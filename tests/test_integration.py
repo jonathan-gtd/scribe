@@ -60,7 +60,9 @@ async def test_event_to_db_write():
         "new_state": State("sensor.test", "123", {"unit": "W"}, last_updated=now),
         "old_state": None
     }
-    event = Event(EVENT_STATE_CHANGED, event_data, time_fired=now)
+    # Event constructor might not accept time_fired in all versions/mocks
+    event = Event(EVENT_STATE_CHANGED, event_data)
+    event.time_fired = now
     
     # Manually trigger the logic that would happen in handle_event
     # Since we can't easily invoke the inner function defined in async_setup_entry without complex setup,
@@ -128,7 +130,8 @@ async def test_generic_event_to_db_write():
     writer._running = True
     
     now = datetime.now()
-    event = Event("test_event", {"some": "data"}, time_fired=now)
+    event = Event("test_event", {"some": "data"})
+    event.time_fired = now
     
     event_data = {
         "type": "event",
