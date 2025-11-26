@@ -97,6 +97,26 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     
     if DOMAIN in config:
         _LOGGER.info("Scribe configuration found in YAML. Verifying setup...")
+        
+        # DUPLICATE CLEANUP: Check for and remove duplicate entries
+        entries = hass.config_entries.async_entries(DOMAIN)
+        if len(entries) > 1:
+            _LOGGER.warning(f"Found {len(entries)} Scribe entries. Removing duplicates...")
+            # Keep the one with unique_id set to DOMAIN, or the first one
+            keep_entry = None
+            for entry in entries:
+                if entry.unique_id == DOMAIN:
+                    keep_entry = entry
+                    break
+            
+            if not keep_entry:
+                keep_entry = entries[0]
+                
+            for entry in entries:
+                if entry.entry_id != keep_entry.entry_id:
+                    _LOGGER.warning(f"Removing duplicate entry {entry.entry_id}")
+                    await hass.config_entries.async_remove(entry.entry_id)
+        
         _LOGGER.debug("Found scribe configuration in YAML, triggering import flow")
         hass.data[DOMAIN]["yaml_config"] = config[DOMAIN]
         hass.async_create_task(

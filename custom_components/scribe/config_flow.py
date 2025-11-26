@@ -60,7 +60,10 @@ class ScribeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """
         _LOGGER.debug("Starting async_step_user")
         # Only allow one instance of Scribe
-        if self._async_current_entries():
+        current_entries = self._async_current_entries()
+        _LOGGER.debug(f"Current entries: {len(current_entries)}")
+        if current_entries:
+            _LOGGER.debug("Aborting async_step_user: single_instance_allowed")
             return self.async_abort(reason="single_instance_allowed")
             
         await self.async_set_unique_id(DOMAIN)
@@ -114,6 +117,7 @@ class ScribeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         # Fallback: Check for any existing entry (legacy support)
         existing_entries = self._async_current_entries()
+        _LOGGER.debug(f"Import step: Found {len(existing_entries)} existing entries")
         if existing_entries:
             existing_entry = existing_entries[0]
             _LOGGER.info("Scribe config entry already exists, updating with YAML config")
