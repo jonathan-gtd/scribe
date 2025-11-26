@@ -99,18 +99,36 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         _LOGGER.info("Scribe configuration found in YAML. Verifying setup...")
         hass.data[DOMAIN]["yaml_config"] = config[DOMAIN]
         
-        # Check if an entry already exists
+        # Check for existing entries
         current_entries = hass.config_entries.async_entries(DOMAIN)
+        _LOGGER.debug(f"Scribe async_setup found {len(current_entries)} entries: {[e.entry_id for e in current_entries]}")
+        
+        if len(current_entries) > 1:
+            _LOGGER.warning(f"Found multiple Scribe entries ({len(current_entries)}). Cleaning up duplicates...")
+            # Keep the one with unique_id=DOMAIN, or the first one if none match
+            keep_entry = None
+            for entry in current_entries:
+                if entry.unique_id == DOMAIN:
+                    keep_entry = entry
+                    break
+            
+            if not keep_entry:
+                keep_entry = current_entries[0]
+                _LOGGER.info(f"No entry with unique_id='{DOMAIN}' found. Keeping first entry: {keep_entry.entry_id}")
+
+            for entry in current_entries:
+                if entry.entry_id != keep_entry.entry_id:
+                    _LOGGER.warning(f"Removing duplicate Scribe entry: {entry.entry_id} (unique_id={entry.unique_id})")
+                    await hass.config_entries.async_remove(entry.entry_id)
+            
+            # Refresh list after cleanup
+            current_entries = [keep_entry]
+
         if current_entries:
             # Update the existing entry directly to avoid UnknownFlow race condition
             entry = current_entries[0]
             _LOGGER.debug(f"Updating existing Scribe entry {entry.entry_id} from YAML")
             hass.config_entries.async_update_entry(entry, data=config[DOMAIN])
-            # Reload to apply changes if needed (optional, but good practice if options changed)
-            # await hass.config_entries.async_reload(entry.entry_id) 
-            # Note: async_update_entry might trigger reload listeners if configured, 
-            # but usually we rely on the entry setup to pick up changes or a reload.
-            # Since we are in async_setup, the entry might not be loaded yet or is about to be loaded.
             return True
 
         _LOGGER.debug("Found scribe configuration in YAML, triggering import flow")
