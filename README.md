@@ -61,6 +61,7 @@ It is designed as a lightweight, "set-and-forget" alternative to the built-in Re
 ### Advanced Configuration (YAML Only)
 Some advanced settings are only available via `configuration.yaml`:
 
+```
 scribe:
   # Database Connection
   db_url: postgresql://scribe:password@host:5432/scribe
