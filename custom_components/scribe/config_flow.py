@@ -12,7 +12,6 @@ from homeassistant.core import callback, HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers import selector
-from sqlalchemy import create_engine
 
 from .const import (
     DOMAIN,
@@ -51,13 +50,7 @@ class ScribeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_user(self, user_input=None) -> FlowResult:
         """Handle the initial step."""
-        # 1. Handle Singleton: Check if already configured
-        # This handles both UI and YAML import attempts that reach here
-        if self._async_current_entries():
-            return self.async_abort(reason="single_instance_allowed")
-
-        # 2. Handle Singleton: Set Unique ID
-        # This ensures future attempts will be caught by _abort_if_unique_id_configured
+        # Handle Singleton: Set Unique ID
         await self.async_set_unique_id(DOMAIN)
         self._abort_if_unique_id_configured()
 
@@ -70,9 +63,7 @@ class ScribeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 try:
                     # Validate connection
-                    await self.hass.async_add_executor_job(
-                        self.validate_input, self.hass, user_input
-                    )
+                    await self.async_validate_input(user_input)
                     return self.async_create_entry(title="Scribe", data=user_input)
                 except Exception as e:
                     _LOGGER.error("Connection error: %s", e)
@@ -99,54 +90,30 @@ class ScribeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_import(self, user_input=None) -> FlowResult:
         """Handle import from YAML."""
-        # 1. Handle Singleton: Set Unique ID
         await self.async_set_unique_id(DOMAIN)
-        
-        # 2. Handle Singleton: Abort if configured, updating existing entry if needed
-        # This is the standard HA way to handle YAML updates for singletons
         self._abort_if_unique_id_configured(updates=user_input)
+        return self.async_create_entry(title="Scribe", data=user_input)
 
-        # 3. If we get here, it means no entry exists with unique_id=DOMAIN
-        # BUT, we might have a legacy entry without a unique_id.
-        # Let's check for ANY existing entry to be safe.
-        existing_entries = self._async_current_entries()
-        if existing_entries:
-            # We found a legacy entry. Let's update it and set its unique_id.
-            entry = existing_entries[0]
-            _LOGGER.info("Found legacy Scribe entry. Updating with YAML config and setting unique_id.")
-            
-            # Update data
-            self.hass.config_entries.async_update_entry(
-                entry,
-                data=user_input,
-                unique_id=DOMAIN # Set the unique ID now!
-            )
-            
-            # Reload to apply changes
-            await self.hass.config_entries.async_reload(entry.entry_id)
-            return self.async_abort(reason="already_configured")
-
-        # 4. No existing entry at all -> Create new one via user step
-        return await self.async_step_user(user_input)
-
-    @staticmethod
-    def validate_input(hass: HomeAssistant, data: dict) -> dict:
+    async def async_validate_input(self, data: dict) -> None:
         """Validate the user input allows us to connect."""
         _LOGGER.debug("Validating database connection...")
         db_url = data[CONF_DB_URL]
         
-        # Simple sync validation
+        # Ensure asyncpg driver
+        if "postgresql://" in db_url and "postgresql+asyncpg://" not in db_url:
+            db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
+
         try:
-            # Strip async driver for sync validation if present
-            sync_url = db_url.replace("+asyncpg", "")
-            engine = create_engine(sync_url)
-            with engine.connect() as conn:
-                pass
+            from sqlalchemy.ext.asyncio import create_async_engine
+            from sqlalchemy import text
+            
+            engine = create_async_engine(db_url)
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+            await engine.dispose()
         except Exception as e:
             _LOGGER.error(f"Database connection failed: {e}")
             raise Exception(f"Cannot connect to database: {e}")
-
-        return {"title": "Scribe"}
 
     @staticmethod
     @callback
