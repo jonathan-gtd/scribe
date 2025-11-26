@@ -14,6 +14,28 @@ async def test_flow_user_init(hass):
     assert result["step_id"] == "user"
 
 @pytest.mark.asyncio
+async def test_flow_user_single_instance(hass):
+    """Test that only one instance is allowed."""
+    # Mock an existing entry
+    mock_entry = config_entries.ConfigEntry(
+        version=1,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Scribe",
+        data={},
+        source=config_entries.SOURCE_USER,
+        unique_id=DOMAIN,
+        entry_id="mock_entry_id"
+    )
+    hass.config_entries._entries[mock_entry.entry_id] = mock_entry
+    
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    assert result["type"] == data_entry_flow.FlowResultType.ABORT
+    assert result["reason"] == "single_instance_allowed"
+
+@pytest.mark.asyncio
 async def test_flow_user_valid_input(hass):
     """Test valid user input."""
     with patch("custom_components.scribe.config_flow.create_engine") as mock_create_engine:
@@ -65,3 +87,37 @@ async def test_flow_import(hass):
         
         assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
         assert result["title"] == "Scribe"
+
+@pytest.mark.asyncio
+async def test_flow_import_existing_legacy(hass):
+    """Test import from YAML when a legacy entry exists (no unique_id)."""
+    # Mock an existing legacy entry
+    mock_entry = config_entries.ConfigEntry(
+        version=1,
+        minor_version=1,
+        domain=DOMAIN,
+        title="Scribe",
+        data={},
+        source=config_entries.SOURCE_USER,
+        unique_id=None, # Legacy entry has no unique_id
+        entry_id="legacy_entry_id"
+    )
+    hass.config_entries._entries[mock_entry.entry_id] = mock_entry
+    
+    with patch("custom_components.scribe.config_flow.create_engine"), \
+         patch.object(hass.config_entries, "async_reload", return_value=None):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_IMPORT},
+            data={
+                CONF_DB_URL: "postgresql://user:pass@host/db",
+                CONF_RECORD_STATES: True,
+                CONF_RECORD_EVENTS: True
+            }
+        )
+        
+        # Should abort with already_configured, but update the entry
+        assert result["type"] == data_entry_flow.FlowResultType.ABORT
+        assert result["reason"] == "already_configured"
+        
+        # Verify entry was updated
+        assert mock_entry.unique_id == DOMAIN

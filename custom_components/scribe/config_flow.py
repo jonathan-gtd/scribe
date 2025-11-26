@@ -7,12 +7,12 @@ This module handles the UI configuration for Scribe. It supports:
 """
 import logging
 import voluptuous as vol
-from sqlalchemy import create_engine, text
 from homeassistant import config_entries
 from homeassistant.core import callback, HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers import selector
+from sqlalchemy import create_engine
 
 from .const import (
     DOMAIN,
@@ -45,39 +45,31 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 class ScribeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for Scribe.
-    
-    The config flow is responsible for creating the ConfigEntry.
-    It validates the database connection.
-    """
+    """Handle a config flow for Scribe."""
 
     VERSION = 1
 
     async def async_step_user(self, user_input=None) -> FlowResult:
-        """Handle the initial step.
-        
-        Displays the form to the user and processes the input.
-        """
-        _LOGGER.debug("Starting async_step_user")
-        # Only allow one instance of Scribe
-        current_entries = self._async_current_entries()
-        _LOGGER.debug(f"Current entries: {len(current_entries)}")
-        if current_entries:
-            _LOGGER.debug("Aborting async_step_user: single_instance_allowed")
+        """Handle the initial step."""
+        # 1. Handle Singleton: Check if already configured
+        # This handles both UI and YAML import attempts that reach here
+        if self._async_current_entries():
             return self.async_abort(reason="single_instance_allowed")
-            
+
+        # 2. Handle Singleton: Set Unique ID
+        # This ensures future attempts will be caught by _abort_if_unique_id_configured
         await self.async_set_unique_id(DOMAIN)
         self._abort_if_unique_id_configured()
-        
+
         errors = {}
 
         if user_input is not None:
-            # Validation: Must record at least states or events
+            # Validation
             if not user_input.get(CONF_RECORD_STATES) and not user_input.get(CONF_RECORD_EVENTS):
                 errors["base"] = "must_record_something"
             else:
                 try:
-                    # Validate connection in executor to avoid blocking loop
+                    # Validate connection
                     await self.hass.async_add_executor_job(
                         self.validate_input, self.hass, user_input
                     )
@@ -88,12 +80,12 @@ class ScribeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="user",
-            data_schema = vol.Schema(
-            {
-                vol.Required(CONF_DB_URL): str,
-                vol.Optional(
-                    CONF_RECORD_STATES, default=DEFAULT_RECORD_STATES
-                ): bool,
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_DB_URL): str,
+                    vol.Optional(
+                        CONF_RECORD_STATES, default=DEFAULT_RECORD_STATES
+                    ): bool,
                     vol.Optional(
                         CONF_RECORD_EVENTS, default=DEFAULT_RECORD_EVENTS
                     ): bool,
@@ -106,56 +98,46 @@ class ScribeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def async_step_import(self, user_input=None) -> FlowResult:
-        """Handle import from YAML.
-        
-        Triggered by async_setup in __init__.py if configuration.yaml contains 'scribe:'.
-        If an instance already exists, we update it with the YAML config (YAML takes precedence).
-        """
-        # Check if an instance already exists
+        """Handle import from YAML."""
+        # 1. Handle Singleton: Set Unique ID
         await self.async_set_unique_id(DOMAIN)
+        
+        # 2. Handle Singleton: Abort if configured, updating existing entry if needed
+        # This is the standard HA way to handle YAML updates for singletons
         self._abort_if_unique_id_configured(updates=user_input)
 
-        # Fallback: Check for any existing entry (legacy support)
+        # 3. If we get here, it means no entry exists with unique_id=DOMAIN
+        # BUT, we might have a legacy entry without a unique_id.
+        # Let's check for ANY existing entry to be safe.
         existing_entries = self._async_current_entries()
-        _LOGGER.debug(f"Import step: Found {len(existing_entries)} existing entries")
         if existing_entries:
-            existing_entry = existing_entries[0]
-            _LOGGER.info("Scribe config entry already exists, updating with YAML config")
+            # We found a legacy entry. Let's update it and set its unique_id.
+            entry = existing_entries[0]
+            _LOGGER.info("Found legacy Scribe entry. Updating with YAML config and setting unique_id.")
+            
+            # Update data
             self.hass.config_entries.async_update_entry(
-                existing_entry,
-                data=user_input
+                entry,
+                data=user_input,
+                unique_id=DOMAIN # Set the unique ID now!
             )
-            await self.hass.config_entries.async_reload(existing_entry.entry_id)
+            
+            # Reload to apply changes
+            await self.hass.config_entries.async_reload(entry.entry_id)
             return self.async_abort(reason="already_configured")
-        
-        _LOGGER.debug("Importing Scribe config from YAML")
+
+        # 4. No existing entry at all -> Create new one via user step
         return await self.async_step_user(user_input)
 
     @staticmethod
     def validate_input(hass: HomeAssistant, data: dict) -> dict:
-        """Validate the user input allows us to connect.
-        
-        This method attempts to connect to the target database.
-        """
-        from .const import CONF_DB_URL
-        
+        """Validate the user input allows us to connect."""
         _LOGGER.debug("Validating database connection...")
         db_url = data[CONF_DB_URL]
         
-        # Replace postgresql:// with postgresql+asyncpg:// for validation if needed, 
-        # but for simple validation we can stick to sync engine or just check if it's a valid string.
-        # However, since we are moving to asyncpg, the actual runtime will use asyncpg.
-        # For validation here, we can still use sync psycopg2 if installed, or just try to connect.
-        # Given requirements, we should probably stick to sync validation for simplicity here 
-        # OR switch to async validation. Let's stick to sync validation for now as it runs in executor.
-        
+        # Simple sync validation
         try:
-            # We might need to ensure the URL is compatible with the sync driver for this check
-            # If the user provides postgresql+asyncpg://, create_engine might fail if asyncpg is not installed in the sync context?
-            # Actually, we added asyncpg to requirements.
-            # But create_engine (sync) won't work with asyncpg driver.
-            # So we should strip +asyncpg if present for this check, or ensure we use a sync driver.
-            
+            # Strip async driver for sync validation if present
             sync_url = db_url.replace("+asyncpg", "")
             engine = create_engine(sync_url)
             with engine.connect() as conn:
@@ -173,15 +155,10 @@ class ScribeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return ScribeOptionsFlowHandler(config_entry)
 
 class ScribeOptionsFlowHandler(config_entries.OptionsFlow):
-    """Handle options flow for Scribe.
-    
-    Allows users to change settings without restarting Home Assistant.
-    Supports filtering (include/exclude) and performance tuning (batch size, flush interval).
-    """
+    """Handle options flow for Scribe."""
 
     def __init__(self, config_entry):
         """Initialize options flow."""
-        # self.config_entry is set by the parent class in recent HA versions
         pass
 
     async def async_step_init(self, user_input=None) -> FlowResult:
