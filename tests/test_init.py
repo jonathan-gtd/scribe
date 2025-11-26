@@ -18,6 +18,8 @@ def mock_config_entry():
     entry.title = "Scribe"
     entry.setup_lock = MagicMock()
     entry.setup_lock.locked.return_value = False
+    from homeassistant.config_entries import ConfigEntryState
+    entry.state = ConfigEntryState.NOT_LOADED
     return entry
 
 @pytest.mark.asyncio
@@ -145,6 +147,10 @@ async def test_legacy_config(hass):
     entry.options = {}
     entry.entry_id = "legacy_entry"
     entry.title = "Legacy"
+    entry.setup_lock = MagicMock()
+    entry.setup_lock.locked.return_value = False
+    from homeassistant.config_entries import ConfigEntryState
+    entry.state = ConfigEntryState.NOT_LOADED
     
     with patch("custom_components.scribe.ScribeWriter") as mock_writer_cls:
         mock_writer = mock_writer_cls.return_value
