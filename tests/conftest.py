@@ -67,5 +67,6 @@ def mock_config_entry():
         },
         entry_id="test_entry_id"
     )
-    entry.setup_lock = None
+    entry.setup_lock = MagicMock()
+    entry.setup_lock.locked.return_value = False
     return entry

@@ -60,8 +60,10 @@ async def test_event_to_db_write():
         "new_state": State("sensor.test", "123", {"unit": "W"}, last_updated=now),
         "old_state": None
     }
-    # Event constructor accepts time_fired
-    event = Event(EVENT_STATE_CHANGED, event_data)
+    # Mock Event object to avoid version compatibility issues
+    event = MagicMock()
+    event.event_type = EVENT_STATE_CHANGED
+    event.data = event_data
     event.time_fired = now
     
     # Manually trigger the logic that would happen in handle_event
@@ -130,8 +132,14 @@ async def test_generic_event_to_db_write():
     writer._running = True
     
     now = datetime.now()
-    event = Event("test_event", {"some": "data"})
+    event = MagicMock()
+    event.event_type = "test_event"
+    event.data = {"some": "data"}
     event.time_fired = now
+    event.origin = "LOCAL"
+    event.context.id = "ctx_id"
+    event.context.user_id = "user_id"
+    event.context.parent_id = "parent_id"
     
     event_data = {
         "type": "event",

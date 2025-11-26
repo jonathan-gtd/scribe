@@ -16,7 +16,8 @@ def mock_config_entry():
     entry.entry_id = "test_entry"
     entry.unique_id = DOMAIN
     entry.title = "Scribe"
-    entry.setup_lock = None
+    entry.setup_lock = MagicMock()
+    entry.setup_lock.locked.return_value = False
     return entry
 
 @pytest.mark.asyncio
