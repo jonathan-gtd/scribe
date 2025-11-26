@@ -7,6 +7,7 @@ to ensure that database operations do not block the main Home Assistant event lo
 import logging
 import json
 import voluptuous as vol
+from homeassistant.helpers.json import JSONEncoder
 
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry
@@ -243,32 +244,38 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     if attr in exclude_attributes:
                         del attributes[attr]
 
-            data = {
-                "type": "state",
-                "time": new_state.last_updated,
-                "entity_id": entity_id,
-                "state": new_state.state,
-                "value": state_val,
-                "attributes": json.dumps(attributes, default=str),
-            }
-            _LOGGER.debug(f"Scribe: Enqueueing state change for {entity_id}")
-            writer.enqueue(data)
+            try:
+                data = {
+                    "type": "state",
+                    "time": new_state.last_updated,
+                    "entity_id": entity_id,
+                    "state": new_state.state,
+                    "value": state_val,
+                    "attributes": json.dumps(attributes, cls=JSONEncoder),
+                }
+                _LOGGER.debug(f"Scribe: Enqueueing state change for {entity_id}")
+                writer.enqueue(data)
+            except Exception as e:
+                _LOGGER.error(f"Scribe: Error processing state change for {entity_id}: {e}", exc_info=True)
             return
 
         # Handle Generic Events
         if record_events:
-            data = {
-                "type": "event",
-                "time": event.time_fired,
-                "event_type": event_type,
-                "event_data": json.dumps(event.data, default=str),
-                "origin": str(event.origin),
-                "context_id": event.context.id,
-                "context_user_id": event.context.user_id,
-                "context_parent_id": event.context.parent_id,
-            }
-            # _LOGGER.debug(f"Scribe: Enqueueing event {event_type}")
-            writer.enqueue(data)
+            try:
+                data = {
+                    "type": "event",
+                    "time": event.time_fired,
+                    "event_type": event_type,
+                    "event_data": json.dumps(event.data, cls=JSONEncoder),
+                    "origin": str(event.origin),
+                    "context_id": event.context.id,
+                    "context_user_id": event.context.user_id,
+                    "context_parent_id": event.context.parent_id,
+                }
+                # _LOGGER.debug(f"Scribe: Enqueueing event {event_type}")
+                writer.enqueue(data)
+            except Exception as e:
+                _LOGGER.error(f"Scribe: Error processing event {event_type}: {e}", exc_info=True)
 
     # Register the event listener
     # Listening to None means we listen to ALL events
