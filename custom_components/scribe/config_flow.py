@@ -58,6 +58,7 @@ class ScribeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         
         Displays the form to the user and processes the input.
         """
+        _LOGGER.debug("Starting async_step_user")
         # Only allow one instance of Scribe
         if self._async_current_entries():
             return self.async_abort(reason="single_instance_allowed")
@@ -118,6 +119,7 @@ class ScribeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             await self.hass.config_entries.async_reload(existing_entry.entry_id)
             return self.async_abort(reason="already_configured")
         
+        _LOGGER.debug("Importing Scribe config from YAML")
         return await self.async_step_user(user_input)
 
     @staticmethod
@@ -128,6 +130,7 @@ class ScribeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """
         from .const import CONF_DB_URL
         
+        _LOGGER.debug("Validating database connection...")
         db_url = data[CONF_DB_URL]
         
         # Replace postgresql:// with postgresql+asyncpg:// for validation if needed, 

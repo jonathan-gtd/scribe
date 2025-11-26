@@ -95,6 +95,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     hass.data.setdefault(DOMAIN, {})
     
     if DOMAIN in config:
+        _LOGGER.debug("Found scribe configuration in YAML, triggering import flow")
         hass.data[DOMAIN]["yaml_config"] = config[DOMAIN]
         hass.async_create_task(
             hass.config_entries.flow.async_init(
@@ -110,6 +111,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     This is the main setup function called when the integration is loaded.
     It initializes the writer, connects to the database, and sets up event listeners.
     """
+    _LOGGER.debug(f"Setting up Scribe entry: {entry.entry_id}")
     config = entry.data
     options = entry.options
 
@@ -264,6 +266,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "context_user_id": event.context.user_id,
                 "context_parent_id": event.context.parent_id,
             }
+            # _LOGGER.debug(f"Scribe: Enqueueing event {event_type}")
             writer.enqueue(data)
 
     # Register the event listener
@@ -280,12 +283,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.bus.async_listen(EVENT_HOMEASSISTANT_STOP, async_stop_scribe)
     )
     
-    # Register Services
     async def handle_flush(call):
         """Handle flush service call.
         
         Allows users to manually trigger a database flush via automation or UI.
         """
+        _LOGGER.debug("Manual flush triggered via service call")
         await writer._flush()
         
     hass.services.async_register(DOMAIN, "flush", handle_flush)
@@ -311,8 +314,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """
     unload_ok = await hass.config_entries.async_unload_platforms(entry, ["sensor", "binary_sensor"])
     if unload_ok:
+        _LOGGER.debug("Unloading Scribe entry")
         data = hass.data[DOMAIN].pop(entry.entry_id)
         writer = data["writer"]
         # Ensure writer flushes remaining data before stopping
         await writer.stop()
+        _LOGGER.debug("Scribe entry unloaded successfully")
     return unload_ok

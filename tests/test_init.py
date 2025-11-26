@@ -1,5 +1,5 @@
 """Test Scribe setup process."""
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 from homeassistant.setup import async_setup_component
 from custom_components.scribe.const import (
     DOMAIN,
@@ -30,9 +30,9 @@ async def test_setup_unload_entry(hass):
         "custom_components.scribe.ScribeWriter"
     ) as mock_writer_cls:
         mock_writer = mock_writer_cls.return_value
-        mock_writer.init_db = MagicMock()
-        mock_writer.start = MagicMock()
-        mock_writer.shutdown = MagicMock()
+        mock_writer.init_db = AsyncMock()
+        mock_writer.start = AsyncMock()
+        mock_writer.stop = AsyncMock()
 
         assert await hass.config_entries.async_setup(config_entry.entry_id)
         await hass.async_block_till_done()
@@ -43,4 +43,4 @@ async def test_setup_unload_entry(hass):
         assert await hass.config_entries.async_unload(config_entry.entry_id)
         await hass.async_block_till_done()
 
-        mock_writer.shutdown.assert_called()
+        mock_writer.stop.assert_called()

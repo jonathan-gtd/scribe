@@ -60,8 +60,7 @@ It is designed as a lightweight, "set-and-forget" alternative to the built-in Re
 
 ### Advanced Configuration (YAML Only)
 Some advanced settings are only available via `configuration.yaml`:
-
-```
+```yaml
 scribe:
   # Database Connection
   db_url: postgresql://scribe:password@host:5432/scribe
@@ -170,7 +169,7 @@ Scribe provides several sensors to monitor its performance and storage usage (if
 
 *   **Connection Failed**: Check your DB credentials and ensure the PostgreSQL server allows connections from the HA IP.
 *   **Missing Data**: Verify that `record_states` or `record_events` is enabled and that you haven't excluded the entities.
-*   **Extension Missing**: Ensure `timescaledb` extension is installed on your Postgres server (`CREATE EXTENSION IF NOT EXISTS timescaledb;`).
+*   **Extension Missing**:```yaml server (`CREATE EXTENSION IF NOT EXISTS timescaledb;`).
 
 For more detailed information, see [TECHNICAL_DOCS.md](TECHNICAL_DOCS.md).
 

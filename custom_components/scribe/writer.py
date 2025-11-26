@@ -88,23 +88,26 @@ class ScribeWriter:
         
         # Create Engine
         try:
+            _LOGGER.debug(f"Creating AsyncEngine for {self.db_url.split('@')[-1]} with pool_size=10, max_overflow=20")
             self._engine = create_async_engine(
                 self.db_url, 
                 pool_size=10, 
                 max_overflow=20,
                 echo=False # We handle our own logging
             )
-            _LOGGER.debug(f"Created AsyncEngine for {self.db_url.split('@')[-1]}") # Log DB host/name only
+            _LOGGER.debug("AsyncEngine created successfully")
         except Exception as e:
-            _LOGGER.error(f"Failed to create engine: {e}")
+            _LOGGER.error(f"Failed to create engine: {e}", exc_info=True)
             return
 
         # Initialize DB
+        _LOGGER.debug("Starting database initialization...")
         await self.init_db()
+        _LOGGER.debug("Database initialization completed")
         
         # Start Loop
         self._task = asyncio.create_task(self._run())
-        _LOGGER.info("ScribeWriter started")
+        _LOGGER.info("ScribeWriter started successfully")
 
     async def stop(self):
         """Stop the writer task."""
@@ -157,6 +160,7 @@ class ScribeWriter:
         
         # Trigger flush if batch size reached
         if len(self._queue) >= self.batch_size:
+            _LOGGER.debug(f"Batch size reached ({len(self._queue)} >= {self.batch_size}), triggering flush")
             asyncio.create_task(self._flush())
 
     async def init_db(self):
@@ -281,12 +285,12 @@ class ScribeWriter:
             _LOGGER.debug(f"Flush complete in {duration:.3f}s")
 
         except Exception as e:
-            _LOGGER.error(f"Error flushing batch: {e}")
+            _LOGGER.error(f"Error flushing batch: {e}", exc_info=True)
             self._connected = False
             self._last_error = str(e)
             
             if self.buffer_on_failure:
-                _LOGGER.warning(f"Buffering {len(batch)} items due to failure")
+                _LOGGER.warning(f"Buffering {len(batch)} items due to failure. Current queue size: {len(self._queue)}")
                 # Prepend back to queue
                 self._queue = batch + self._queue
                 
@@ -295,7 +299,7 @@ class ScribeWriter:
                     dropped = len(self._queue) - self.max_queue_size
                     self._queue = self._queue[:self.max_queue_size]
                     self._dropped_events += dropped
-                    _LOGGER.error(f"Buffer full! Dropped {dropped} oldest events.")
+                    _LOGGER.error(f"Buffer full! Dropped {dropped} oldest events. Queue size: {len(self._queue)}")
             else:
                 self._dropped_events += len(batch)
                 _LOGGER.warning(f"Dropped {len(batch)} items (buffering disabled)")
