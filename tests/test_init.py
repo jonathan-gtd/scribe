@@ -114,10 +114,12 @@ async def test_event_listener(hass, mock_config_entry):
         
         # Let's try to find the one that is our handle_event
         target_listener = None
-        for job, _, _ in listeners:
-             if "handle_event" in str(job):
-                 target_listener = job.target
-                 break
+        for listener_item in listeners:
+            # Handle both (job, filter, weak) and (job, filter) formats
+            job = listener_item[0]
+            if "handle_event" in str(job):
+                target_listener = job.target
+                break
         
         assert target_listener is not None
         
@@ -241,10 +243,12 @@ async def test_event_listener_filtering(hass, mock_config_entry):
         
         listeners = hass.bus._listeners.get(None, [])
         target_listener = None
-        for job, _, _ in listeners:
-             if "handle_event" in str(job):
-                 target_listener = job.target
-                 break
+        for listener_item in listeners:
+            # Handle both (job, filter, weak) and (job, filter) formats
+            job = listener_item[0]
+            if "handle_event" in str(job):
+                target_listener = job.target
+                break
         assert target_listener is not None
         
         # Test 1: Entity not included
@@ -309,10 +313,12 @@ async def test_event_listener_no_record_states(hass, mock_config_entry):
         
         listeners = hass.bus._listeners.get(None, [])
         target_listener = None
-        for job, _, _ in listeners:
-             if "handle_event" in str(job):
-                 target_listener = job.target
-                 break
+        for listener_item in listeners:
+            # Handle both (job, filter, weak) and (job, filter) formats
+            job = listener_item[0]
+            if "handle_event" in str(job):
+                target_listener = job.target
+                break
         
         event = MagicMock()
         event.event_type = EVENT_STATE_CHANGED
@@ -339,10 +345,12 @@ async def test_generic_events(hass, mock_config_entry):
         
         listeners = hass.bus._listeners.get(None, [])
         target_listener = None
-        for job, _, _ in listeners:
-             if "handle_event" in str(job):
-                 target_listener = job.target
-                 break
+        for listener_item in listeners:
+            # Handle both (job, filter, weak) and (job, filter) formats
+            job = listener_item[0]
+            if "handle_event" in str(job):
+                target_listener = job.target
+                break
         
         event = MagicMock()
         event.event_type = "custom_event"
