@@ -170,57 +170,20 @@ class ScribeWriter:
             return
 
         try:
-            # States Table
-            if self.record_states:
-                try:
-                    async with self._engine.begin() as conn:
-                        _LOGGER.debug(f"Creating table {self.table_name_states} if not exists")
-                        await conn.execute(text(f"""
-                            CREATE TABLE IF NOT EXISTS {self.table_name_states} (
-                                time TIMESTAMPTZ NOT NULL,
-                                entity_id TEXT NOT NULL,
-                                state TEXT,
-                                value DOUBLE PRECISION,
-                                attributes JSONB
-                            );
-                        """))
-                        await conn.execute(text(f"""
-                            CREATE INDEX IF NOT EXISTS {self.table_name_states}_entity_time_idx 
-                            ON {self.table_name_states} (entity_id, time DESC);
-                        """))
-                    
-                    # Hypertable & Compression (TimescaleDB specific)
-                    # Use separate connection/transaction for these as they might fail safely
-                    async with self._engine.begin() as conn:
-                        await self._init_hypertable(conn, self.table_name_states, "entity_id")
-                except Exception as e:
-                     _LOGGER.error(f"Error initializing states table: {e}")
+            async with self._engine.begin() as conn:
+                if self.record_states:
+                    await self._init_states_table(conn)
+                if self.record_events:
+                    await self._init_events_table(conn)
 
-            # Events Table
+            # Hypertable & Compression (separate transactions for safety)
+            if self.record_states:
+                async with self._engine.begin() as conn:
+                    await self._init_hypertable(conn, self.table_name_states, "entity_id")
+            
             if self.record_events:
-                try:
-                    async with self._engine.begin() as conn:
-                        _LOGGER.debug(f"Creating table {self.table_name_events} if not exists")
-                        await conn.execute(text(f"""
-                            CREATE TABLE IF NOT EXISTS {self.table_name_events} (
-                                time TIMESTAMPTZ NOT NULL,
-                                event_type TEXT NOT NULL,
-                                event_data JSONB,
-                                origin TEXT,
-                                context_id TEXT,
-                                context_user_id TEXT,
-                                context_parent_id TEXT
-                            );
-                        """))
-                        await conn.execute(text(f"""
-                            CREATE INDEX IF NOT EXISTS {self.table_name_events}_type_time_idx 
-                            ON {self.table_name_events} (event_type, time DESC);
-                        """))
-                    
-                    async with self._engine.begin() as conn:
-                        await self._init_hypertable(conn, self.table_name_events, "event_type")
-                except Exception as e:
-                    _LOGGER.error(f"Error initializing events table: {e}")
+                async with self._engine.begin() as conn:
+                    await self._init_hypertable(conn, self.table_name_events, "event_type")
                     
             _LOGGER.info("Database initialized successfully")
             self._connected = True
@@ -228,6 +191,42 @@ class ScribeWriter:
         except Exception as e:
             _LOGGER.error(f"Error initializing database: {e}")
             self._connected = False
+
+    async def _init_states_table(self, conn):
+        """Initialize states table."""
+        _LOGGER.debug(f"Creating table {self.table_name_states} if not exists")
+        await conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS {self.table_name_states} (
+                time TIMESTAMPTZ NOT NULL,
+                entity_id TEXT NOT NULL,
+                state TEXT,
+                value DOUBLE PRECISION,
+                attributes JSONB
+            );
+        """))
+        await conn.execute(text(f"""
+            CREATE INDEX IF NOT EXISTS {self.table_name_states}_entity_time_idx 
+            ON {self.table_name_states} (entity_id, time DESC);
+        """))
+
+    async def _init_events_table(self, conn):
+        """Initialize events table."""
+        _LOGGER.debug(f"Creating table {self.table_name_events} if not exists")
+        await conn.execute(text(f"""
+            CREATE TABLE IF NOT EXISTS {self.table_name_events} (
+                time TIMESTAMPTZ NOT NULL,
+                event_type TEXT NOT NULL,
+                event_data JSONB,
+                origin TEXT,
+                context_id TEXT,
+                context_user_id TEXT,
+                context_parent_id TEXT
+            );
+        """))
+        await conn.execute(text(f"""
+            CREATE INDEX IF NOT EXISTS {self.table_name_events}_type_time_idx 
+            ON {self.table_name_events} (event_type, time DESC);
+        """))
 
     async def _init_hypertable(self, conn, table_name, segment_by):
         """Initialize hypertable and compression."""
