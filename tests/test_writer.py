@@ -1,13 +1,12 @@
 """Test ScribeWriter."""
 import pytest
 import asyncio
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, AsyncMock, patch, ANY
 from custom_components.scribe.writer import ScribeWriter
 
-@pytest.mark.asyncio
-async def test_writer_enqueue_flush():
-    """Test enqueue and flush logic."""
-    hass = MagicMock()
+@pytest.fixture
+async def writer(hass, mock_engine):
+    """Create a writer instance."""
     writer = ScribeWriter(
         hass=hass,
         db_url="postgresql://user:pass@host/db",
@@ -20,24 +19,45 @@ async def test_writer_enqueue_flush():
         max_queue_size=10000,
         buffer_on_failure=True,
         table_name_states="states",
-        table_name_events="events"
+        table_name_events="events",
+        engine=mock_engine
     )
+    yield writer
+    if writer._task:
+        await writer.stop()
 
-    # Mock Engine
-    # AsyncEngine is not awaitable, so use MagicMock
-    mock_engine = MagicMock()
-    mock_conn = AsyncMock()
+@pytest.mark.asyncio
+async def test_writer_init_db(writer, mock_engine, mock_db_connection):
+    """Test database initialization."""
+    import custom_components.scribe.writer
+    print(f"DEBUG: create_async_engine is {custom_components.scribe.writer.create_async_engine}")
     
-    # Setup async context manager explicitly for begin()
-    mock_transaction = AsyncMock()
-    mock_transaction.__aenter__.return_value = mock_conn
-    mock_transaction.__aexit__.return_value = None
+    await writer.start()
     
-    mock_engine.begin.return_value = mock_transaction
+    # Verify engine creation
+    assert writer._engine == mock_engine
     
-    writer._engine = mock_engine
-    writer._running = True
+    # Verify table creation calls
+    calls = []
+    for call in mock_db_connection.execute.mock_calls:
+        if call.args and hasattr(call.args[0], "text"):
+            calls.append(call.args[0].text)
+        else:
+            calls.append(str(call))
+            
+    assert mock_db_connection.execute.call_count >= 4 
+    
+    # Check for specific SQL fragments in calls
+    assert any("CREATE TABLE IF NOT EXISTS states" in c for c in calls)
+    assert any("CREATE TABLE IF NOT EXISTS events" in c for c in calls)
+    assert any("create_hypertable('states'" in c for c in calls)
+    assert any("create_hypertable('events'" in c for c in calls)
 
+@pytest.mark.asyncio
+async def test_writer_enqueue_flush(writer, mock_db_connection):
+    """Test enqueue and flush logic."""
+    await writer.start()
+    
     # Enqueue items
     writer.enqueue({"type": "state", "data": 1})
     assert len(writer._queue) == 1
@@ -55,38 +75,30 @@ async def test_writer_enqueue_flush():
     assert len(writer._queue) == 0 
 
     # Verify DB calls
-    assert mock_conn.execute.call_count >= 1
+    # We expect INSERT statements
+    calls = []
+    for call in mock_db_connection.execute.mock_calls:
+        if call.args and hasattr(call.args[0], "text"):
+            calls.append(call.args[0].text)
+        else:
+            calls.append(str(call))
+            
+    assert any("INSERT INTO states" in c for c in calls)
+    assert any("INSERT INTO events" in c for c in calls)
     
     # Verify stats
     assert writer._states_written == 1
     assert writer._events_written == 1
 
 @pytest.mark.asyncio
-async def test_writer_no_buffer_on_failure():
+async def test_writer_no_buffer_on_failure(writer, mock_engine, mock_db_connection):
     """Test that events are dropped when buffering is disabled."""
-    hass = MagicMock()
-    writer = ScribeWriter(
-        hass=hass,
-        db_url="postgresql://user:pass@host/db",
-        chunk_interval="7 days",
-        compress_after="60 days",
-        record_states=True,
-        record_events=True,
-        batch_size=1,
-        flush_interval=5,
-        max_queue_size=10000,
-        buffer_on_failure=False,
-        table_name_states="states",
-        table_name_events="events"
-    )
-
-    # Mock Engine to fail
-    mock_engine = MagicMock()
-    mock_transaction = AsyncMock()
-    mock_transaction.__aenter__.side_effect = Exception("Connection failed")
-    mock_engine.begin.return_value = mock_transaction
+    writer.buffer_on_failure = False
+    writer.batch_size = 1
+    await writer.start()
     
-    writer._engine = mock_engine
+    # Mock connection failure during flush
+    mock_db_connection.execute.side_effect = Exception("Connection failed")
     
     # Enqueue item
     writer.enqueue({"type": "state", "data": 1})
@@ -99,31 +111,14 @@ async def test_writer_no_buffer_on_failure():
     assert writer._dropped_events == 1
 
 @pytest.mark.asyncio
-async def test_writer_buffer_on_failure():
+async def test_writer_buffer_on_failure(writer, mock_engine, mock_db_connection):
     """Test that events are buffered when buffering is enabled."""
-    hass = MagicMock()
-    writer = ScribeWriter(
-        hass=hass,
-        db_url="postgresql://user:pass@host/db",
-        chunk_interval="7 days",
-        compress_after="60 days",
-        record_states=True,
-        record_events=True,
-        batch_size=1,
-        flush_interval=5,
-        max_queue_size=10000,
-        buffer_on_failure=True,
-        table_name_states="states",
-        table_name_events="events"
-    )
-
-    # Mock Engine to fail
-    mock_engine = MagicMock()
-    mock_transaction = AsyncMock()
-    mock_transaction.__aenter__.side_effect = Exception("Connection failed")
-    mock_engine.begin.return_value = mock_transaction
+    writer.buffer_on_failure = True
+    writer.batch_size = 1
+    await writer.start()
     
-    writer._engine = mock_engine
+    # Mock connection failure during flush
+    mock_db_connection.execute.side_effect = Exception("Connection failed")
     
     # Enqueue item
     writer.enqueue({"type": "state", "data": 1})
@@ -136,24 +131,11 @@ async def test_writer_buffer_on_failure():
     assert writer._queue[0]["data"] == 1
 
 @pytest.mark.asyncio
-async def test_writer_max_queue_size():
+async def test_writer_max_queue_size(writer):
     """Test that events are dropped when queue is full."""
-    hass = MagicMock()
-    writer = ScribeWriter(
-        hass=hass,
-        db_url="postgresql://user:pass@host/db",
-        chunk_interval="7 days",
-        compress_after="60 days",
-        record_states=True,
-        record_events=True,
-        batch_size=100, 
-        flush_interval=5,
-        max_queue_size=2, # Small max size
-        buffer_on_failure=True,
-        table_name_states="states",
-        table_name_events="events"
-    )
-
+    writer.max_queue_size = 2
+    writer.batch_size = 100 # Prevent auto-flush
+    
     # Fill queue
     writer.enqueue({"type": "state", "data": 1})
     writer.enqueue({"type": "state", "data": 2})
@@ -163,3 +145,219 @@ async def test_writer_max_queue_size():
     writer.enqueue({"type": "state", "data": 3})
     assert len(writer._queue) == 2
     assert writer._dropped_events == 1
+
+@pytest.mark.asyncio
+async def test_writer_get_db_stats(writer, mock_db_connection):
+    """Test fetching DB stats."""
+    await writer.start()
+    
+    # Mock return values
+    # We need to mock the result of execute().scalar() and fetchone()
+    
+    # This is tricky because execute is called multiple times.
+    # We can use side_effect to return different mocks or just a generic mock that returns something.
+    
+    mock_result = MagicMock()
+    mock_result.scalar.return_value = 1024
+    mock_result.fetchone.return_value = (10, 5, 500, 1000)
+    
+    mock_db_connection.execute.return_value = mock_result
+    
+    stats = await writer.get_db_stats()
+    
+    assert stats["states_size_bytes"] == 1024
+    assert stats["states_total_chunks"] == 10
+    assert stats["events_size_bytes"] == 1024
+
+@pytest.mark.asyncio
+async def test_writer_engine_creation_failure(hass):
+    """Test engine creation failure."""
+    from custom_components.scribe.writer import ScribeWriter
+    
+    with patch("custom_components.scribe.writer.create_async_engine", side_effect=Exception("Engine Error")):
+        writer = ScribeWriter(
+            hass=hass,
+            db_url="postgresql://user:pass@host/db",
+            chunk_interval="7 days",
+            compress_after="60 days",
+            record_states=True,
+            record_events=True,
+            batch_size=2,
+            flush_interval=5,
+            max_queue_size=10000,
+            buffer_on_failure=True,
+            table_name_states="states",
+            table_name_events="events"
+        )
+        await writer.start()
+        assert writer._engine is None
+        assert writer._connected is False
+
+@pytest.mark.asyncio
+async def test_writer_init_db_failure(writer, mock_engine, mock_db_connection):
+    """Test init_db failure."""
+    mock_db_connection.execute.side_effect = Exception("DB Error")
+    
+    await writer.start()
+    assert writer._connected is False
+
+@pytest.mark.asyncio
+async def test_writer_hypertable_failure(writer, mock_engine, mock_db_connection):
+    """Test hypertable creation failure (should be logged but not fail init)."""
+    # We need to allow initial table creation to succeed, but fail hypertable calls
+    
+    async def side_effect(statement, *args, **kwargs):
+        stmt_str = str(statement)
+        if "create_hypertable" in stmt_str:
+            raise Exception("Hypertable Error")
+        return MagicMock()
+        
+    mock_db_connection.execute.side_effect = side_effect
+    
+    await writer.start()
+    # Should still be connected because hypertable failure is caught
+    assert writer._connected is True
+
+@pytest.mark.asyncio
+async def test_writer_get_db_stats_failure(writer, mock_db_connection):
+    """Test stats fetching failure."""
+    await writer.start()
+    
+    mock_db_connection.execute.side_effect = Exception("Stats Error")
+    
+    stats = await writer.get_db_stats()
+    assert stats == {}
+
+@pytest.mark.asyncio
+async def test_writer_start_already_running(writer):
+    """Test start when already running."""
+    await writer.start()
+    assert writer.running is True
+    
+    # Call start again
+    with patch("custom_components.scribe.writer.create_async_engine") as mock_create:
+        await writer.start()
+        mock_create.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_writer_stop_cancelled(writer):
+    """Test stop handling CancelledError."""
+    await writer.start()
+    
+    # Mock task to raise CancelledError when awaited
+    async def mock_task():
+        raise asyncio.CancelledError()
+    
+    writer._task = asyncio.create_task(mock_task())
+    
+    await writer.stop()
+    assert writer.running is False
+
+@pytest.mark.asyncio
+async def test_writer_run_exception(writer):
+    """Test exception in run loop."""
+    writer._running = True
+    writer.flush_interval = 0.01
+    
+    # Mock flush to raise exception then stop running
+    async def side_effect():
+        if writer._running:
+             writer._running = False # Stop loop after first error
+             raise Exception("Loop Error")
+             
+    writer._flush = AsyncMock(side_effect=side_effect)
+    
+    await writer._run()
+    # Should exit loop without crashing
+
+@pytest.mark.asyncio
+async def test_writer_init_db_no_engine(writer):
+    """Test init_db with no engine."""
+    writer._engine = None
+    await writer.init_db()
+    assert writer._connected is False
+
+@pytest.mark.asyncio
+async def test_writer_compression_policy_failure(writer, mock_engine, mock_db_connection):
+    """Test compression policy failure."""
+    async def side_effect(statement, *args, **kwargs):
+        stmt_str = str(statement)
+        if "add_compression_policy" in stmt_str:
+            raise Exception("Policy Error")
+        return MagicMock()
+        
+    mock_db_connection.execute.side_effect = side_effect
+    
+    await writer.start()
+    assert writer._connected is True
+
+@pytest.mark.asyncio
+async def test_writer_buffer_full_drop_oldest(writer):
+    """Test dropping oldest events when buffer is full (buffer_on_failure=True)."""
+    writer.buffer_on_failure = True
+    writer.max_queue_size = 2
+    writer.batch_size = 10 # Prevent auto-flush
+    
+    # Fill queue
+    writer.enqueue({"type": "state", "data": 1})
+    writer.enqueue({"type": "state", "data": 2})
+    
+    # Mock flush failure to trigger buffering logic
+    writer._engine = MagicMock()
+    
+    # Mock begin() to return a context manager that adds an item then raises exception
+    mock_cm = MagicMock()
+    
+    async def mock_enter(*args, **kwargs):
+        # Simulate concurrent add
+        writer.enqueue({"type": "state", "data": 3})
+        raise Exception("Flush Error")
+        
+    mock_cm.__aenter__ = AsyncMock(side_effect=mock_enter)
+    mock_cm.__aexit__ = AsyncMock()
+    
+    writer._engine.begin.return_value = mock_cm
+    
+    # Trigger flush manually
+    await writer._flush()
+    
+    # Batch was [1, 2]. Queue became [3].
+    # Re-buffer: [1, 2, 3]. Max size 2.
+    # Should drop 1 (oldest). Result: [2, 3].
+    
+    assert len(writer._queue) == 2
+    assert writer._queue[0]["data"] == 2
+    assert writer._queue[1]["data"] == 3
+    assert writer._dropped_events == 1
+
+@pytest.mark.asyncio
+async def test_writer_get_db_stats_no_engine(writer):
+    """Test get_db_stats with no engine."""
+    writer._engine = None
+    stats = await writer.get_db_stats()
+    assert stats == {}
+
+@pytest.mark.asyncio
+async def test_writer_compression_enable_failure(writer, mock_engine, mock_db_connection):
+    """Test compression enable failure."""
+    async def side_effect(statement, *args, **kwargs):
+        stmt_str = str(statement)
+        if "timescaledb.compress" in stmt_str:
+            raise Exception("Compression Enable Error")
+        return MagicMock()
+        
+    mock_db_connection.execute.side_effect = side_effect
+    
+    await writer.start()
+    assert writer._connected is True
+
+@pytest.mark.asyncio
+async def test_writer_get_db_stats_connect_failure(writer):
+    """Test get_db_stats connection failure."""
+    await writer.start()
+    
+    # Mock connect() to raise exception
+    writer._engine.connect.side_effect = Exception("Connect Error")
+    
+    stats = await writer.get_db_stats()
+    assert stats == {}

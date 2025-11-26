@@ -40,7 +40,8 @@ class ScribeWriter:
         max_queue_size: int, 
         buffer_on_failure: bool, 
         table_name_states: str, 
-        table_name_events: str
+        table_name_events: str,
+        engine: Any = None
     ):
         """Initialize the writer."""
         self.hass = hass
@@ -74,7 +75,7 @@ class ScribeWriter:
         self._queue: List[Dict[str, Any]] = []
         self._queue_lock = asyncio.Lock()
         
-        self._engine = None
+        self._engine = engine
         self._task = None
         self._running = False
 
@@ -87,18 +88,20 @@ class ScribeWriter:
         self._running = True
         
         # Create Engine
-        try:
-            _LOGGER.debug(f"Creating AsyncEngine for {self.db_url.split('@')[-1]} with pool_size=10, max_overflow=20")
-            self._engine = create_async_engine(
-                self.db_url, 
-                pool_size=10, 
-                max_overflow=20,
-                echo=False # We handle our own logging
-            )
-            _LOGGER.debug("AsyncEngine created successfully")
-        except Exception as e:
-            _LOGGER.error(f"Failed to create engine: {e}", exc_info=True)
-            return
+        if not self._engine:
+            try:
+                _LOGGER.debug(f"Creating AsyncEngine for {self.db_url.split('@')[-1]} with pool_size=10, max_overflow=20")
+                self._engine = create_async_engine(
+                    self.db_url, 
+                    pool_size=10, 
+                    max_overflow=20,
+                    echo=False # We handle our own logging
+                )
+                _LOGGER.debug("AsyncEngine created successfully")
+            except Exception as e:
+                print(f"DEBUG: Failed to create engine: {e}")
+                _LOGGER.error(f"Failed to create engine: {e}", exc_info=True)
+                return
 
         # Initialize DB
         _LOGGER.debug("Starting database initialization...")
@@ -305,7 +308,7 @@ class ScribeWriter:
                 # Check max size
                 if len(self._queue) > self.max_queue_size:
                     dropped = len(self._queue) - self.max_queue_size
-                    self._queue = self._queue[:self.max_queue_size]
+                    self._queue = self._queue[-self.max_queue_size:]
                     self._dropped_events += dropped
                     _LOGGER.error(f"Buffer full! Dropped {dropped} oldest events. Queue size: {len(self._queue)}")
             else:

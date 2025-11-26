@@ -102,6 +102,7 @@ class ScribeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Ensure asyncpg driver
         if "postgresql://" in db_url and "postgresql+asyncpg://" not in db_url:
             db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
+            data[CONF_DB_URL] = db_url
 
         try:
             from sqlalchemy.ext.asyncio import create_async_engine
@@ -126,7 +127,7 @@ class ScribeOptionsFlowHandler(config_entries.OptionsFlow):
 
     def __init__(self, config_entry):
         """Initialize options flow."""
-        pass
+        self.config_entry = config_entry
 
     async def async_step_init(self, user_input=None) -> FlowResult:
         """Manage the options."""
