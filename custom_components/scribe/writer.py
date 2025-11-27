@@ -275,15 +275,15 @@ class ScribeWriter:
                     await self._init_events_table(conn)
                 
                 # Always init users table
-                if self.enable_users:
+                if self.enable_table_users:
                     await self._init_users_table(conn)
-                if self.enable_entities:
+                if self.enable_table_entities:
                     await self._init_entities_table(conn)
-                if self.enable_areas:
+                if self.enable_table_areas:
                     await self._init_areas_table(conn)
-                if self.enable_devices:
+                if self.enable_table_devices:
                     await self._init_devices_table(conn)
-                if self.enable_integrations:
+                if self.enable_table_integrations:
                     await self._init_integrations_table(conn)
 
             # Hypertable & Compression (each operation in its own transaction)

@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.8.2] - 2025-11-27
+
+### Fixed
+- **Writer**: Fixed `AttributeError` in `init_db` causing initialization failure due to incomplete rename of configuration options.
+
 ## [2.8.1] - 2025-11-27
 
 ### Changed
