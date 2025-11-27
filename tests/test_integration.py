@@ -61,7 +61,13 @@ async def test_integration_write_and_read(hass, socket_enabled):
         await asyncio.sleep(2)
         
         # 3. Verify with direct DB connection
+        print(f"DEBUG: Connecting to DB_URL: {DB_URL}")
         conn = await asyncpg.connect(DB_URL)
+        
+        # DEBUG: List tables
+        tables = await conn.fetch("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")
+        print(f"DEBUG: Tables in public schema: {[t['table_name'] for t in tables]}")
+        
         try:
             # Check States
             row = await conn.fetchrow("SELECT * FROM states WHERE entity_id = 'sensor.integration_test'")
