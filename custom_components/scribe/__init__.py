@@ -10,9 +10,8 @@ import json
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.helpers import config_validation as cv
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, ServiceCall, Event, callback
+from homeassistant.core import HomeAssistant, Event, callback
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers import config_validation as cv, area_registry as ar, device_registry as dr, entity_registry as er
 from homeassistant.exceptions import HomeAssistantError
