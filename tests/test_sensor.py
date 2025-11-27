@@ -48,7 +48,7 @@ async def test_writer_sensors():
     
     # Test Write Duration
     sensor = ScribeWriteDurationSensor(writer, entry)
-    assert sensor.native_value == 0.5
+    assert sensor.native_value == 500.0
 
 @pytest.mark.asyncio
 async def test_chunk_coordinator_sensors():
