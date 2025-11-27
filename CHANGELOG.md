@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.8.3] - 2025-11-27
+
+### Changed
+- **Configuration**: Changed default `compress_after` from "60 days" to "7 days" to align with the default chunk interval. This ensures chunks are compressed as soon as they are full.
+
 ## [2.8.2] - 2025-11-27
 
 ### Fixed

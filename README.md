@@ -72,7 +72,7 @@ scribe:
   db_url: postgresql://scribe:password@192.168.1.10:5432/scribe
   db_ssl: false
   chunk_time_interval: "7 days"
-  compress_after: "60 days"
+  compress_after: "7 days"
   record_states: true
   record_events: false
   batch_size: 100
