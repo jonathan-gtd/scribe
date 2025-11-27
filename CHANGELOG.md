@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.5.0] - 2025-11-27
+
+### Added
+- **Entities Table**: Added `entities` table and automatic syncing of Home Assistant entities (including scripts and automations) to the database. This allows joining `entity_id` with friendly names and other metadata.
+
 ## [2.4.0] - 2025-11-27
 
 ### Added

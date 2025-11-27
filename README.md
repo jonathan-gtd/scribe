@@ -12,6 +12,7 @@ Scribe is built differently. Unlike other integrations that rely on synchronous 
 - 📊 **Granular Statistics**: Optional sensors for monitoring chunk counts, compression ratios, and I/O performance.
 - 🔒 **Secure**: Full SSL/TLS support.
 - 👥 **User Context**: Automatically syncs Home Assistant users to the database for rich context.
+- 🧩 **Entity Metadata**: Automatically syncs entity registry (names, platforms, etc.) to the `entities` table.
 - 🎯 **Smart Filtering**: Include/exclude by domain, entity, or attribute.
 - ✅ **100% Test Coverage**: Robust and reliable.
 

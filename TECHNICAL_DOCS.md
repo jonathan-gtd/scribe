@@ -113,6 +113,19 @@ Stores Home Assistant user metadata to provide context for events.
 
 **Syncing**: This table is automatically synchronized with Home Assistant's user registry on startup.
 
+### 4. `entities`
+Stores metadata for all entities (including scripts and automations).
+*   `entity_id` (TEXT): Primary Key.
+*   `unique_id` (TEXT): Unique ID of the entity.
+*   `platform` (TEXT): Integration platform (e.g., `hue`, `mqtt`).
+*   `domain` (TEXT): Entity domain (e.g., `light`, `sensor`).
+*   `name` (TEXT): Friendly name or original name.
+*   `device_id` (TEXT): Associated device ID.
+*   `area_id` (TEXT): Associated area ID.
+*   `capabilities` (JSONB): Entity capabilities (e.g., supported features).
+
+**Syncing**: This table is automatically synchronized with Home Assistant's entity registry on startup.
+
 ## Migration from Recorder
 
 Scribe does not automatically import data from the native Recorder database. However, you can migrate data manually using SQL if both databases are accessible.

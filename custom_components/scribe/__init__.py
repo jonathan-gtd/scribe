@@ -18,8 +18,10 @@ from homeassistant.const import (
     EVENT_HOMEASSISTANT_STOP,
 )
 from homeassistant.helpers.typing import ConfigType
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entityfilter import generate_filter
 from homeassistant.helpers.json import JSONEncoder
+from homeassistant.loader import bind_hass
 
 from .const import (
     DOMAIN,
@@ -240,6 +242,28 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             
     except Exception as e:
         _LOGGER.error(f"Error syncing users: {e}", exc_info=True)
+
+    # Sync Entities
+    try:
+        registry = er.async_get(hass)
+        entities = []
+        for entity in registry.entities.values():
+            entities.append({
+                "entity_id": entity.entity_id,
+                "unique_id": entity.unique_id,
+                "platform": entity.platform,
+                "domain": entity.domain,
+                "name": entity.name or entity.original_name,
+                "device_id": entity.device_id,
+                "area_id": entity.area_id,
+                "capabilities": json.dumps(entity.capabilities, default=str) if entity.capabilities else None
+            })
+        
+        if entities:
+            _LOGGER.debug(f"Syncing {len(entities)} entities to database")
+            await writer.write_entities(entities)
+    except Exception as e:
+        _LOGGER.error(f"Error syncing entities: {e}", exc_info=True)
     
     # Setup Data Update Coordinators for statistics
     from .coordinator import ScribeDataUpdateCoordinator
@@ -288,9 +312,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         
         Note: This must be a synchronous callback (not async) for proper event handling.
         """
-        # DEBUG: Log raw event data to see what HA sends
-        _LOGGER.debug(f"SCRIBE DEBUG - STATE_CHANGED: {event}")
-        _LOGGER.debug(f"SCRIBE DEBUG - STATE_CHANGED data: {event.data}")
 
         entity_id = event.data.get("entity_id")
         new_state = event.data.get("new_state")
@@ -343,10 +364,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             """Handle non-state-change events."""
             if event.event_type == EVENT_STATE_CHANGED:
                 return  # Already handled above
-            
-            # DEBUG: Log raw event data
-            _LOGGER.debug(f"SCRIBE DEBUG - OTHER_EVENT: {event}")
-            _LOGGER.debug(f"SCRIBE DEBUG - OTHER_EVENT data: {event.data}")
 
             _other_event_count["total"] += 1
             if _other_event_count["total"] <= 5:

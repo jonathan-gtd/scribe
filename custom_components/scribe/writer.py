@@ -264,6 +264,7 @@ class ScribeWriter:
                 
                 # Always init users table
                 await self._init_users_table(conn)
+                await self._init_entities_table(conn)
 
             # Hypertable & Compression (each operation in its own transaction)
             if self.record_states:
@@ -353,6 +354,48 @@ class ScribeWriter:
                 _LOGGER.debug("Users written successfully")
         except Exception as e:
             _LOGGER.error(f"Error writing users: {e}")
+
+    async def _init_entities_table(self, conn):
+        """Initialize entities table."""
+        _LOGGER.debug("Creating table entities if not exists")
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS entities (
+                entity_id TEXT PRIMARY KEY,
+                unique_id TEXT,
+                platform TEXT,
+                domain TEXT,
+                name TEXT,
+                device_id TEXT,
+                area_id TEXT,
+                capabilities JSONB
+            );
+        """))
+
+    async def write_entities(self, entities: list[dict]):
+        """Write entities to the database (upsert)."""
+        if not self._engine or not entities:
+            return
+
+        _LOGGER.debug(f"Writing {len(entities)} entities to database...")
+        try:
+            async with self._engine.begin() as conn:
+                # Upsert entities
+                stmt = text("""
+                    INSERT INTO entities (entity_id, unique_id, platform, domain, name, device_id, area_id, capabilities)
+                    VALUES (:entity_id, :unique_id, :platform, :domain, :name, :device_id, :area_id, :capabilities)
+                    ON CONFLICT (entity_id) DO UPDATE SET
+                        unique_id = EXCLUDED.unique_id,
+                        platform = EXCLUDED.platform,
+                        domain = EXCLUDED.domain,
+                        name = EXCLUDED.name,
+                        device_id = EXCLUDED.device_id,
+                        area_id = EXCLUDED.area_id,
+                        capabilities = EXCLUDED.capabilities;
+                """)
+                await conn.execute(stmt, entities)
+                _LOGGER.debug("Entities written successfully")
+        except Exception as e:
+            _LOGGER.error(f"Error writing entities: {e}")
 
     async def _init_hypertable(self, table_name, segment_by):
         """Initialize hypertable and compression.
