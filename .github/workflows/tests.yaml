@@ -11,8 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.11", "3.12", "3.13", "3.14"]
-        postgres-version: ["pg16", "pg17", "pg18"]
+        python-version: ["3.12", "3.13"]
+        postgres-version: ["pg16", "pg17"]
+        ha-version: ["stable", "beta", "dev", "2024.10.0"]
 
     services:
       timescaledb:
@@ -40,6 +41,18 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements_test.txt
+        
+    - name: Install Home Assistant ${{ matrix.ha-version }}
+      run: |
+        if [ "${{ matrix.ha-version }}" == "stable" ]; then
+          pip install homeassistant
+        elif [ "${{ matrix.ha-version }}" == "beta" ]; then
+          pip install --pre homeassistant
+        elif [ "${{ matrix.ha-version }}" == "dev" ]; then
+          pip install git+https://github.com/home-assistant/core.git@dev
+        else
+          pip install homeassistant==${{ matrix.ha-version }}
+        fi
 
     - name: Run Linting
       run: |

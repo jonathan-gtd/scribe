@@ -69,6 +69,6 @@ def mock_config_entry():
     )
     mock_entry.setup_lock = MagicMock()
     mock_entry.setup_lock.locked.return_value = False
-    from homeassistant.config_entries import ConfigEntryState
+    # from homeassistant.config_entries import ConfigEntryState
     # mock_entry.state = ConfigEntryState.LOADED
     return mock_entry

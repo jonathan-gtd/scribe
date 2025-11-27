@@ -101,7 +101,7 @@ async def test_event_listener(hass, mock_config_entry):
         # Since we can't easily patch it before setup in this structure without refactoring,
         # let's iterate listeners again but be more robust.
         
-        target_listener = None
+        # target_listener = None
         # In HA core, listeners are stored in hass.bus._listeners
         # It's a dict: {event_type: [list of listeners]}
         # For EVENT_STATE_CHANGED, it should be there.

@@ -10,14 +10,14 @@ import json
 import voluptuous as vol
 
 from homeassistant import config_entries
+from homeassistant.helpers import config_validation as cv
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, Event, ServiceCall, ServiceResponse, SupportsResponse, callback
+from homeassistant.core import HomeAssistant, Event, callback
 from homeassistant.const import (
     EVENT_STATE_CHANGED,
     EVENT_HOMEASSISTANT_STOP,
 )
 from homeassistant.helpers.typing import ConfigType
-from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entityfilter import generate_filter
 from homeassistant.helpers.json import JSONEncoder
 
@@ -63,9 +63,6 @@ from .const import (
 from .writer import ScribeWriter
 
 _LOGGER = logging.getLogger(__name__)
-
-import homeassistant.helpers.config_validation as cv
-from homeassistant.helpers import discovery
 
 # Configuration Schema for YAML configuration
 # This allows users to configure Scribe via configuration.yaml instead of the UI.
