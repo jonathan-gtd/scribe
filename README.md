@@ -60,30 +60,56 @@ scribe:
   db_url: postgresql://scribe:password@192.168.1.10:5432/scribe
 ```
 
+### Full Configuration (Default Values)
+
+```yaml
+scribe:
+  db_url: postgresql://scribe:password@192.168.1.10:5432/scribe
+  db_ssl: false
+  chunk_time_interval: "7 days"
+  compress_after: "60 days"
+  record_states: true
+  record_events: false
+  batch_size: 100
+  flush_interval: 5
+  max_queue_size: 10000
+  buffer_on_failure: true
+  enable_stats_io: false
+  enable_stats_chunk: false
+  enable_stats_size: false
+  stats_chunk_interval: 60
+  stats_size_interval: 60
+  include_domains: []
+  include_entities: []
+  exclude_domains: []
+  exclude_entities: []
+  exclude_attributes: []
+```
+
 ### Configuration Parameters
 
-| Parameter | Description | Example |
-| :--- | :--- | :--- |
-| `db_url` | **Required.** The connection string for your TimescaleDB database. | `postgresql://user:pass@host:5432/db` |
-| `db_ssl` | Enable SSL/TLS for the database connection. | `false` |
-| `chunk_time_interval` | The duration of each data chunk in TimescaleDB. | `"7 days"` |
-| `compress_after` | How old data should be before it is compressed. | `"60 days"` |
-| `record_states` | Whether to record state changes. | `true` |
-| `record_events` | Whether to record events. | `false` |
-| `batch_size` | Number of items to buffer before writing to the database. | `100` |
-| `flush_interval` | Maximum time (in seconds) to wait before flushing the buffer. | `5` |
-| `max_queue_size` | Maximum number of items to hold in memory before dropping new ones. | `10000` |
-| `buffer_on_failure` | If true, keeps data in memory if the DB is unreachable (up to `max_queue_size`). | `true` |
-| `enable_stats_io` | Enable real-time writer performance sensors (no DB queries). | `false` |
-| `enable_stats_chunk` | Enable chunk count statistics sensors (queries DB). | `false` |
-| `enable_stats_size` | Enable storage size statistics sensors (queries DB). | `false` |
-| `stats_chunk_interval` | Interval (in minutes) to update chunk statistics. | `60` |
-| `stats_size_interval` | Interval (in minutes) to update size statistics. | `60` |
-| `include_domains` | List of domains to include. | `["sensor", "light"]` |
-| `include_entities` | List of specific entities to include. | `["sensor.temp"]` |
-| `exclude_domains` | List of domains to exclude. | `["automation"]` |
-| `exclude_entities` | List of specific entities to exclude. | `["sensor.noisy"]` |
-| `exclude_attributes` | List of attributes to exclude from the `attributes` column. | `["entity_picture"]` |
+| Parameter | Description |
+| :--- | :--- |
+| `db_url` | **Required.** The connection string for your TimescaleDB database. |
+| `db_ssl` | Enable SSL/TLS for the database connection. |
+| `chunk_time_interval` | The duration of each data chunk in TimescaleDB. |
+| `compress_after` | How old data should be before it is compressed. |
+| `record_states` | Whether to record state changes. |
+| `record_events` | Whether to record events. |
+| `batch_size` | Number of items to buffer before writing to the database. |
+| `flush_interval` | Maximum time (in seconds) to wait before flushing the buffer. |
+| `max_queue_size` | Maximum number of items to hold in memory before dropping new ones. |
+| `buffer_on_failure` | If true, keeps data in memory if the DB is unreachable (up to `max_queue_size`). |
+| `enable_stats_io` | Enable real-time writer performance sensors (no DB queries). |
+| `enable_stats_chunk` | Enable chunk count statistics sensors (queries DB). |
+| `enable_stats_size` | Enable storage size statistics sensors (queries DB). |
+| `stats_chunk_interval` | Interval (in minutes) to update chunk statistics. |
+| `stats_size_interval` | Interval (in minutes) to update size statistics. |
+| `include_domains` | List of domains to include. |
+| `include_entities` | List of specific entities to include. |
+| `exclude_domains` | List of domains to exclude. |
+| `exclude_entities` | List of specific entities to exclude. |
+| `exclude_attributes` | List of attributes to exclude from the `attributes` column. |
 
 ## Statistics Sensors
 
@@ -165,6 +191,10 @@ You can configure SSL certificates for the database connection. This is useful i
 
 ### Still having issues?
 Please [open an issue](https://github.com/jonathan-gatard/scribe/issues) on GitHub with your logs and configuration. We're happy to help!
+
+## Technical Data
+
+For detailed technical information about the architecture, database schema, and data flow, please refer to the [Technical Documentation](TECHNICAL_DOCS.md).
 
 ## License
 
