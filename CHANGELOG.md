@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.8.1] - 2025-11-27
+
+### Changed
+- **Configuration**: Renamed `enable_*` configuration options to `enable_table_*` for clarity.
+  - `enable_areas` -> `enable_table_areas`
+  - `enable_devices` -> `enable_table_devices`
+  - `enable_entities` -> `enable_table_entities`
+  - `enable_integrations` -> `enable_table_integrations`
+  - `enable_users` -> `enable_table_users`
+
 ## [2.8.0] - 2025-11-27
 
 ### Added

@@ -91,9 +91,11 @@ class ScribeWriter:
         ssl_key_file: str = None,
         enable_areas: bool = True,
         enable_devices: bool = True,
-        enable_entities: bool = True,
-        enable_integrations: bool = True,
-        enable_users: bool = True,
+        enable_table_areas: bool = True,
+        enable_table_devices: bool = True,
+        enable_table_entities: bool = True,
+        enable_table_integrations: bool = True,
+        enable_table_users: bool = True,
         engine: Any = None
     ):
         """Initialize the writer."""
@@ -119,11 +121,11 @@ class ScribeWriter:
         self.ssl_root_cert = ssl_root_cert
         self.ssl_cert_file = ssl_cert_file
         self.ssl_key_file = ssl_key_file
-        self.enable_areas = enable_areas
-        self.enable_devices = enable_devices
-        self.enable_entities = enable_entities
-        self.enable_integrations = enable_integrations
-        self.enable_users = enable_users
+        self.enable_table_areas = enable_table_areas
+        self.enable_table_devices = enable_table_devices
+        self.enable_table_entities = enable_table_entities
+        self.enable_table_integrations = enable_table_integrations
+        self.enable_table_users = enable_table_users
         
         # Stats for sensors
         self._states_written = 0

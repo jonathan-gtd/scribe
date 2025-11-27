@@ -85,7 +85,14 @@ scribe:
   include_entities: []
   exclude_domains: []
   exclude_entities: []
+  exclude_entities: []
   exclude_attributes: []
+  # Optional: Disable specific metadata tables (default: true)
+  enable_table_areas: true
+  enable_table_devices: true
+  enable_table_entities: true
+  enable_table_integrations: true
+  enable_table_users: true
 ```
 
 ### Configuration Parameters
@@ -112,6 +119,11 @@ scribe:
 | `exclude_domains` | List of domains to exclude. |
 | `exclude_entities` | List of specific entities to exclude. |
 | `exclude_attributes` | List of attributes to exclude from the `attributes` column. |
+| `enable_table_areas` | Enable creation and sync of the `areas` table. |
+| `enable_table_devices` | Enable creation and sync of the `devices` table. |
+| `enable_table_entities` | Enable creation and sync of the `entities` table. |
+| `enable_table_integrations` | Enable creation and sync of the `integrations` table. |
+| `enable_table_users` | Enable creation and sync of the `users` table. |
 
 ## Statistics Sensors
 

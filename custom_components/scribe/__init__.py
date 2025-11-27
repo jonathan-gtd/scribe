@@ -231,18 +231,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         ssl_root_cert=ssl_root_cert,
         ssl_cert_file=ssl_cert_file,
         ssl_key_file=ssl_key_file,
-        enable_areas=yaml_config.get(CONF_ENABLE_AREAS, DEFAULT_ENABLE_AREAS),
-        enable_devices=yaml_config.get(CONF_ENABLE_DEVICES, DEFAULT_ENABLE_DEVICES),
-        enable_entities=yaml_config.get(CONF_ENABLE_ENTITIES, DEFAULT_ENABLE_ENTITIES),
-        enable_integrations=yaml_config.get(CONF_ENABLE_INTEGRATIONS, DEFAULT_ENABLE_INTEGRATIONS),
-        enable_users=yaml_config.get(CONF_ENABLE_USERS, DEFAULT_ENABLE_USERS),
+        enable_table_areas=yaml_config.get(CONF_ENABLE_AREAS, DEFAULT_ENABLE_AREAS),
+        enable_table_devices=yaml_config.get(CONF_ENABLE_DEVICES, DEFAULT_ENABLE_DEVICES),
+        enable_table_entities=yaml_config.get(CONF_ENABLE_ENTITIES, DEFAULT_ENABLE_ENTITIES),
+        enable_table_integrations=yaml_config.get(CONF_ENABLE_INTEGRATIONS, DEFAULT_ENABLE_INTEGRATIONS),
+        enable_table_users=yaml_config.get(CONF_ENABLE_USERS, DEFAULT_ENABLE_USERS),
     )
     
     # Start the writer task (async)
     await writer.start()
 
     # Sync Users
-    if writer.enable_users:
+    if writer.enable_table_users:
         try:
             users_list = await hass.auth.async_get_users()
             _LOGGER.debug(f"Syncing users. Total users in hass.auth: {len(users_list)}")
@@ -267,7 +267,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.error(f"Error syncing users: {e}", exc_info=True)
 
     # Sync Entities
-    if writer.enable_entities:
+    if writer.enable_table_entities:
         try:
             registry = er.async_get(hass)
             entities = []
@@ -290,7 +290,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.error(f"Error syncing entities: {e}", exc_info=True)
 
     # Sync Areas
-    if writer.enable_areas:
+    if writer.enable_table_areas:
         try:
             area_reg = ar.async_get(hass)
             areas = []
@@ -307,7 +307,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.error(f"Error syncing areas: {e}", exc_info=True)
 
     # Sync Devices
-    if writer.enable_devices:
+    if writer.enable_table_devices:
         try:
             device_reg = dr.async_get(hass)
             devices = []
@@ -332,7 +332,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.error(f"Error syncing devices: {e}", exc_info=True)
 
     # Sync Integrations (Config Entries)
-    if writer.enable_integrations:
+    if writer.enable_table_integrations:
         try:
             integrations = []
             for config_entry in hass.config_entries.async_entries():
@@ -474,11 +474,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.async_on_unload(
             hass.bus.async_listen(MATCH_ALL, handle_other_events)
         )
-    
+
     # Real-time Metadata Sync Listeners
     
     # Entity Registry Updates
-    if writer.enable_entities:
+    if writer.enable_table_entities:
         async def handle_entity_registry_update(event: Event):
             """Handle entity registry update."""
             action = event.data.get("action")
@@ -509,7 +509,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
 
     # Device Registry Updates
-    if writer.enable_devices:
+    if writer.enable_table_devices:
         async def handle_device_registry_update(event: Event):
             """Handle device registry update."""
             action = event.data.get("action")
@@ -543,7 +543,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
 
     # Area Registry Updates
-    if writer.enable_areas:
+    if writer.enable_table_areas:
         async def handle_area_registry_update(event: Event):
             """Handle area registry update."""
             action = event.data.get("action")
@@ -567,11 +567,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         entry.async_on_unload(
             hass.bus.async_listen("area_registry_updated", handle_area_registry_update)
         )
-    
 
 
     # User Registry Updates
-    if writer.enable_users:
+    if writer.enable_table_users:
         async def handle_user_update(event: Event):
             """Handle user registry update."""
             user_id = event.data.get("user_id")

@@ -44,11 +44,11 @@ async def test_default_config_enables_all(hass, mock_config_entry):
         mock_writer.write_integrations = AsyncMock()
         
         # Mock flags on the writer instance (simulating what __init__ does)
-        mock_writer.enable_users = True
-        mock_writer.enable_entities = True
-        mock_writer.enable_areas = True
-        mock_writer.enable_devices = True
-        mock_writer.enable_integrations = True
+        mock_writer.enable_table_users = True
+        mock_writer.enable_table_entities = True
+        mock_writer.enable_table_areas = True
+        mock_writer.enable_table_devices = True
+        mock_writer.enable_table_integrations = True
 
         mock_get_users.return_value = [] # Return empty list to avoid actual processing but verify call
         
@@ -64,11 +64,11 @@ async def test_default_config_enables_all(hass, mock_config_entry):
         
         # For others, we can check if the registry getters were called, but simpler to check if writer was initialized with correct flags
         _, kwargs = mock_writer_cls.call_args
-        assert kwargs["enable_users"] is True
-        assert kwargs["enable_entities"] is True
-        assert kwargs["enable_areas"] is True
-        assert kwargs["enable_devices"] is True
-        assert kwargs["enable_integrations"] is True
+        assert kwargs["enable_table_users"] is True
+        assert kwargs["enable_table_entities"] is True
+        assert kwargs["enable_table_areas"] is True
+        assert kwargs["enable_table_devices"] is True
+        assert kwargs["enable_table_integrations"] is True
 
 @pytest.mark.asyncio
 async def test_disable_users_table(hass, mock_config_entry):
@@ -88,13 +88,13 @@ async def test_disable_users_table(hass, mock_config_entry):
         mock_writer.stop = AsyncMock()
         
         # Mock flags on the writer instance
-        mock_writer.enable_users = False
+        mock_writer.enable_table_users = False
         
         await async_setup_entry(hass, mock_config_entry)
         
         # Verify ScribeWriter init
         _, kwargs = mock_writer_cls.call_args
-        assert kwargs["enable_users"] is False
+        assert kwargs["enable_table_users"] is False
         
         # Verify async_get_users was NOT called
         mock_get_users.assert_not_called()
@@ -124,21 +124,21 @@ async def test_disable_all_metadata(hass, mock_config_entry):
         mock_writer.stop = AsyncMock()
         
         # Mock flags on the writer instance
-        mock_writer.enable_users = False
-        mock_writer.enable_entities = False
-        mock_writer.enable_areas = False
-        mock_writer.enable_devices = False
-        mock_writer.enable_integrations = False
+        mock_writer.enable_table_users = False
+        mock_writer.enable_table_entities = False
+        mock_writer.enable_table_areas = False
+        mock_writer.enable_table_devices = False
+        mock_writer.enable_table_integrations = False
         
         await async_setup_entry(hass, mock_config_entry)
         
         # Verify ScribeWriter init
         _, kwargs = mock_writer_cls.call_args
-        assert kwargs["enable_users"] is False
-        assert kwargs["enable_entities"] is False
-        assert kwargs["enable_areas"] is False
-        assert kwargs["enable_devices"] is False
-        assert kwargs["enable_integrations"] is False
+        assert kwargs["enable_table_users"] is False
+        assert kwargs["enable_table_entities"] is False
+        assert kwargs["enable_table_areas"] is False
+        assert kwargs["enable_table_devices"] is False
+        assert kwargs["enable_table_integrations"] is False
         
         # Verify no registry calls
         mock_get_users.assert_not_called()

@@ -56,17 +56,17 @@ DEFAULT_STATS_SIZE_INTERVAL = 60  # minutes
 
 DEFAULT_BUFFER_ON_FAILURE = True
 
-CONF_ENABLE_AREAS = "enable_areas"
+CONF_ENABLE_AREAS = "enable_table_areas"
 DEFAULT_ENABLE_AREAS = True
 
-CONF_ENABLE_DEVICES = "enable_devices"
+CONF_ENABLE_DEVICES = "enable_table_devices"
 DEFAULT_ENABLE_DEVICES = True
 
-CONF_ENABLE_ENTITIES = "enable_entities"
+CONF_ENABLE_ENTITIES = "enable_table_entities"
 DEFAULT_ENABLE_ENTITIES = True
 
-CONF_ENABLE_INTEGRATIONS = "enable_integrations"
+CONF_ENABLE_INTEGRATIONS = "enable_table_integrations"
 DEFAULT_ENABLE_INTEGRATIONS = True
 
-CONF_ENABLE_USERS = "enable_users"
+CONF_ENABLE_USERS = "enable_table_users"
 DEFAULT_ENABLE_USERS = True
