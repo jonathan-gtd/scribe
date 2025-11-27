@@ -149,16 +149,27 @@ class ScribeWriter:
                 # clean_url = self._clean_db_url(self.db_url)
                 
                 if self.use_ssl:
+                    # Resolve paths relative to HA config dir if they are relative
+                    def resolve_path(path_str):
+                        if not path_str:
+                            return None
+                        path = Path(path_str)
+                        if not path.is_absolute():
+                            return str(Path(self.hass.config.config_dir) / path)
+                        return str(path)
+
+                    root_cert = resolve_path(self.ssl_root_cert)
+                    cert_file = resolve_path(self.ssl_cert_file)
+                    key_file = resolve_path(self.ssl_key_file)
+
                     # Create SSL context in executor to avoid blocking the event loop
-                    # asyncpg calls ssl.load_cert_chain() synchronously when it detects
-                    # certificates. By providing our own pre-configured SSL context,
-                    # we prevent asyncpg from doing blocking I/O in the event loop.
+                    # We pass the resolved paths
                     _LOGGER.debug("SSL enabled, creating SSL context in executor...")
                     ssl_context = await self.hass.async_add_executor_job(
                         _create_ssl_context, 
-                        self.ssl_root_cert, 
-                        self.ssl_cert_file, 
-                        self.ssl_key_file
+                        root_cert, 
+                        cert_file, 
+                        key_file
                     )
                     connect_args = {"ssl": ssl_context}
                 else:
