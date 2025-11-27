@@ -1,9 +1,8 @@
 """Test Scribe setup process."""
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock, ANY
-from homeassistant.core import HomeAssistant
+from unittest.mock import patch, MagicMock, AsyncMock
 from homeassistant.config_entries import ConfigEntry, SOURCE_IMPORT
-from homeassistant.const import EVENT_STATE_CHANGED, EVENT_HOMEASSISTANT_STOP
+from homeassistant.const import EVENT_STATE_CHANGED
 from custom_components.scribe.const import DOMAIN, CONF_DB_URL
 
 @pytest.fixture
@@ -112,7 +111,7 @@ async def test_event_listener(hass, mock_config_entry):
              # listener_item is a generic callback, usually the job is wrapped
              # We look for our function name in the string representation
              if "handle_event" in str(listener_item):
-                 target_listener = listener_item
+                 # target_listener = listener_item
                  break
         
         # If not found in specific event, check None (catch-all) if we used MATCH_ALL? 
@@ -137,7 +136,6 @@ async def test_event_listener(hass, mock_config_entry):
 async def test_legacy_config(hass):
     """Test legacy configuration with individual fields."""
     from custom_components.scribe import async_setup_entry
-    from custom_components.scribe.const import CONF_DB_URL
     
     entry = MagicMock(spec=ConfigEntry)
     entry.domain = DOMAIN

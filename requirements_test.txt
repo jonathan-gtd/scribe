@@ -1,0 +1,7 @@
+pytest
+pytest-homeassistant-custom-component
+pytest-asyncio
+psycopg2-binary
+sqlalchemy
+asyncpg
+ruff

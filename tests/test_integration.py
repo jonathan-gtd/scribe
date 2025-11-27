@@ -1,168 +1,117 @@
 """Integration tests for Scribe."""
+import os
 import pytest
-import json
 import asyncio
-from unittest.mock import MagicMock, AsyncMock, patch
+import asyncpg
 from datetime import datetime
-from homeassistant.const import EVENT_STATE_CHANGED
-from homeassistant.core import Event, State
 from custom_components.scribe.writer import ScribeWriter
-from custom_components.scribe import async_setup_entry
-from custom_components.scribe.const import DOMAIN
 
+# Get DB URL from env or skip
+DB_URL = os.getenv("SCRIBE_INTEGRATION_TEST_DB_URL")
+
+@pytest.mark.skipif(not DB_URL, reason="Integration test DB URL not set")
 @pytest.mark.asyncio
-async def test_event_to_db_write():
-    """Test that a Home Assistant event results in a DB write."""
-    hass = MagicMock()
-    hass.data = {}
+async def test_integration_write_and_read(hass):
+    """Test writing to a real database and reading back."""
     
-    # Mock Config Entry
-    entry = MagicMock()
-    entry.entry_id = "test_entry"
-    entry.data = {
-        "db_url": "postgresql://user:pass@host/db",
-        "record_states": True,
-        "record_events": True
-    }
-    entry.options = {}
-    
-    # Mock Writer in hass.data (simulating setup)
+    # 1. Setup Writer
     writer = ScribeWriter(
         hass=hass,
-        db_url="postgresql://user:pass@host/db",
+        db_url=DB_URL,
         chunk_interval="7 days",
         compress_after="60 days",
         record_states=True,
         record_events=True,
-        batch_size=1, # Flush immediately
-        flush_interval=60,
+        batch_size=1, # Write immediately
+        flush_interval=1,
         max_queue_size=100,
-        buffer_on_failure=True,
+        buffer_on_failure=False,
         table_name_states="states",
         table_name_events="events"
     )
     
-    # Mock Engine & Connection
-    mock_engine = MagicMock()
-    mock_conn = AsyncMock()
-    mock_transaction = AsyncMock()
-    mock_transaction.__aenter__.return_value = mock_conn
-    mock_transaction.__aexit__.return_value = None
-    mock_engine.begin.return_value = mock_transaction
+    await writer.start()
     
-    writer._engine = mock_engine
-    writer._running = True
-    
-    # Simulate Event
-    now = datetime.now()
-    event_data = {
-        "entity_id": "sensor.test",
-        "new_state": State("sensor.test", "123", {"unit": "W"}, last_updated=now),
-        "old_state": None
-    }
-    # Mock Event object to avoid version compatibility issues
-    event = MagicMock()
-    event.event_type = EVENT_STATE_CHANGED
-    event.data = event_data
-    event.time_fired = now
-    
-    # Manually trigger the logic that would happen in handle_event
-    # Since we can't easily invoke the inner function defined in async_setup_entry without complex setup,
-    # we will test the writer's enqueue and flush directly with data derived from the event,
-    # which mimics the integration logic.
-    
-    # 1. Transform Event to Data (Logic from __init__.py)
-    state_data = {
-        "type": "state",
-        "time": event.data["new_state"].last_updated,
-        "entity_id": event.data["entity_id"],
-        "state": event.data["new_state"].state,
-        "value": float(event.data["new_state"].state),
-        "attributes": json.dumps(dict(event.data["new_state"].attributes), default=str),
-    }
-    
-    # 2. Enqueue
-    writer.enqueue(state_data)
-    
-    # 3. Flush (triggered by batch_size=1)
-    await asyncio.sleep(0.1)
-    if len(writer._queue) > 0:
-        await writer._flush()
+    try:
+        # 2. Write Data
+        # State
+        writer.enqueue({
+            "type": "state",
+            "entity_id": "sensor.integration_test",
+            "state": "123.45",
+            "attributes": '{"unit": "C"}',
+            "last_updated": datetime.now().isoformat(),
+            "last_changed": datetime.now().isoformat(),
+            "value": 123.45
+        })
         
-    # 4. Verify DB Write
-    assert mock_conn.execute.call_count == 1
-    call_args = mock_conn.execute.call_args
-    sql_query = str(call_args[0][0])
-    params = call_args[0][1]
-    
-    assert "INSERT INTO states" in sql_query
-    assert len(params) == 1
-    assert params[0]["entity_id"] == "sensor.test"
-    assert params[0]["value"] == 123.0
-    assert params[0]["state"] == "123"
-    assert "unit" in params[0]["attributes"]
+        # Event
+        writer.enqueue({
+            "type": "event",
+            "event_type": "integration_event",
+            "event_data": '{"foo": "bar"}',
+            "time_fired": datetime.now().isoformat(),
+            "origin": "LOCAL",
+            "context_id": "ctx_1",
+            "context_user_id": "user_1",
+            "context_parent_id": "parent_1"
+        })
+        
+        # Wait for flush
+        await asyncio.sleep(2)
+        
+        # 3. Verify with direct DB connection
+        conn = await asyncpg.connect(DB_URL)
+        try:
+            # Check States
+            row = await conn.fetchrow("SELECT * FROM states WHERE entity_id = 'sensor.integration_test'")
+            assert row is not None
+            assert row["state"] == "123.45"
+            assert row["value"] == 123.45
+            
+            # Check Events
+            row = await conn.fetchrow("SELECT * FROM events WHERE event_type = 'integration_event'")
+            assert row is not None
+            assert "bar" in row["event_data"]
+            
+        finally:
+            await conn.close()
+            
+    finally:
+        await writer.stop()
 
+@pytest.mark.skipif(not DB_URL, reason="Integration test DB URL not set")
 @pytest.mark.asyncio
-async def test_generic_event_to_db_write():
-    """Test that a generic Home Assistant event results in a DB write."""
-    hass = MagicMock()
-    
+async def test_integration_compression_setup(hass):
+    """Test that compression policies are correctly set up."""
     writer = ScribeWriter(
         hass=hass,
-        db_url="postgresql://user:pass@host/db",
+        db_url=DB_URL,
         chunk_interval="7 days",
         compress_after="60 days",
         record_states=True,
         record_events=True,
-        batch_size=1,
-        flush_interval=60,
+        batch_size=10,
+        flush_interval=5,
         max_queue_size=100,
-        buffer_on_failure=True,
+        buffer_on_failure=False,
         table_name_states="states",
         table_name_events="events"
     )
     
-    mock_engine = MagicMock()
-    mock_conn = AsyncMock()
-    mock_transaction = AsyncMock()
-    mock_transaction.__aenter__.return_value = mock_conn
-    mock_transaction.__aexit__.return_value = None
-    mock_engine.begin.return_value = mock_transaction
-    writer._engine = mock_engine
-    writer._running = True
+    await writer.start()
+    await writer.stop()
     
-    now = datetime.now()
-    event = MagicMock()
-    event.event_type = "test_event"
-    event.data = {"some": "data"}
-    event.time_fired = now
-    event.origin = "LOCAL"
-    event.context.id = "ctx_id"
-    event.context.user_id = "user_id"
-    event.context.parent_id = "parent_id"
-    
-    event_data = {
-        "type": "event",
-        "time": event.time_fired,
-        "event_type": event.event_type,
-        "event_data": json.dumps(event.data, default=str),
-        "origin": str(event.origin),
-        "context_id": event.context.id,
-        "context_user_id": event.context.user_id,
-        "context_parent_id": event.context.parent_id,
-    }
-    
-    writer.enqueue(event_data)
-    
-    await asyncio.sleep(0.1)
-    if len(writer._queue) > 0:
-        await writer._flush()
+    conn = await asyncpg.connect(DB_URL)
+    try:
+        # Check if compression is enabled on hypertables
+        # We query timescaledb_information.hypertables or similar
+        # But simpler: check if compression stats view has entries or just check pg_settings/config
         
-    assert mock_conn.execute.call_count == 1
-    call_args = mock_conn.execute.call_args
-    sql_query = str(call_args[0][0])
-    params = call_args[0][1]
-    
-    assert "INSERT INTO events" in sql_query
-    assert params[0]["event_type"] == "test_event"
-    assert '{"some": "data"}' in params[0]["event_data"]
+        # Let's check timescaledb_information.jobs for compression policies
+        rows = await conn.fetch("SELECT * FROM timescaledb_information.jobs WHERE proc_name = 'policy_compression'")
+        # We expect at least 2 jobs (states and events)
+        assert len(rows) >= 2
+        
+    finally:
+        await conn.close()

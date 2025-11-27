@@ -1,6 +1,5 @@
 """Test Scribe config flow."""
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
 from homeassistant import config_entries, data_entry_flow
 from custom_components.scribe.const import DOMAIN, CONF_DB_URL, CONF_RECORD_STATES, CONF_RECORD_EVENTS
 
@@ -135,7 +134,6 @@ async def test_flow_user_asyncpg_replacement(hass, mock_db_connection, mock_engi
 @pytest.mark.asyncio
 async def test_options_flow(hass, mock_config_entry):
     """Test options flow."""
-    from custom_components.scribe.config_flow import ScribeOptionsFlowHandler
     from homeassistant.data_entry_flow import FlowResultType
     from custom_components.scribe.const import (
         CONF_BATCH_SIZE, CONF_RECORD_STATES, CONF_RECORD_EVENTS

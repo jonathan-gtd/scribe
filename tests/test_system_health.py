@@ -1,6 +1,6 @@
 """Test Scribe system health."""
 import pytest
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock
 from custom_components.scribe.system_health import async_register, system_health_info
 from custom_components.scribe.const import DOMAIN
 

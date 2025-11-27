@@ -6,15 +6,13 @@ to minimize database connection overhead and blocking.
 """
 import logging
 import asyncio
-import json
 import ssl
 import time
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from homeassistant.core import HomeAssistant
 

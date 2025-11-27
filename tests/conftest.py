@@ -54,7 +54,7 @@ def mock_config_entry():
     from pytest_homeassistant_custom_component.common import MockConfigEntry
     from custom_components.scribe.const import DOMAIN, CONF_DB_URL, CONF_RECORD_STATES, CONF_RECORD_EVENTS
     
-    return MockConfigEntry(
+    mock_entry = MockConfigEntry(
         domain=DOMAIN,
         data={
             CONF_DB_URL: "postgresql://user:pass@host/db",
@@ -67,8 +67,8 @@ def mock_config_entry():
         },
         entry_id="test_entry_id"
     )
-    entry.setup_lock = MagicMock()
-    entry.setup_lock.locked.return_value = False
+    mock_entry.setup_lock = MagicMock()
+    mock_entry.setup_lock.locked.return_value = False
     from homeassistant.config_entries import ConfigEntryState
-    entry.state = ConfigEntryState.LOADED
-    return entry
+    # mock_entry.state = ConfigEntryState.LOADED
+    return mock_entry

@@ -1,5 +1,5 @@
 """SQLAlchemy models for Scribe."""
-from sqlalchemy import Column, DateTime, String, Float, Integer, Text
+from sqlalchemy import Column, DateTime, String, Float
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.declarative import declarative_base
 

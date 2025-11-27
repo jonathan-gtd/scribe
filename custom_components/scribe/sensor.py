@@ -16,16 +16,11 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
-    DataUpdateCoordinator,
 )
 
 from .const import (
     DOMAIN, 
-    CONF_ENABLE_STATS_CHUNK, 
-    CONF_ENABLE_STATS_SIZE, 
     CONF_ENABLE_STATS_IO,
-    DEFAULT_ENABLE_STATS_CHUNK,
-    DEFAULT_ENABLE_STATS_SIZE,
     DEFAULT_ENABLE_STATS_IO,
 )
 

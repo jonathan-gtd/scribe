@@ -1,7 +1,7 @@
 """Test ScribeWriter."""
 import pytest
 import asyncio
-from unittest.mock import MagicMock, AsyncMock, patch, ANY
+from unittest.mock import MagicMock, AsyncMock, patch
 from custom_components.scribe.writer import ScribeWriter
 
 @pytest.fixture

@@ -8,16 +8,13 @@ This module handles the UI configuration for Scribe. It supports:
 import logging
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.core import callback, HomeAssistant
+from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
-import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers import selector
 
 from .const import (
     DOMAIN,
     CONF_DB_URL,
-    CONF_CHUNK_TIME_INTERVAL,
-    CONF_COMPRESS_AFTER,
     CONF_INCLUDE_DOMAINS,
     CONF_INCLUDE_ENTITIES,
     CONF_EXCLUDE_DOMAINS,
@@ -29,8 +26,6 @@ from .const import (
     CONF_FLUSH_INTERVAL,
     CONF_MAX_QUEUE_SIZE,
     CONF_BUFFER_ON_FAILURE,
-    DEFAULT_CHUNK_TIME_INTERVAL,
-    DEFAULT_COMPRESS_AFTER,
     DEFAULT_RECORD_STATES,
     DEFAULT_RECORD_EVENTS,
     DEFAULT_BATCH_SIZE,

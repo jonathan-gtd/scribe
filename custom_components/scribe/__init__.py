@@ -6,8 +6,8 @@ to ensure that database operations do not block the main Home Assistant event lo
 """
 import logging
 import json
+
 import voluptuous as vol
-from homeassistant.helpers.json import JSONEncoder
 
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry
@@ -19,6 +19,7 @@ from homeassistant.const import (
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entityfilter import generate_filter
+from homeassistant.helpers.json import JSONEncoder
 
 from .const import (
     DOMAIN,
@@ -35,7 +36,6 @@ from .const import (
     CONF_RECORD_EVENTS,
     CONF_BATCH_SIZE,
     CONF_FLUSH_INTERVAL,
-    CONF_MAX_QUEUE_SIZE,
     CONF_MAX_QUEUE_SIZE,
     CONF_ENABLE_STATS_IO,
     CONF_ENABLE_STATS_CHUNK,
@@ -156,7 +156,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             return False
 
     # YAML Only Settings
-    max_queue_size = yaml_config.get(CONF_MAX_QUEUE_SIZE, DEFAULT_MAX_QUEUE_SIZE)
+    # max_queue_size = yaml_config.get(CONF_MAX_QUEUE_SIZE, DEFAULT_MAX_QUEUE_SIZE)
 
     # Entity Filter
     # Sets up the include/exclude logic for domains and entities
