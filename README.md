@@ -11,8 +11,8 @@ Scribe is built differently. Unlike other integrations that rely on synchronous 
 - 📦 **TimescaleDB Native**: Automatically manages Hypertables and Compression Policies.
 - 📊 **Granular Statistics**: Optional sensors for monitoring chunk counts, compression ratios, and I/O performance.
 - 🔒 **Secure**: Full SSL/TLS support.
-- � **States & Events**: Records all state changes and events to `states` and `events` tables.
-- �👥 **User Context**: Automatically syncs Home Assistant users to the database for rich context.
+- 📈 **States & Events**: Records all state changes and events to `states` and `events` tables.
+- 👥 **User Context**: Automatically syncs Home Assistant users to the database for rich context.
 - 🧩 **Entity Metadata**: Automatically syncs entity registry (names, platforms, etc.) to the `entities` table.
 - 🏠 **Area & Device Context**: Automatically syncs areas and devices to `areas` and `devices` tables.
 - 🔌 **Integration Info**: Automatically syncs integration config entries to the `integrations` table.
