@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.8.4] - 2025-11-27
+
+### Changed
+- **Performance**: Increased default `batch_size` from 100 to 500. This reduces database transaction overhead on high-traffic systems without impacting latency on low-traffic systems (thanks to `flush_interval`).
+
 ## [2.8.3] - 2025-11-27
 
 ### Changed
