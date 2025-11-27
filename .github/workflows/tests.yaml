@@ -11,9 +11,148 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.12", "3.13"]
-        postgres-version: ["pg16", "pg17"]
-        ha-version: ["stable", "beta", "dev", "2024.10.0"]
+        include:
+          # Bleeding Edge (Dev) - Test both PG17 and PG18
+          - ha-version: "dev"
+            python-version: "3.13"
+            postgres-version: "pg18"
+          - ha-version: "dev"
+            python-version: "3.13"
+            postgres-version: "pg17"
+
+          # Beta - Test both PG17 and PG18
+          - ha-version: "beta"
+            python-version: "3.13"
+            postgres-version: "pg18"
+          - ha-version: "beta"
+            python-version: "3.13"
+            postgres-version: "pg17"
+
+          # Stable - Test both PG17 and PG18
+          - ha-version: "stable"
+            python-version: "3.13"
+            postgres-version: "pg18"
+          - ha-version: "stable"
+            python-version: "3.13"
+            postgres-version: "pg17"
+
+          # 2025.11 -> PG18
+          - ha-version: "2025.11.0"
+            python-version: "3.13"
+            postgres-version: "pg18"
+
+          # 2025.10 -> PG18 & PG17
+          - ha-version: "2025.10.0"
+            python-version: "3.13"
+            postgres-version: "pg18"
+          - ha-version: "2025.10.0"
+            python-version: "3.13"
+            postgres-version: "pg17"
+
+          # 2025.9 -> PG17
+          - ha-version: "2025.9.0"
+            python-version: "3.13"
+            postgres-version: "pg17"
+
+          # 2025.8 -> PG17
+          - ha-version: "2025.8.0"
+            python-version: "3.13"
+            postgres-version: "pg17"
+
+          # 2025.7 -> PG17
+          - ha-version: "2025.7.0"
+            python-version: "3.13"
+            postgres-version: "pg17"
+
+          # 2025.6 -> PG17
+          - ha-version: "2025.6.0"
+            python-version: "3.13"
+            postgres-version: "pg17"
+
+          # 2025.5 -> PG17
+          - ha-version: "2025.5.0"
+            python-version: "3.13"
+            postgres-version: "pg17"
+
+          # 2025.4 -> PG17
+          - ha-version: "2025.4.0"
+            python-version: "3.13"
+            postgres-version: "pg17"
+
+          # 2025.3 -> PG17
+          - ha-version: "2025.3.0"
+            python-version: "3.13"
+            postgres-version: "pg17"
+
+          # 2025.2 -> PG17
+          - ha-version: "2025.2.0"
+            python-version: "3.13"
+            postgres-version: "pg17"
+
+          # 2025.1 -> PG17
+          - ha-version: "2025.1.0"
+            python-version: "3.13"
+            postgres-version: "pg17"
+
+          # 2024.12 -> PG17
+          - ha-version: "2024.12.0"
+            python-version: "3.12"
+            postgres-version: "pg17"
+
+          # 2024.11 -> PG17
+          - ha-version: "2024.11.0"
+            python-version: "3.12"
+            postgres-version: "pg17"
+
+          # 2024.10 (Released Oct 2024) -> PG17 (Sep 2024)
+          - ha-version: "2024.10.0"
+            python-version: "3.12"
+            postgres-version: "pg17"
+
+          # 2024.9 (Released Sep 2024) -> PG16 (PG17 released late Sep)
+          - ha-version: "2024.9.0"
+            python-version: "3.12"
+            postgres-version: "pg16"
+
+          # 2024.8 -> PG16
+          - ha-version: "2024.8.0"
+            python-version: "3.12"
+            postgres-version: "pg16"
+
+          # 2024.7 -> PG16
+          - ha-version: "2024.7.0"
+            python-version: "3.12"
+            postgres-version: "pg16"
+
+          # 2024.6 -> PG16
+          - ha-version: "2024.6.0"
+            python-version: "3.12"
+            postgres-version: "pg16"
+
+          # 2024.5 -> PG16
+          - ha-version: "2024.5.0"
+            python-version: "3.12"
+            postgres-version: "pg16"
+
+          # 2024.4 -> PG16
+          - ha-version: "2024.4.0"
+            python-version: "3.12"
+            postgres-version: "pg16"
+
+          # 2024.3 -> PG16
+          - ha-version: "2024.3.0"
+            python-version: "3.12"
+            postgres-version: "pg16"
+
+          # 2024.2 -> PG16
+          - ha-version: "2024.2.0"
+            python-version: "3.12"
+            postgres-version: "pg16"
+
+          # 2024.1 -> PG16
+          - ha-version: "2024.1.0"
+            python-version: "3.12"
+            postgres-version: "pg16"
 
     services:
       timescaledb:
