@@ -9,7 +9,7 @@ import asyncio
 import ssl
 import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict
 from collections import deque
 
 from sqlalchemy import text
@@ -151,7 +151,7 @@ class ScribeWriter:
                 _LOGGER.debug(f"Creating AsyncEngine for {self.db_url.split('@')[-1]} (attempt 1)")
                 
                 # Clean URL - remove sslmode parameter as asyncpg doesn't support it in URL
-                clean_url = self._clean_db_url(self.db_url)
+                # clean_url = self._clean_db_url(self.db_url)
                 
                 if self.use_ssl:
                     # Create SSL context in executor to avoid blocking the event loop
@@ -393,8 +393,8 @@ class ScribeWriter:
                 self._queue = deque(batch + list(self._queue), maxlen=self.max_queue_size)
                 
                 # Calculate dropped
-                current_len = len(self._queue)
-                total_len = len(batch) + len(self._queue) - len(batch) # wait, this is just len(batch) + old_len
+                # current_len = len(self._queue)
+                # total_len = len(batch) + len(self._queue) - len(batch) # wait, this is just len(batch) + old_len
                 # Actually, we can't easily know how many were dropped by deque without checking lengths before/after
                 # But we know we added len(batch).
                 # If we were full, we dropped some.

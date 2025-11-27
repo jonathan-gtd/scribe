@@ -384,11 +384,11 @@ class ScribeWriteDurationSensor(ScribeSensor):
             name="Last Write Duration",
             icon="mdi:timer-sand",
             state_class=SensorStateClass.MEASUREMENT,
-            native_unit_of_measurement="s",
+            native_unit_of_measurement="ms",
         )
         super().__init__(writer, entry)
 
     @property
     def native_value(self):
         """Return the state of the sensor."""
-        return self._writer._last_write_duration
+        return round(self._writer._last_write_duration * 1000, 2)

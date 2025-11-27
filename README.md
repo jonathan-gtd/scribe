@@ -93,38 +93,38 @@ Enable sensors by setting their flags in your configuration.
 
 Real-time metrics from the writer (no DB queries).
 
-| Sensor | Description | Example |
-| :--- | :--- | :--- |
-| `sensor.scribe_states_written` | Total number of state changes written to the DB. | `15420` |
-| `sensor.scribe_events_written` | Total number of events written to the DB. | `0` |
-| `sensor.scribe_buffer_size` | Current number of items waiting in the memory buffer. | `12` |
-| `sensor.scribe_write_duration` | Time taken (in seconds) for the last database write operation. | `0.045` |
+| Sensor | Description |
+| :--- | :--- |
+| `mdi:database-plus` `sensor.scribe_states_written` | Total number of state changes written to the DB. |
+| `mdi:database-plus` `sensor.scribe_events_written` | Total number of events written to the DB. |
+| `mdi:buffer` `sensor.scribe_buffer_size` | Current number of items waiting in the memory buffer. |
+| `mdi:timer-sand` `sensor.scribe_write_duration` | Time taken (in ms) for the last database write operation. |
 
 ### Chunk Statistics (`enable_stats_chunk: true`)
 
 Chunk counts (updated every `stats_chunk_interval` minutes).
 
-| Sensor | Description | Example |
-| :--- | :--- | :--- |
-| `sensor.scribe_states_total_chunks` | Total number of chunks for the states table. | `12` |
-| `sensor.scribe_states_compressed_chunks` | Number of chunks that have been compressed. | `10` |
-| `sensor.scribe_states_uncompressed_chunks` | Number of chunks waiting to be compressed. | `2` |
-| `sensor.scribe_events_total_chunks` | Total number of chunks for the events table. | `5` |
-| `sensor.scribe_events_compressed_chunks` | Number of compressed event chunks. | `4` |
-| `sensor.scribe_events_uncompressed_chunks` | Number of uncompressed event chunks. | `1` |
+| Sensor | Description |
+| :--- | :--- |
+| `mdi:cube-outline` `sensor.scribe_states_total_chunks` | Total number of chunks for the states table. |
+| `mdi:package-down` `sensor.scribe_states_compressed_chunks` | Number of chunks that have been compressed. |
+| `mdi:package-up` `sensor.scribe_states_uncompressed_chunks` | Number of chunks waiting to be compressed. |
+| `mdi:cube-outline` `sensor.scribe_events_total_chunks` | Total number of chunks for the events table. |
+| `mdi:package-down` `sensor.scribe_events_compressed_chunks` | Number of compressed event chunks. |
+| `mdi:package-up` `sensor.scribe_events_uncompressed_chunks` | Number of uncompressed event chunks. |
 
 ### Size Statistics (`enable_stats_size: true`)
 
 Storage usage in bytes (updated every `stats_size_interval` minutes).
 
-| Sensor | Description | Example |
-| :--- | :--- | :--- |
-| `sensor.scribe_states_total_size` | Total disk size of the states table. | `1.2 GB` |
-| `sensor.scribe_states_compressed_size` | Size of compressed state data. | `450 MB` |
-| `sensor.scribe_states_uncompressed_size` | Size of uncompressed state data. | `750 MB` |
-| `sensor.scribe_events_total_size` | Total disk size of the events table. | `500 MB` |
-| `sensor.scribe_events_compressed_size` | Size of compressed event data. | `200 MB` |
-| `sensor.scribe_events_uncompressed_size` | Size of uncompressed event data. | `300 MB` |
+| Sensor | Description |
+| :--- | :--- |
+| `mdi:database` `sensor.scribe_states_total_size` | Total disk size of the states table. |
+| `mdi:package-variant` `sensor.scribe_states_compressed_size` | Size of compressed state data. |
+| `mdi:package-variant-closed` `sensor.scribe_states_uncompressed_size` | Size of uncompressed state data. |
+| `mdi:database` `sensor.scribe_events_total_size` | Total disk size of the events table. |
+| `mdi:package-variant` `sensor.scribe_events_compressed_size` | Size of compressed event data. |
+| `mdi:package-variant-closed` `sensor.scribe_events_uncompressed_size` | Size of uncompressed event data. |
 
 ## Services
 
