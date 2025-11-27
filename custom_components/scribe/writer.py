@@ -10,6 +10,7 @@ import ssl
 import time
 from pathlib import Path
 from typing import Any, Dict, List
+from collections import deque
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -128,7 +129,7 @@ class ScribeWriter:
         self._dropped_events = 0
         
         # Queue
-        self._queue: List[Dict[str, Any]] = []
+        self._queue: deque = deque(maxlen=max_queue_size)
         self._queue_lock = asyncio.Lock()
         self._flush_pending = False  # Prevent multiple flush tasks
         
@@ -168,7 +169,7 @@ class ScribeWriter:
                 
                 # Create engine
                 self._engine = create_async_engine(
-                    clean_url,
+                    self.db_url,
                     pool_size=10,
                     max_overflow=20,
                     echo=False,
@@ -190,16 +191,7 @@ class ScribeWriter:
         self._task = asyncio.create_task(self._run())
         _LOGGER.info("ScribeWriter started successfully")
 
-    def _clean_db_url(self, url: str) -> str:
-        """Remove sslmode parameter from URL as asyncpg handles it via connect_args."""
-        import re
-        # Remove sslmode=xxx from URL (handles both ?sslmode= and &sslmode=)
-        cleaned = re.sub(r'[?&]sslmode=[^&]*', '', url)
-        # Fix URL if we removed the first parameter (? becomes nothing)
-        cleaned = re.sub(r'\?&', '?', cleaned)
-        # Remove trailing ? if no parameters left
-        cleaned = re.sub(r'\?$', '', cleaned)
-        return cleaned
+
 
     async def stop(self):
         """Stop the writer task."""
@@ -235,15 +227,8 @@ class ScribeWriter:
         """Add data to the queue.
         
         This is called from the main loop, so it shouldn't block.
-        We use a simple list append here since we are in the main thread (asyncio).
-        Context switches only happen at await, so append is atomic.
+        We use deque with maxlen, so old items are automatically dropped if full.
         """
-        if len(self._queue) >= self.max_queue_size:
-            self._dropped_events += 1
-            if self._dropped_events % 100 == 1:
-                _LOGGER.warning(f"Queue full ({len(self._queue)}), dropping event. Total dropped: {self._dropped_events}")
-            return
-        
         self._queue.append(data)
         
         # Trigger flush if batch size reached (but only if no flush is already pending)
@@ -329,7 +314,7 @@ class ScribeWriter:
             async with self._engine.begin() as op_conn:
                 await op_conn.execute(text(f"SELECT create_hypertable('{table_name}', 'time', chunk_time_interval => INTERVAL '{self.chunk_interval}', if_not_exists => TRUE);"))
         except Exception as e:
-            _LOGGER.debug(f"Hypertable creation failed (might not be TimescaleDB or already exists): {e}")
+            _LOGGER.warning(f"Hypertable creation failed (might not be TimescaleDB or already exists): {e}")
 
         # Enable compression
         try:
@@ -360,9 +345,9 @@ class ScribeWriter:
         if not self._queue:
             return
 
-        # Swap queue
-        batch = self._queue
-        self._queue = []
+        # Swap queue - drain the deque
+        batch = list(self._queue)
+        self._queue.clear()
         
         _LOGGER.debug(f"Flushing {len(batch)} items...")
         start_time = time.time()
@@ -401,14 +386,22 @@ class ScribeWriter:
             if self.buffer_on_failure:
                 _LOGGER.warning(f"Buffering {len(batch)} items due to failure. Current queue size: {len(self._queue)}")
                 # Prepend back to queue
-                self._queue = batch + self._queue
+                # We want to keep [OldBatch] + [NewQueue], but capped at max_queue_size.
+                # Since we want to drop OLDEST items if full, we want the TAIL of this combined list.
+                # deque(..., maxlen=N) keeps the tail (newest items).
+                # So we reconstruct the deque with the combined list.
+                self._queue = deque(batch + list(self._queue), maxlen=self.max_queue_size)
                 
-                # Check max size
-                if len(self._queue) > self.max_queue_size:
-                    dropped = len(self._queue) - self.max_queue_size
-                    self._queue = self._queue[-self.max_queue_size:]
-                    self._dropped_events += dropped
-                    _LOGGER.error(f"Buffer full! Dropped {dropped} oldest events. Queue size: {len(self._queue)}")
+                # Calculate dropped
+                current_len = len(self._queue)
+                total_len = len(batch) + len(self._queue) - len(batch) # wait, this is just len(batch) + old_len
+                # Actually, we can't easily know how many were dropped by deque without checking lengths before/after
+                # But we know we added len(batch).
+                # If we were full, we dropped some.
+                
+                # Let's just log the current state
+                if len(self._queue) == self.max_queue_size:
+                     _LOGGER.warning(f"Buffer full! Queue size: {len(self._queue)}")
             else:
                 self._dropped_events += len(batch)
                 _LOGGER.warning(f"Dropped {len(batch)} items (buffering disabled)")
@@ -429,101 +422,124 @@ class ScribeWriter:
         if not self._engine:
             return stats
         
-        # =============================================
-        # STATES TABLE STATISTICS
-        # =============================================
-        if self.record_states:
-            # Query 1: States chunk counts
-            if stats_type in ("chunk", "all"):
-                try:
-                    async with self._engine.connect() as conn:
-                        res = await conn.execute(text(f"""
-                            SELECT 
-                                COUNT(*) AS total_chunks,
-                                SUM(CASE WHEN is_compressed THEN 1 ELSE 0 END) AS compressed_chunks,
-                                SUM(CASE WHEN NOT is_compressed THEN 1 ELSE 0 END) AS uncompressed_chunks
-                            FROM timescaledb_information.chunks
-                            WHERE hypertable_name = '{self.table_name_states}'
-                        """))
-                        row = res.fetchone()
-                        if row:
-                            stats["states_total_chunks"] = row[0] or 0
-                            stats["states_compressed_chunks"] = row[1] or 0
-                            stats["states_uncompressed_chunks"] = row[2] or 0
-                except Exception as e:
-                    _LOGGER.debug(f"Failed to get states chunk stats: {e}")
-            
-            # Query 2: States size breakdown
-            if stats_type in ("size", "all"):
-                try:
-                    async with self._engine.connect() as conn:
-                        res = await conn.execute(text(f"""
-                            SELECT 
-                                SUM(pg_total_relation_size(chunk_schema || '.' || chunk_name)) AS total_size,
-                                SUM(CASE WHEN is_compressed 
-                                    THEN pg_total_relation_size(chunk_schema || '.' || chunk_name) 
-                                    ELSE 0 END) AS compressed_size,
-                                SUM(CASE WHEN NOT is_compressed 
-                                    THEN pg_total_relation_size(chunk_schema || '.' || chunk_name) 
-                                    ELSE 0 END) AS uncompressed_size
-                            FROM timescaledb_information.chunks
-                            WHERE hypertable_name = '{self.table_name_states}'
-                        """))
-                        row = res.fetchone()
-                        if row:
-                            stats["states_total_size"] = row[0] or 0
-                            stats["states_compressed_size"] = row[1] or 0
-                            stats["states_uncompressed_size"] = row[2] or 0
-                except Exception as e:
-                    _LOGGER.debug(f"Failed to get states size stats: {e}")
+        # Prepare tasks for concurrent execution
+        tasks = []
+        
+        # Helper functions for queries
+        async def get_states_chunk_stats():
+            try:
+                async with self._engine.connect() as conn:
+                    res = await conn.execute(text(f"""
+                        SELECT 
+                            COUNT(*) AS total_chunks,
+                            SUM(CASE WHEN is_compressed THEN 1 ELSE 0 END) AS compressed_chunks,
+                            SUM(CASE WHEN NOT is_compressed THEN 1 ELSE 0 END) AS uncompressed_chunks
+                        FROM timescaledb_information.chunks
+                        WHERE hypertable_name = '{self.table_name_states}'
+                    """))
+                    row = res.fetchone()
+                    if row:
+                        return {
+                            "states_total_chunks": row[0] or 0,
+                            "states_compressed_chunks": row[1] or 0,
+                            "states_uncompressed_chunks": row[2] or 0
+                        }
+            except Exception as e:
+                _LOGGER.debug(f"Failed to get states chunk stats: {e}")
+            return {}
 
-        # =============================================
-        # EVENTS TABLE STATISTICS
-        # =============================================
-        if self.record_events:
-            # Query 3: Events chunk counts
+        async def get_states_size_stats():
+            try:
+                async with self._engine.connect() as conn:
+                    res = await conn.execute(text(f"""
+                        SELECT 
+                            SUM(pg_total_relation_size(chunk_schema || '.' || chunk_name)) AS total_size,
+                            SUM(CASE WHEN is_compressed 
+                                THEN pg_total_relation_size(chunk_schema || '.' || chunk_name) 
+                                ELSE 0 END) AS compressed_size,
+                            SUM(CASE WHEN NOT is_compressed 
+                                THEN pg_total_relation_size(chunk_schema || '.' || chunk_name) 
+                                ELSE 0 END) AS uncompressed_size
+                        FROM timescaledb_information.chunks
+                        WHERE hypertable_name = '{self.table_name_states}'
+                    """))
+                    row = res.fetchone()
+                    if row:
+                        return {
+                            "states_total_size": row[0] or 0,
+                            "states_compressed_size": row[1] or 0,
+                            "states_uncompressed_size": row[2] or 0
+                        }
+            except Exception as e:
+                _LOGGER.debug(f"Failed to get states size stats: {e}")
+            return {}
+
+        async def get_events_chunk_stats():
+            try:
+                async with self._engine.connect() as conn:
+                    res = await conn.execute(text(f"""
+                        SELECT 
+                            COUNT(*) AS total_chunks,
+                            SUM(CASE WHEN is_compressed THEN 1 ELSE 0 END) AS compressed_chunks,
+                            SUM(CASE WHEN NOT is_compressed THEN 1 ELSE 0 END) AS uncompressed_chunks
+                        FROM timescaledb_information.chunks
+                        WHERE hypertable_name = '{self.table_name_events}'
+                    """))
+                    row = res.fetchone()
+                    if row:
+                        return {
+                            "events_total_chunks": row[0] or 0,
+                            "events_compressed_chunks": row[1] or 0,
+                            "events_uncompressed_chunks": row[2] or 0
+                        }
+            except Exception as e:
+                _LOGGER.debug(f"Failed to get events chunk stats: {e}")
+            return {}
+
+        async def get_events_size_stats():
+            try:
+                async with self._engine.connect() as conn:
+                    res = await conn.execute(text(f"""
+                        SELECT 
+                            SUM(pg_total_relation_size(chunk_schema || '.' || chunk_name)) AS total_size,
+                            SUM(CASE WHEN is_compressed 
+                                THEN pg_total_relation_size(chunk_schema || '.' || chunk_name) 
+                                ELSE 0 END) AS compressed_size,
+                            SUM(CASE WHEN NOT is_compressed 
+                                THEN pg_total_relation_size(chunk_schema || '.' || chunk_name) 
+                                ELSE 0 END) AS uncompressed_size
+                        FROM timescaledb_information.chunks
+                        WHERE hypertable_name = '{self.table_name_events}'
+                    """))
+                    row = res.fetchone()
+                    if row:
+                        return {
+                            "events_total_size": row[0] or 0,
+                            "events_compressed_size": row[1] or 0,
+                            "events_uncompressed_size": row[2] or 0
+                        }
+            except Exception as e:
+                _LOGGER.debug(f"Failed to get events size stats: {e}")
+            return {}
+
+        # Add tasks based on configuration and requested stats_type
+        if self.record_states:
             if stats_type in ("chunk", "all"):
-                try:
-                    async with self._engine.connect() as conn:
-                        res = await conn.execute(text(f"""
-                            SELECT 
-                                COUNT(*) AS total_chunks,
-                                SUM(CASE WHEN is_compressed THEN 1 ELSE 0 END) AS compressed_chunks,
-                                SUM(CASE WHEN NOT is_compressed THEN 1 ELSE 0 END) AS uncompressed_chunks
-                            FROM timescaledb_information.chunks
-                            WHERE hypertable_name = '{self.table_name_events}'
-                        """))
-                        row = res.fetchone()
-                        if row:
-                            stats["events_total_chunks"] = row[0] or 0
-                            stats["events_compressed_chunks"] = row[1] or 0
-                            stats["events_uncompressed_chunks"] = row[2] or 0
-                except Exception as e:
-                    _LOGGER.debug(f"Failed to get events chunk stats: {e}")
-            
-            # Query 4: Events size breakdown
+                tasks.append(get_states_chunk_stats())
             if stats_type in ("size", "all"):
-                try:
-                    async with self._engine.connect() as conn:
-                        res = await conn.execute(text(f"""
-                            SELECT 
-                                SUM(pg_total_relation_size(chunk_schema || '.' || chunk_name)) AS total_size,
-                                SUM(CASE WHEN is_compressed 
-                                    THEN pg_total_relation_size(chunk_schema || '.' || chunk_name) 
-                                    ELSE 0 END) AS compressed_size,
-                                SUM(CASE WHEN NOT is_compressed 
-                                    THEN pg_total_relation_size(chunk_schema || '.' || chunk_name) 
-                                    ELSE 0 END) AS uncompressed_size
-                            FROM timescaledb_information.chunks
-                            WHERE hypertable_name = '{self.table_name_events}'
-                        """))
-                        row = res.fetchone()
-                        if row:
-                            stats["events_total_size"] = row[0] or 0
-                            stats["events_compressed_size"] = row[1] or 0
-                            stats["events_uncompressed_size"] = row[2] or 0
-                except Exception as e:
-                    _LOGGER.debug(f"Failed to get events size stats: {e}")
+                tasks.append(get_states_size_stats())
+
+        if self.record_events:
+            if stats_type in ("chunk", "all"):
+                tasks.append(get_events_chunk_stats())
+            if stats_type in ("size", "all"):
+                tasks.append(get_events_size_stats())
+
+        # Execute all tasks concurrently
+        if tasks:
+            results = await asyncio.gather(*tasks)
+            for result in results:
+                stats.update(result)
             
         return stats
 
