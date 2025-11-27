@@ -99,60 +99,7 @@ jobs:
             python-version: "3.12"
             postgres-version: "pg17"
 
-          # 2024.11 -> PG17
-          - ha-version: "2024.11.0"
-            python-version: "3.12"
-            postgres-version: "pg17"
 
-          # 2024.10 (Released Oct 2024) -> PG17 (Sep 2024)
-          - ha-version: "2024.10.0"
-            python-version: "3.12"
-            postgres-version: "pg17"
-
-          # 2024.9 (Released Sep 2024) -> PG16 (PG17 released late Sep)
-          - ha-version: "2024.9.0"
-            python-version: "3.12"
-            postgres-version: "pg16"
-
-          # 2024.8 -> PG16
-          - ha-version: "2024.8.0"
-            python-version: "3.12"
-            postgres-version: "pg16"
-
-          # 2024.7 -> PG16
-          - ha-version: "2024.7.0"
-            python-version: "3.12"
-            postgres-version: "pg16"
-
-          # 2024.6 -> PG16
-          - ha-version: "2024.6.0"
-            python-version: "3.12"
-            postgres-version: "pg16"
-
-          # 2024.5 -> PG16
-          - ha-version: "2024.5.0"
-            python-version: "3.12"
-            postgres-version: "pg16"
-
-          # 2024.4 -> PG16
-          - ha-version: "2024.4.0"
-            python-version: "3.12"
-            postgres-version: "pg16"
-
-          # 2024.3 -> PG16
-          - ha-version: "2024.3.0"
-            python-version: "3.12"
-            postgres-version: "pg16"
-
-          # 2024.2 -> PG16
-          - ha-version: "2024.2.0"
-            python-version: "3.12"
-            postgres-version: "pg16"
-
-          # 2024.1 -> PG16
-          - ha-version: "2024.1.0"
-            python-version: "3.12"
-            postgres-version: "pg16"
 
     services:
       timescaledb:
