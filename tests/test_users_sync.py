@@ -35,14 +35,16 @@ async def test_users_sync(hass, mock_config_entry):
     
     hass.auth.users = [mock_user]
     
-    with patch("custom_components.scribe.ScribeWriter") as mock_writer_cls:
+    with patch("custom_components.scribe.ScribeWriter") as mock_writer_cls, \
+         patch("homeassistant.auth.AuthManager.async_get_users", new_callable=AsyncMock) as mock_get_users:
+        
         mock_writer = mock_writer_cls.return_value
         mock_writer.start = AsyncMock()
         mock_writer.stop = AsyncMock()
         mock_writer.write_users = AsyncMock()
         
-        # Mock async_get_users to return our list
-        hass.auth.async_get_users = AsyncMock(return_value=[mock_user])
+        # Configure mock to return our list
+        mock_get_users.return_value = [mock_user]
         
         await async_setup_entry(hass, mock_config_entry)
         
