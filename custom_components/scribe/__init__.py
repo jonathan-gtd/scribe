@@ -216,6 +216,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     # Start the writer task (async)
     await writer.start()
+
+    # Sync Users
+    try:
+        users = []
+        for user in hass.auth.users:
+            users.append({
+                "user_id": user.id,
+                "name": user.name,
+                "is_owner": user.is_owner,
+                "is_active": user.is_active,
+                "system_generated": user.system_generated,
+                "group_ids": json.dumps([g.id for g in user.groups], default=str)
+            })
+        if users:
+            await writer.write_users(users)
+    except Exception as e:
+        _LOGGER.error(f"Error syncing users: {e}")
     
     # Setup Data Update Coordinators for statistics
     from .coordinator import ScribeDataUpdateCoordinator
@@ -281,8 +298,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         try:
             state_val = float(new_state.state)
+            state_str = None
         except (ValueError, TypeError):
             state_val = None
+            state_str = new_state.state
 
         # Filter Attributes
         filtered_attrs = {k: v for k, v in new_state.attributes.items() if k not in exclude_attributes}
@@ -292,7 +311,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "type": "state",
                 "time": new_state.last_updated,
                 "entity_id": entity_id,
-                "state": new_state.state,
+                "state": state_str,
                 "value": state_val,
                 "attributes": json.dumps(filtered_attrs, default=str),
             })

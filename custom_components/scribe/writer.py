@@ -261,6 +261,9 @@ class ScribeWriter:
                     await self._init_states_table(conn)
                 if self.record_events:
                     await self._init_events_table(conn)
+                
+                # Always init users table
+                await self._init_users_table(conn)
 
             # Hypertable & Compression (each operation in its own transaction)
             if self.record_states:
@@ -311,6 +314,45 @@ class ScribeWriter:
             CREATE INDEX IF NOT EXISTS {self.table_name_events}_type_time_idx 
             ON {self.table_name_events} (event_type, time DESC);
         """))
+
+    async def _init_users_table(self, conn):
+        """Initialize users table."""
+        _LOGGER.debug("Creating table users if not exists")
+        await conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS users (
+                user_id TEXT PRIMARY KEY,
+                name TEXT,
+                is_owner BOOLEAN,
+                is_active BOOLEAN,
+                system_generated BOOLEAN,
+                group_ids JSONB
+            );
+        """))
+
+    async def write_users(self, users: list[dict]):
+        """Write users to the database (upsert)."""
+        if not self._engine or not users:
+            return
+
+        _LOGGER.debug(f"Writing {len(users)} users to database...")
+        try:
+            async with self._engine.begin() as conn:
+                # Upsert users
+                # We use ON CONFLICT DO UPDATE to update existing users
+                stmt = text("""
+                    INSERT INTO users (user_id, name, is_owner, is_active, system_generated, group_ids)
+                    VALUES (:user_id, :name, :is_owner, :is_active, :system_generated, :group_ids)
+                    ON CONFLICT (user_id) DO UPDATE SET
+                        name = EXCLUDED.name,
+                        is_owner = EXCLUDED.is_owner,
+                        is_active = EXCLUDED.is_active,
+                        system_generated = EXCLUDED.system_generated,
+                        group_ids = EXCLUDED.group_ids;
+                """)
+                await conn.execute(stmt, users)
+                _LOGGER.debug("Users written successfully")
+        except Exception as e:
+            _LOGGER.error(f"Error writing users: {e}")
 
     async def _init_hypertable(self, table_name, segment_by):
         """Initialize hypertable and compression.
