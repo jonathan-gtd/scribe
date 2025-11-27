@@ -46,8 +46,7 @@ async def test_integration_write_and_read(hass, socket_enabled):
             "entity_id": "sensor.integration_test",
             "state": "123.45",
             "attributes": '{"unit": "C"}',
-            "last_updated": datetime.now().isoformat(),
-            "last_changed": datetime.now().isoformat(),
+            "time": datetime.now().isoformat(),
             "value": 123.45
         })
         
@@ -56,7 +55,7 @@ async def test_integration_write_and_read(hass, socket_enabled):
             "type": "event",
             "event_type": "integration_event",
             "event_data": '{"foo": "bar"}',
-            "time_fired": datetime.now().isoformat(),
+            "time": datetime.now().isoformat(),
             "origin": "LOCAL",
             "context_id": "ctx_1",
             "context_user_id": "user_1",
