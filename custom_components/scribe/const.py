@@ -20,8 +20,7 @@ CONF_RECORD_EVENTS = "record_events"
 CONF_BATCH_SIZE = "batch_size"
 CONF_FLUSH_INTERVAL = "flush_interval"
 CONF_MAX_QUEUE_SIZE = "max_queue_size"
-CONF_TABLE_NAME_STATES = "table_name_states"
-CONF_TABLE_NAME_EVENTS = "table_name_events"
+
 
 # Statistics configuration
 CONF_ENABLE_STATS_CHUNK = "enable_stats_chunk"

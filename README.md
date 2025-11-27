@@ -43,10 +43,6 @@ scribe:
   chunk_time_interval: "7 days"   # Chunk size
   compress_after: "60 days"       # Compression policy
   
-  # Tables
-  table_name_states: "states"
-  table_name_events: "events"
-  
   # What to record
   record_states: true
   record_events: false

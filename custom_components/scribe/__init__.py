@@ -36,8 +36,7 @@ from .const import (
     CONF_BATCH_SIZE,
     CONF_FLUSH_INTERVAL,
     CONF_MAX_QUEUE_SIZE,
-    CONF_TABLE_NAME_STATES,
-    CONF_TABLE_NAME_EVENTS,
+    CONF_MAX_QUEUE_SIZE,
     CONF_ENABLE_STATS_IO,
     CONF_ENABLE_STATS_CHUNK,
     CONF_ENABLE_STATS_SIZE,
@@ -83,8 +82,6 @@ CONFIG_SCHEMA = vol.Schema(
                 vol.Optional(CONF_BATCH_SIZE, default=DEFAULT_BATCH_SIZE): cv.positive_int,
                 vol.Optional(CONF_FLUSH_INTERVAL, default=DEFAULT_FLUSH_INTERVAL): cv.positive_int,
                 vol.Optional(CONF_MAX_QUEUE_SIZE, default=DEFAULT_MAX_QUEUE_SIZE): cv.positive_int,
-                vol.Optional(CONF_TABLE_NAME_STATES, default=DEFAULT_TABLE_NAME_STATES): cv.string,
-                vol.Optional(CONF_TABLE_NAME_EVENTS, default=DEFAULT_TABLE_NAME_EVENTS): cv.string,
                 vol.Optional(CONF_BUFFER_ON_FAILURE, default=DEFAULT_BUFFER_ON_FAILURE): cv.boolean,
                 vol.Optional(CONF_ENABLE_STATS_IO, default=DEFAULT_ENABLE_STATS_IO): cv.boolean,
                 vol.Optional(CONF_ENABLE_STATS_CHUNK, default=DEFAULT_ENABLE_STATS_CHUNK): cv.boolean,
@@ -159,8 +156,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             return False
 
     # YAML Only Settings
-    table_name_states = yaml_config.get(CONF_TABLE_NAME_STATES, DEFAULT_TABLE_NAME_STATES)
-    table_name_events = yaml_config.get(CONF_TABLE_NAME_EVENTS, DEFAULT_TABLE_NAME_EVENTS)
     max_queue_size = yaml_config.get(CONF_MAX_QUEUE_SIZE, DEFAULT_MAX_QUEUE_SIZE)
 
     # Entity Filter
@@ -203,8 +198,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         flush_interval=options.get(CONF_FLUSH_INTERVAL, config.get(CONF_FLUSH_INTERVAL, DEFAULT_FLUSH_INTERVAL)),
         max_queue_size=options.get(CONF_MAX_QUEUE_SIZE, config.get(CONF_MAX_QUEUE_SIZE, DEFAULT_MAX_QUEUE_SIZE)),
         buffer_on_failure=options.get(CONF_BUFFER_ON_FAILURE, config.get(CONF_BUFFER_ON_FAILURE, DEFAULT_BUFFER_ON_FAILURE)),
-        table_name_states=table_name_states,
-        table_name_events=table_name_events,
+        table_name_states=DEFAULT_TABLE_NAME_STATES,
+        table_name_events=DEFAULT_TABLE_NAME_EVENTS,
         use_ssl=db_ssl
     )
     
