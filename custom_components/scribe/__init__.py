@@ -264,6 +264,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         
         Note: This must be a synchronous callback (not async) for proper event handling.
         """
+        # DEBUG: Log raw event data to see what HA sends
+        _LOGGER.info(f"SCRIBE DEBUG - STATE_CHANGED: {event}")
+        # _LOGGER.info(f"SCRIBE DEBUG - STATE_CHANGED data: {event.data}")
+
         entity_id = event.data.get("entity_id")
         new_state = event.data.get("new_state")
 
@@ -314,6 +318,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if event.event_type == EVENT_STATE_CHANGED:
                 return  # Already handled above
             
+            # DEBUG: Log raw event data
+            _LOGGER.info(f"SCRIBE DEBUG - OTHER_EVENT: {event}")
+
             _other_event_count["total"] += 1
             if _other_event_count["total"] <= 5:
                 _LOGGER.debug(f"handle_other_events called: {event.event_type}")
