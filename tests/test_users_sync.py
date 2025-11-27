@@ -41,6 +41,9 @@ async def test_users_sync(hass, mock_config_entry):
         mock_writer.stop = AsyncMock()
         mock_writer.write_users = AsyncMock()
         
+        # Mock async_get_users to return our list
+        hass.auth.async_get_users = AsyncMock(return_value=[mock_user])
+        
         await async_setup_entry(hass, mock_config_entry)
         
         mock_writer.write_users.assert_called_once()
