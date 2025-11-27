@@ -36,47 +36,6 @@ jobs:
             python-version: "3.13"
             postgres-version: "pg17"
 
-
-
-          # 2025.10 -> PG18 & PG17
-          - ha-version: "2025.10.0"
-            python-version: "3.13"
-            postgres-version: "pg18"
-          # 2025.11 -> PG18
-          - ha-version: "2025.11.0"
-            python-version: "3.13"
-            postgres-version: "pg18"
-
-          # 2025.10 -> PG18 & PG17
-          - ha-version: "2025.10.0"
-            python-version: "3.13"
-            postgres-version: "pg18"
-          - ha-version: "2025.10.0"
-            python-version: "3.13"
-            postgres-version: "pg17"
-
-          # 2025.9 -> PG17
-          - ha-version: "2025.9.0"
-            python-version: "3.13"
-            postgres-version: "pg17"
-
-          # 2025.8 -> PG17
-          - ha-version: "2025.8.0"
-            python-version: "3.13"
-            postgres-version: "pg17"
-
-          # 2025.7 -> PG17
-          - ha-version: "2025.7.0"
-            python-version: "3.13"
-            postgres-version: "pg17"
-
-          # 2025.6 -> PG17
-          - ha-version: "2025.6.0"
-            python-version: "3.13"
-            postgres-version: "pg17"
-
-
-
     services:
       timescaledb:
         image: timescale/timescaledb:latest-${{ matrix.postgres-version }}

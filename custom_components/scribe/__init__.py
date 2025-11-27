@@ -265,8 +265,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         Note: This must be a synchronous callback (not async) for proper event handling.
         """
         # DEBUG: Log raw event data to see what HA sends
-        _LOGGER.info(f"SCRIBE DEBUG - STATE_CHANGED: {event}")
-        # _LOGGER.info(f"SCRIBE DEBUG - STATE_CHANGED data: {event.data}")
+        _LOGGER.debug(f"SCRIBE DEBUG - STATE_CHANGED: {event}")
+        _LOGGER.debug(f"SCRIBE DEBUG - STATE_CHANGED data: {event.data}")
 
         entity_id = event.data.get("entity_id")
         new_state = event.data.get("new_state")
@@ -300,7 +300,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _LOGGER.error(f"Error enqueueing state for {entity_id}: {e}")
 
     # Register the event listener for state changes
-    _LOGGER.info(f"Registering event listener (record_states={record_states}, record_events={record_events})")
+    _LOGGER.debug(f"Registering event listener (record_states={record_states}, record_events={record_events})")
     
     if record_states:
         entry.async_on_unload(
@@ -319,7 +319,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 return  # Already handled above
             
             # DEBUG: Log raw event data
-            _LOGGER.info(f"SCRIBE DEBUG - OTHER_EVENT: {event}")
+            _LOGGER.debug(f"SCRIBE DEBUG - OTHER_EVENT: {event}")
+            _LOGGER.debug(f"SCRIBE DEBUG - OTHER_EVENT data: {event.data}")
 
             _other_event_count["total"] += 1
             if _other_event_count["total"] <= 5:
@@ -342,7 +343,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         
         # Use MATCH_ALL to listen to all events
         from homeassistant.const import MATCH_ALL
-        _LOGGER.info("Registering listener for ALL events (MATCH_ALL)")																												
+        _LOGGER.debug("Registering listener for ALL events (MATCH_ALL)")																												
         entry.async_on_unload(
             hass.bus.async_listen(MATCH_ALL, handle_other_events)
         )
@@ -360,7 +361,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         
         Allows users to manually trigger a database flush via automation or UI.
         """
-        _LOGGER.debug("Manual flush triggered via service call")
+        _LOGGER.info("Manual flush triggered via service call")
         await writer._flush()
         
     hass.services.async_register(DOMAIN, "flush", handle_flush)
