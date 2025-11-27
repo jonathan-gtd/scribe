@@ -445,10 +445,136 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         
         # Use MATCH_ALL to listen to all events
         from homeassistant.const import MATCH_ALL
-        _LOGGER.debug("Registering listener for ALL events (MATCH_ALL)")																												
+        _LOGGER.debug("Registering listener for ALL events (MATCH_ALL)")
         entry.async_on_unload(
             hass.bus.async_listen(MATCH_ALL, handle_other_events)
         )
+    
+    # Real-time Metadata Sync Listeners
+    
+    # Entity Registry Updates
+    async def handle_entity_registry_update(event: Event):
+        """Handle entity registry update."""
+        action = event.data.get("action")
+        entity_id = event.data.get("entity_id")
+        
+        if action in ["create", "update"]:
+            _LOGGER.debug(f"Entity registry update: {action} {entity_id}")
+            try:
+                registry = er.async_get(hass)
+                entity = registry.async_get(entity_id)
+                if entity:
+                    data = [{
+                        "entity_id": entity.entity_id,
+                        "unique_id": entity.unique_id,
+                        "platform": entity.platform,
+                        "domain": entity.domain,
+                        "name": entity.name or entity.original_name,
+                        "device_id": entity.device_id,
+                        "area_id": entity.area_id,
+                        "capabilities": json.dumps(entity.capabilities, default=str) if entity.capabilities else None
+                    }]
+                    await writer.write_entities(data)
+            except Exception as e:
+                _LOGGER.error(f"Error syncing entity {entity_id}: {e}")
+
+    entry.async_on_unload(
+        hass.bus.async_listen("entity_registry_updated", handle_entity_registry_update)
+    )
+
+    # Device Registry Updates
+    async def handle_device_registry_update(event: Event):
+        """Handle device registry update."""
+        action = event.data.get("action")
+        device_id = event.data.get("device_id")
+        
+        if action in ["create", "update"]:
+            _LOGGER.debug(f"Device registry update: {action} {device_id}")
+            try:
+                device_reg = dr.async_get(hass)
+                device = device_reg.async_get(device_id)
+                if device:
+                    # Get primary config entry
+                    primary_entry = next(iter(device.config_entries), None) if device.config_entries else None
+                    
+                    data = [{
+                        "device_id": device.id,
+                        "name": device.name,
+                        "name_by_user": device.name_by_user,
+                        "model": device.model,
+                        "manufacturer": device.manufacturer,
+                        "sw_version": device.sw_version,
+                        "area_id": device.area_id,
+                        "primary_config_entry": primary_entry
+                    }]
+                    await writer.write_devices(data)
+            except Exception as e:
+                _LOGGER.error(f"Error syncing device {device_id}: {e}")
+
+    entry.async_on_unload(
+        hass.bus.async_listen("device_registry_updated", handle_device_registry_update)
+    )
+
+    # Area Registry Updates
+    async def handle_area_registry_update(event: Event):
+        """Handle area registry update."""
+        action = event.data.get("action")
+        area_id = event.data.get("area_id")
+        
+        if action in ["create", "update"]:
+            _LOGGER.debug(f"Area registry update: {action} {area_id}")
+            try:
+                area_reg = ar.async_get(hass)
+                area = area_reg.async_get_area(area_id)
+                if area:
+                    data = [{
+                        "area_id": area.id,
+                        "name": area.name,
+                        "picture": area.picture
+                    }]
+                    await writer.write_areas(data)
+            except Exception as e:
+                _LOGGER.error(f"Error syncing area {area_id}: {e}")
+
+    entry.async_on_unload(
+        hass.bus.async_listen("area_registry_updated", handle_area_registry_update)
+    )
+    
+    entry.async_on_unload(
+        hass.bus.async_listen("area_registry_updated", handle_area_registry_update)
+    )
+
+    # User Registry Updates
+    async def handle_user_update(event: Event):
+        """Handle user registry update."""
+        user_id = event.data.get("user_id")
+        action = event.event_type # user_added, user_updated, user_removed
+        
+        _LOGGER.debug(f"User registry update: {action} {user_id}")
+        try:
+            user = await hass.auth.async_get_user(user_id)
+            if user:
+                data = [{
+                    "user_id": user.id,
+                    "name": user.name,
+                    "is_owner": user.is_owner,
+                    "is_active": user.is_active,
+                    "system_generated": user.system_generated,
+                    "group_ids": json.dumps([g.id for g in user.groups], default=str)
+                }]
+                await writer.write_users(data)
+        except Exception as e:
+            _LOGGER.error(f"Error syncing user {user_id}: {e}")
+
+    entry.async_on_unload(
+        hass.bus.async_listen("user_added", handle_user_update)
+    )
+    entry.async_on_unload(
+        hass.bus.async_listen("user_updated", handle_user_update)
+    )
+    entry.async_on_unload(
+        hass.bus.async_listen("user_removed", handle_user_update)
+    )
     
     # Register shutdown handler
     async def async_stop_scribe(event):

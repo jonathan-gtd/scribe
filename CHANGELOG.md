@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.6.1] - 2025-11-27
+
+### Added
+- **Real-time Metadata Sync**: Scribe now listens to Home Assistant registry events to update `users`, `entities`, `devices`, and `areas` in real-time.
+  - **Users**: Updates when users are added, updated, or removed.
+  - **Entities**: Updates when entities are created or updated.
+  - **Devices**: Updates when devices are created or updated.
+  - **Areas**: Updates when areas are created or updated.
+
 ## [2.6.0] - 2025-11-26
 
 ### Added
