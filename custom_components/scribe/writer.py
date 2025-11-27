@@ -89,6 +89,11 @@ class ScribeWriter:
         ssl_root_cert: str = None,
         ssl_cert_file: str = None,
         ssl_key_file: str = None,
+        enable_areas: bool = True,
+        enable_devices: bool = True,
+        enable_entities: bool = True,
+        enable_integrations: bool = True,
+        enable_users: bool = True,
         engine: Any = None
     ):
         """Initialize the writer."""
@@ -114,6 +119,11 @@ class ScribeWriter:
         self.ssl_root_cert = ssl_root_cert
         self.ssl_cert_file = ssl_cert_file
         self.ssl_key_file = ssl_key_file
+        self.enable_areas = enable_areas
+        self.enable_devices = enable_devices
+        self.enable_entities = enable_entities
+        self.enable_integrations = enable_integrations
+        self.enable_users = enable_users
         
         # Stats for sensors
         self._states_written = 0
@@ -263,11 +273,16 @@ class ScribeWriter:
                     await self._init_events_table(conn)
                 
                 # Always init users table
-                await self._init_users_table(conn)
-                await self._init_entities_table(conn)
-                await self._init_areas_table(conn)
-                await self._init_devices_table(conn)
-                await self._init_integrations_table(conn)
+                if self.enable_users:
+                    await self._init_users_table(conn)
+                if self.enable_entities:
+                    await self._init_entities_table(conn)
+                if self.enable_areas:
+                    await self._init_areas_table(conn)
+                if self.enable_devices:
+                    await self._init_devices_table(conn)
+                if self.enable_integrations:
+                    await self._init_integrations_table(conn)
 
             # Hypertable & Compression (each operation in its own transaction)
             if self.record_states:

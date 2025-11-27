@@ -65,6 +65,16 @@ from .const import (
     DEFAULT_STATS_SIZE_INTERVAL,
     CONF_BUFFER_ON_FAILURE,
     DEFAULT_BUFFER_ON_FAILURE,
+    CONF_ENABLE_AREAS,
+    DEFAULT_ENABLE_AREAS,
+    CONF_ENABLE_DEVICES,
+    DEFAULT_ENABLE_DEVICES,
+    CONF_ENABLE_ENTITIES,
+    DEFAULT_ENABLE_ENTITIES,
+    CONF_ENABLE_INTEGRATIONS,
+    DEFAULT_ENABLE_INTEGRATIONS,
+    CONF_ENABLE_USERS,
+    DEFAULT_ENABLE_USERS,
 )
 from .writer import ScribeWriter
 
@@ -98,7 +108,13 @@ CONFIG_SCHEMA = vol.Schema(
                 vol.Optional(CONF_INCLUDE_ENTITIES, default=[]): vol.All(cv.ensure_list, [cv.entity_id]),
                 vol.Optional(CONF_EXCLUDE_DOMAINS, default=[]): vol.All(cv.ensure_list, [cv.string]),
                 vol.Optional(CONF_EXCLUDE_ENTITIES, default=[]): vol.All(cv.ensure_list, [cv.entity_id]),
+                vol.Optional(CONF_EXCLUDE_ENTITIES, default=[]): vol.All(cv.ensure_list, [cv.entity_id]),
                 vol.Optional(CONF_EXCLUDE_ATTRIBUTES, default=[]): vol.All(cv.ensure_list, [cv.string]),
+                vol.Optional(CONF_ENABLE_AREAS, default=DEFAULT_ENABLE_AREAS): cv.boolean,
+                vol.Optional(CONF_ENABLE_DEVICES, default=DEFAULT_ENABLE_DEVICES): cv.boolean,
+                vol.Optional(CONF_ENABLE_ENTITIES, default=DEFAULT_ENABLE_ENTITIES): cv.boolean,
+                vol.Optional(CONF_ENABLE_INTEGRATIONS, default=DEFAULT_ENABLE_INTEGRATIONS): cv.boolean,
+                vol.Optional(CONF_ENABLE_USERS, default=DEFAULT_ENABLE_USERS): cv.boolean,
             }
         )
     },
@@ -215,113 +231,123 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         ssl_root_cert=ssl_root_cert,
         ssl_cert_file=ssl_cert_file,
         ssl_key_file=ssl_key_file,
+        enable_areas=yaml_config.get(CONF_ENABLE_AREAS, DEFAULT_ENABLE_AREAS),
+        enable_devices=yaml_config.get(CONF_ENABLE_DEVICES, DEFAULT_ENABLE_DEVICES),
+        enable_entities=yaml_config.get(CONF_ENABLE_ENTITIES, DEFAULT_ENABLE_ENTITIES),
+        enable_integrations=yaml_config.get(CONF_ENABLE_INTEGRATIONS, DEFAULT_ENABLE_INTEGRATIONS),
+        enable_users=yaml_config.get(CONF_ENABLE_USERS, DEFAULT_ENABLE_USERS),
     )
     
     # Start the writer task (async)
     await writer.start()
 
     # Sync Users
-    try:
-        users_list = await hass.auth.async_get_users()
-        _LOGGER.debug(f"Syncing users. Total users in hass.auth: {len(users_list)}")
-        users = []
-        for user in users_list:
-            users.append({
-                "user_id": user.id,
-                "name": user.name,
-                "is_owner": user.is_owner,
-                "is_active": user.is_active,
-                "system_generated": user.system_generated,
-                "group_ids": json.dumps([g.id for g in user.groups], default=str)
-            })
-        
-        if users:
-            _LOGGER.debug(f"Calling writer.write_users with {len(users)} users")
-            await writer.write_users(users)
-        else:
-            _LOGGER.warning("No users found to sync!")
+    if writer.enable_users:
+        try:
+            users_list = await hass.auth.async_get_users()
+            _LOGGER.debug(f"Syncing users. Total users in hass.auth: {len(users_list)}")
+            users = []
+            for user in users_list:
+                users.append({
+                    "user_id": user.id,
+                    "name": user.name,
+                    "is_owner": user.is_owner,
+                    "is_active": user.is_active,
+                    "system_generated": user.system_generated,
+                    "group_ids": json.dumps([g.id for g in user.groups], default=str)
+                })
             
-    except Exception as e:
-        _LOGGER.error(f"Error syncing users: {e}", exc_info=True)
+            if users:
+                _LOGGER.debug(f"Calling writer.write_users with {len(users)} users")
+                await writer.write_users(users)
+            else:
+                _LOGGER.warning("No users found to sync!")
+                
+        except Exception as e:
+            _LOGGER.error(f"Error syncing users: {e}", exc_info=True)
 
     # Sync Entities
-    try:
-        registry = er.async_get(hass)
-        entities = []
-        for entity in registry.entities.values():
-            entities.append({
-                "entity_id": entity.entity_id,
-                "unique_id": entity.unique_id,
-                "platform": entity.platform,
-                "domain": entity.domain,
-                "name": entity.name or entity.original_name,
-                "device_id": entity.device_id,
-                "area_id": entity.area_id,
-                "capabilities": json.dumps(entity.capabilities, default=str) if entity.capabilities else None
-            })
-        
-        if entities:
-            _LOGGER.debug(f"Syncing {len(entities)} entities to database")
-            await writer.write_entities(entities)
-    except Exception as e:
-        _LOGGER.error(f"Error syncing entities: {e}", exc_info=True)
+    if writer.enable_entities:
+        try:
+            registry = er.async_get(hass)
+            entities = []
+            for entity in registry.entities.values():
+                entities.append({
+                    "entity_id": entity.entity_id,
+                    "unique_id": entity.unique_id,
+                    "platform": entity.platform,
+                    "domain": entity.domain,
+                    "name": entity.name or entity.original_name,
+                    "device_id": entity.device_id,
+                    "area_id": entity.area_id,
+                    "capabilities": json.dumps(entity.capabilities, default=str) if entity.capabilities else None
+                })
+            
+            if entities:
+                _LOGGER.debug(f"Syncing {len(entities)} entities to database")
+                await writer.write_entities(entities)
+        except Exception as e:
+            _LOGGER.error(f"Error syncing entities: {e}", exc_info=True)
 
     # Sync Areas
-    try:
-        area_reg = ar.async_get(hass)
-        areas = []
-        for area in area_reg.areas.values():
-            areas.append({
-                "area_id": area.id,
-                "name": area.name,
-                "picture": area.picture
-            })
-        if areas:
-            _LOGGER.debug(f"Syncing {len(areas)} areas to database")
-            await writer.write_areas(areas)
-    except Exception as e:
-        _LOGGER.error(f"Error syncing areas: {e}", exc_info=True)
+    if writer.enable_areas:
+        try:
+            area_reg = ar.async_get(hass)
+            areas = []
+            for area in area_reg.areas.values():
+                areas.append({
+                    "area_id": area.id,
+                    "name": area.name,
+                    "picture": area.picture
+                })
+            if areas:
+                _LOGGER.debug(f"Syncing {len(areas)} areas to database")
+                await writer.write_areas(areas)
+        except Exception as e:
+            _LOGGER.error(f"Error syncing areas: {e}", exc_info=True)
 
     # Sync Devices
-    try:
-        device_reg = dr.async_get(hass)
-        devices = []
-        for device in device_reg.devices.values():
-            # Get primary config entry
-            primary_entry = next(iter(device.config_entries), None) if device.config_entries else None
-            
-            devices.append({
-                "device_id": device.id,
-                "name": device.name,
-                "name_by_user": device.name_by_user,
-                "model": device.model,
-                "manufacturer": device.manufacturer,
-                "sw_version": device.sw_version,
-                "area_id": device.area_id,
-                "primary_config_entry": primary_entry
-            })
-        if devices:
-            _LOGGER.debug(f"Syncing {len(devices)} devices to database")
-            await writer.write_devices(devices)
-    except Exception as e:
-        _LOGGER.error(f"Error syncing devices: {e}", exc_info=True)
+    if writer.enable_devices:
+        try:
+            device_reg = dr.async_get(hass)
+            devices = []
+            for device in device_reg.devices.values():
+                # Get primary config entry
+                primary_entry = next(iter(device.config_entries), None) if device.config_entries else None
+                
+                devices.append({
+                    "device_id": device.id,
+                    "name": device.name,
+                    "name_by_user": device.name_by_user,
+                    "model": device.model,
+                    "manufacturer": device.manufacturer,
+                    "sw_version": device.sw_version,
+                    "area_id": device.area_id,
+                    "primary_config_entry": primary_entry
+                })
+            if devices:
+                _LOGGER.debug(f"Syncing {len(devices)} devices to database")
+                await writer.write_devices(devices)
+        except Exception as e:
+            _LOGGER.error(f"Error syncing devices: {e}", exc_info=True)
 
     # Sync Integrations (Config Entries)
-    try:
-        integrations = []
-        for config_entry in hass.config_entries.async_entries():
-            integrations.append({
-                "entry_id": config_entry.entry_id,
-                "domain": config_entry.domain,
-                "title": config_entry.title,
-                "state": config_entry.state.value if hasattr(config_entry.state, "value") else str(config_entry.state),
-                "source": config_entry.source
-            })
-        if integrations:
-            _LOGGER.debug(f"Syncing {len(integrations)} integrations to database")
-            await writer.write_integrations(integrations)
-    except Exception as e:
-        _LOGGER.error(f"Error syncing integrations: {e}", exc_info=True)
+    if writer.enable_integrations:
+        try:
+            integrations = []
+            for config_entry in hass.config_entries.async_entries():
+                integrations.append({
+                    "entry_id": config_entry.entry_id,
+                    "domain": config_entry.domain,
+                    "title": config_entry.title,
+                    "state": config_entry.state.value if hasattr(config_entry.state, "value") else str(config_entry.state),
+                    "source": config_entry.source
+                })
+            if integrations:
+                _LOGGER.debug(f"Syncing {len(integrations)} integrations to database")
+                await writer.write_integrations(integrations)
+        except Exception as e:
+            _LOGGER.error(f"Error syncing integrations: {e}", exc_info=True)
     
     # Setup Data Update Coordinators for statistics
     from .coordinator import ScribeDataUpdateCoordinator
@@ -452,128 +478,130 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Real-time Metadata Sync Listeners
     
     # Entity Registry Updates
-    async def handle_entity_registry_update(event: Event):
-        """Handle entity registry update."""
-        action = event.data.get("action")
-        entity_id = event.data.get("entity_id")
-        
-        if action in ["create", "update"]:
-            _LOGGER.debug(f"Entity registry update: {action} {entity_id}")
-            try:
-                registry = er.async_get(hass)
-                entity = registry.async_get(entity_id)
-                if entity:
-                    data = [{
-                        "entity_id": entity.entity_id,
-                        "unique_id": entity.unique_id,
-                        "platform": entity.platform,
-                        "domain": entity.domain,
-                        "name": entity.name or entity.original_name,
-                        "device_id": entity.device_id,
-                        "area_id": entity.area_id,
-                        "capabilities": json.dumps(entity.capabilities, default=str) if entity.capabilities else None
-                    }]
-                    await writer.write_entities(data)
-            except Exception as e:
-                _LOGGER.error(f"Error syncing entity {entity_id}: {e}")
+    if writer.enable_entities:
+        async def handle_entity_registry_update(event: Event):
+            """Handle entity registry update."""
+            action = event.data.get("action")
+            entity_id = event.data.get("entity_id")
+            
+            if action in ["create", "update"]:
+                _LOGGER.debug(f"Entity registry update: {action} {entity_id}")
+                try:
+                    registry = er.async_get(hass)
+                    entity = registry.async_get(entity_id)
+                    if entity:
+                        data = [{
+                            "entity_id": entity.entity_id,
+                            "unique_id": entity.unique_id,
+                            "platform": entity.platform,
+                            "domain": entity.domain,
+                            "name": entity.name or entity.original_name,
+                            "device_id": entity.device_id,
+                            "area_id": entity.area_id,
+                            "capabilities": json.dumps(entity.capabilities, default=str) if entity.capabilities else None
+                        }]
+                        await writer.write_entities(data)
+                except Exception as e:
+                    _LOGGER.error(f"Error syncing entity {entity_id}: {e}")
 
-    entry.async_on_unload(
-        hass.bus.async_listen("entity_registry_updated", handle_entity_registry_update)
-    )
+        entry.async_on_unload(
+            hass.bus.async_listen("entity_registry_updated", handle_entity_registry_update)
+        )
 
     # Device Registry Updates
-    async def handle_device_registry_update(event: Event):
-        """Handle device registry update."""
-        action = event.data.get("action")
-        device_id = event.data.get("device_id")
-        
-        if action in ["create", "update"]:
-            _LOGGER.debug(f"Device registry update: {action} {device_id}")
-            try:
-                device_reg = dr.async_get(hass)
-                device = device_reg.async_get(device_id)
-                if device:
-                    # Get primary config entry
-                    primary_entry = next(iter(device.config_entries), None) if device.config_entries else None
-                    
-                    data = [{
-                        "device_id": device.id,
-                        "name": device.name,
-                        "name_by_user": device.name_by_user,
-                        "model": device.model,
-                        "manufacturer": device.manufacturer,
-                        "sw_version": device.sw_version,
-                        "area_id": device.area_id,
-                        "primary_config_entry": primary_entry
-                    }]
-                    await writer.write_devices(data)
-            except Exception as e:
-                _LOGGER.error(f"Error syncing device {device_id}: {e}")
+    if writer.enable_devices:
+        async def handle_device_registry_update(event: Event):
+            """Handle device registry update."""
+            action = event.data.get("action")
+            device_id = event.data.get("device_id")
+            
+            if action in ["create", "update"]:
+                _LOGGER.debug(f"Device registry update: {action} {device_id}")
+                try:
+                    device_reg = dr.async_get(hass)
+                    device = device_reg.async_get(device_id)
+                    if device:
+                        # Get primary config entry
+                        primary_entry = next(iter(device.config_entries), None) if device.config_entries else None
+                        
+                        data = [{
+                            "device_id": device.id,
+                            "name": device.name,
+                            "name_by_user": device.name_by_user,
+                            "model": device.model,
+                            "manufacturer": device.manufacturer,
+                            "sw_version": device.sw_version,
+                            "area_id": device.area_id,
+                            "primary_config_entry": primary_entry
+                        }]
+                        await writer.write_devices(data)
+                except Exception as e:
+                    _LOGGER.error(f"Error syncing device {device_id}: {e}")
 
-    entry.async_on_unload(
-        hass.bus.async_listen("device_registry_updated", handle_device_registry_update)
-    )
+        entry.async_on_unload(
+            hass.bus.async_listen("device_registry_updated", handle_device_registry_update)
+        )
 
     # Area Registry Updates
-    async def handle_area_registry_update(event: Event):
-        """Handle area registry update."""
-        action = event.data.get("action")
-        area_id = event.data.get("area_id")
-        
-        if action in ["create", "update"]:
-            _LOGGER.debug(f"Area registry update: {action} {area_id}")
-            try:
-                area_reg = ar.async_get(hass)
-                area = area_reg.async_get_area(area_id)
-                if area:
-                    data = [{
-                        "area_id": area.id,
-                        "name": area.name,
-                        "picture": area.picture
-                    }]
-                    await writer.write_areas(data)
-            except Exception as e:
-                _LOGGER.error(f"Error syncing area {area_id}: {e}")
+    if writer.enable_areas:
+        async def handle_area_registry_update(event: Event):
+            """Handle area registry update."""
+            action = event.data.get("action")
+            area_id = event.data.get("area_id")
+            
+            if action in ["create", "update"]:
+                _LOGGER.debug(f"Area registry update: {action} {area_id}")
+                try:
+                    area_reg = ar.async_get(hass)
+                    area = area_reg.async_get_area(area_id)
+                    if area:
+                        data = [{
+                            "area_id": area.id,
+                            "name": area.name,
+                            "picture": area.picture
+                        }]
+                        await writer.write_areas(data)
+                except Exception as e:
+                    _LOGGER.error(f"Error syncing area {area_id}: {e}")
 
-    entry.async_on_unload(
-        hass.bus.async_listen("area_registry_updated", handle_area_registry_update)
-    )
+        entry.async_on_unload(
+            hass.bus.async_listen("area_registry_updated", handle_area_registry_update)
+        )
     
-    entry.async_on_unload(
-        hass.bus.async_listen("area_registry_updated", handle_area_registry_update)
-    )
+
 
     # User Registry Updates
-    async def handle_user_update(event: Event):
-        """Handle user registry update."""
-        user_id = event.data.get("user_id")
-        action = event.event_type # user_added, user_updated, user_removed
-        
-        _LOGGER.debug(f"User registry update: {action} {user_id}")
-        try:
-            user = await hass.auth.async_get_user(user_id)
-            if user:
-                data = [{
-                    "user_id": user.id,
-                    "name": user.name,
-                    "is_owner": user.is_owner,
-                    "is_active": user.is_active,
-                    "system_generated": user.system_generated,
-                    "group_ids": json.dumps([g.id for g in user.groups], default=str)
-                }]
-                await writer.write_users(data)
-        except Exception as e:
-            _LOGGER.error(f"Error syncing user {user_id}: {e}")
+    if writer.enable_users:
+        async def handle_user_update(event: Event):
+            """Handle user registry update."""
+            user_id = event.data.get("user_id")
+            action = event.event_type # user_added, user_updated, user_removed
+            
+            _LOGGER.debug(f"User registry update: {action} {user_id}")
+            try:
+                user = await hass.auth.async_get_user(user_id)
+                if user:
+                    data = [{
+                        "user_id": user.id,
+                        "name": user.name,
+                        "is_owner": user.is_owner,
+                        "is_active": user.is_active,
+                        "system_generated": user.system_generated,
+                        "group_ids": json.dumps([g.id for g in user.groups], default=str)
+                    }]
+                    await writer.write_users(data)
+            except Exception as e:
+                _LOGGER.error(f"Error syncing user {user_id}: {e}")
 
-    entry.async_on_unload(
-        hass.bus.async_listen("user_added", handle_user_update)
-    )
-    entry.async_on_unload(
-        hass.bus.async_listen("user_updated", handle_user_update)
-    )
-    entry.async_on_unload(
-        hass.bus.async_listen("user_removed", handle_user_update)
-    )
+        entry.async_on_unload(
+            hass.bus.async_listen("user_added", handle_user_update)
+        )
+        entry.async_on_unload(
+            hass.bus.async_listen("user_updated", handle_user_update)
+        )
+        entry.async_on_unload(
+            hass.bus.async_listen("user_removed", handle_user_update)
+        )
     
     # Register shutdown handler
     async def async_stop_scribe(event):

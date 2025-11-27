@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2.8.0] - 2025-11-27
+
+### Added
+- **Configurable Metadata Tables**: Added YAML configuration options to enable/disable specific metadata tables.
+  - `enable_areas` (default: true)
+  - `enable_devices` (default: true)
+  - `enable_entities` (default: true)
+  - `enable_integrations` (default: true)
+  - `enable_users` (default: true)
+  - Disabling a table prevents it from being created and stops synchronization for that metadata type.
+
 ## [2.7.0] - 2025-11-27
 
 ### Added
