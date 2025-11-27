@@ -12,15 +12,14 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.helpers import config_validation as cv
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, Event, callback
+from homeassistant.core import HomeAssistant, ServiceCall, Event, callback
+from homeassistant.helpers.typing import ConfigType
+from homeassistant.helpers import config_validation as cv, area_registry as ar, device_registry as dr, entity_registry as er
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.const import (
     EVENT_STATE_CHANGED,
     EVENT_HOMEASSISTANT_STOP,
 )
-from homeassistant.helpers.typing import ConfigType
-from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers.entityfilter import generate_filter
 from homeassistant.helpers.json import JSONEncoder
 
@@ -624,13 +623,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         """Handle query service call."""
         sql = call.data.get("sql")
         if not sql:
-            raise ValueError("SQL query is required")
+            raise HomeAssistantError("SQL query is required")
             
         try:
             result = await writer.query(sql)
             return {"result": result}
+        except ValueError as e:
+            # Specific validation error (e.g. non-SELECT query)
+            raise HomeAssistantError(str(e))
         except Exception as e:
-            raise ValueError(f"Query failed: {e}")
+            raise HomeAssistantError(f"Query failed: {e}")
 
     hass.services.async_register(
         DOMAIN, 
