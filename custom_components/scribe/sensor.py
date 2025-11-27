@@ -45,11 +45,20 @@ async def async_setup_entry(
     # These sensors rely on the DataUpdateCoordinator to fetch data periodically
     if entry.options.get(CONF_ENABLE_STATISTICS, DEFAULT_ENABLE_STATISTICS) and coordinator:
         entities.extend([
-            ScribeStatesSizeBeforeCompressionSensor(coordinator, entry, "states_size_before_compression", "States Size (Before Compression)"),
-            ScribeStatesSizeAfterCompressionSensor(coordinator, entry, "states_size_after_compression", "States Size (After Compression)"),
-            ScribeEventsSizeBeforeCompressionSensor(coordinator, entry, "events_size_before_compression", "Events Size (Before Compression)"),
-            ScribeEventsSizeAfterCompressionSensor(coordinator, entry, "events_size_after_compression", "Events Size (After Compression)"),
-            ScribeCompressionRatioSensor(coordinator, entry, "states_compression", "States Compression Ratio"),
+            # States table sensors
+            ScribeStatsTotalSizeSensor(coordinator, entry),
+            ScribeStatsCompressedSizeSensor(coordinator, entry),
+            ScribeStatsUncompressedSizeSensor(coordinator, entry),
+            ScribeStatsTotalChunksSensor(coordinator, entry),
+            ScribeStatsCompressedChunksSensor(coordinator, entry),
+            ScribeStatsUncompressedChunksSensor(coordinator, entry),
+            # Events table sensors
+            ScribeEventsTotalSizeSensor(coordinator, entry),
+            ScribeEventsCompressedSizeSensor(coordinator, entry),
+            ScribeEventsUncompressedSizeSensor(coordinator, entry),
+            ScribeEventsTotalChunksSensor(coordinator, entry),
+            ScribeEventsCompressedChunksSensor(coordinator, entry),
+            ScribeEventsUncompressedChunksSensor(coordinator, entry),
         ])
     
     async_add_entities(entities, True)
@@ -100,72 +109,180 @@ class ScribeCoordinatorSensor(CoordinatorEntity, SensorEntity):
             "manufacturer": "Jonathan Gatard",
         }
 
-class ScribeStatesSizeBeforeCompressionSensor(ScribeCoordinatorSensor):
-    """Sensor for States Table size (Before Compression)."""
+# =============================================
+# STATES TABLE SENSORS
+# =============================================
+
+class ScribeStatsTotalSizeSensor(ScribeCoordinatorSensor):
+    """Sensor for States total size."""
     
-    _attr_native_unit_of_measurement = "B"
-    _attr_device_class = "data_size"
-    _attr_state_class = SensorStateClass.TOTAL
-    _attr_icon = "mdi:database-outline"
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "states_total_size", "States Total Size")
+        self._attr_native_unit_of_measurement = "B"
+        self._attr_device_class = "data_size"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_icon = "mdi:database"
 
     @property
     def native_value(self):
-        # Formula: (Total Size - Compressed Bytes) + Uncompressed Bytes
-        total_size = self.coordinator.data.get("states_size_bytes", 0) or 0
-        compressed_bytes = self.coordinator.data.get("states_compressed_total_bytes", 0) or 0
-        uncompressed_bytes = self.coordinator.data.get("states_uncompressed_total_bytes", 0) or 0
-        
-        # If no compression, total_size is the uncompressed size
-        if compressed_bytes == 0:
-            return total_size
-            
-        return (total_size - compressed_bytes) + uncompressed_bytes
+        return self.coordinator.data.get("states_total_size", 0)
 
-class ScribeStatesSizeAfterCompressionSensor(ScribeCoordinatorSensor):
-    """Sensor for States Table size (After Compression)."""
+
+class ScribeStatsCompressedSizeSensor(ScribeCoordinatorSensor):
+    """Sensor for States compressed size."""
     
-    _attr_native_unit_of_measurement = "B"
-    _attr_device_class = "data_size"
-    _attr_state_class = SensorStateClass.TOTAL
-    _attr_icon = "mdi:database"
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "states_compressed_size", "States Compressed Size")
+        self._attr_native_unit_of_measurement = "B"
+        self._attr_device_class = "data_size"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_icon = "mdi:package-variant"
 
     @property
     def native_value(self):
-        return self.coordinator.data.get("states_size_bytes", 0)
+        return self.coordinator.data.get("states_compressed_size", 0)
 
-class ScribeEventsSizeBeforeCompressionSensor(ScribeCoordinatorSensor):
-    """Sensor for Events Table size (Before Compression)."""
+
+class ScribeStatsUncompressedSizeSensor(ScribeCoordinatorSensor):
+    """Sensor for States uncompressed size."""
     
-    _attr_native_unit_of_measurement = "B"
-    _attr_device_class = "data_size"
-    _attr_state_class = SensorStateClass.TOTAL
-    _attr_icon = "mdi:database-outline"
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "states_uncompressed_size", "States Uncompressed Size")
+        self._attr_native_unit_of_measurement = "B"
+        self._attr_device_class = "data_size"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_icon = "mdi:package-variant-closed"
 
     @property
     def native_value(self):
-        # Formula: (Total Size - Compressed Bytes) + Uncompressed Bytes
-        total_size = self.coordinator.data.get("events_size_bytes", 0) or 0
-        compressed_bytes = self.coordinator.data.get("events_compressed_total_bytes", 0) or 0
-        uncompressed_bytes = self.coordinator.data.get("events_uncompressed_total_bytes", 0) or 0
-        
-        # If no compression, total_size is the uncompressed size
-        if compressed_bytes == 0:
-            return total_size
-            
-        return (total_size - compressed_bytes) + uncompressed_bytes
+        return self.coordinator.data.get("states_uncompressed_size", 0)
 
-class ScribeEventsSizeAfterCompressionSensor(ScribeCoordinatorSensor):
-    """Sensor for Events Table size (After Compression)."""
+
+class ScribeStatsTotalChunksSensor(ScribeCoordinatorSensor):
+    """Sensor for States total chunks."""
     
-    _attr_native_unit_of_measurement = "B"
-    _attr_device_class = "data_size"
-    _attr_state_class = SensorStateClass.TOTAL
-    _attr_icon = "mdi:database"
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "states_total_chunks", "States Total Chunks")
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_icon = "mdi:cube-outline"
 
     @property
     def native_value(self):
-        return self.coordinator.data.get("events_size_bytes", 0)
+        return self.coordinator.data.get("states_total_chunks", 0)
 
+
+class ScribeStatsCompressedChunksSensor(ScribeCoordinatorSensor):
+    """Sensor for States compressed chunks."""
+    
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "states_compressed_chunks", "States Compressed Chunks")
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_icon = "mdi:package-down"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("states_compressed_chunks", 0)
+
+
+class ScribeStatsUncompressedChunksSensor(ScribeCoordinatorSensor):
+    """Sensor for States uncompressed chunks."""
+    
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "states_uncompressed_chunks", "States Uncompressed Chunks")
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_icon = "mdi:package-up"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("states_uncompressed_chunks", 0)
+
+
+# =============================================
+# EVENTS TABLE SENSORS
+# =============================================
+
+class ScribeEventsTotalSizeSensor(ScribeCoordinatorSensor):
+    """Sensor for Events total size."""
+    
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "events_total_size", "Events Total Size")
+        self._attr_native_unit_of_measurement = "B"
+        self._attr_device_class = "data_size"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_icon = "mdi:database"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("events_total_size", 0)
+
+
+class ScribeEventsCompressedSizeSensor(ScribeCoordinatorSensor):
+    """Sensor for Events compressed size."""
+    
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "events_compressed_size", "Events Compressed Size")
+        self._attr_native_unit_of_measurement = "B"
+        self._attr_device_class = "data_size"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_icon = "mdi:package-variant"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("events_compressed_size", 0)
+
+
+class ScribeEventsUncompressedSizeSensor(ScribeCoordinatorSensor):
+    """Sensor for Events uncompressed size."""
+    
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "events_uncompressed_size", "Events Uncompressed Size")
+        self._attr_native_unit_of_measurement = "B"
+        self._attr_device_class = "data_size"
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_icon = "mdi:package-variant-closed"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("events_uncompressed_size", 0)
+
+
+class ScribeEventsTotalChunksSensor(ScribeCoordinatorSensor):
+    """Sensor for Events total chunks."""
+    
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "events_total_chunks", "Events Total Chunks")
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_icon = "mdi:cube-outline"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("events_total_chunks", 0)
+
+
+class ScribeEventsCompressedChunksSensor(ScribeCoordinatorSensor):
+    """Sensor for Events compressed chunks."""
+    
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "events_compressed_chunks", "Events Compressed Chunks")
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_icon = "mdi:package-down"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("events_compressed_chunks", 0)
+
+
+class ScribeEventsUncompressedChunksSensor(ScribeCoordinatorSensor):
+    """Sensor for Events uncompressed chunks."""
+    
+    def __init__(self, coordinator, entry):
+        super().__init__(coordinator, entry, "events_uncompressed_chunks", "Events Uncompressed Chunks")
+        self._attr_state_class = SensorStateClass.MEASUREMENT
+        self._attr_icon = "mdi:package-up"
+
+    @property
+    def native_value(self):
+        return self.coordinator.data.get("events_uncompressed_chunks", 0)
 
 
 class ScribeCompressionRatioSensor(ScribeCoordinatorSensor):

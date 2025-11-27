@@ -11,7 +11,7 @@ from homeassistant.helpers.json import JSONEncoder
 
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, Event, ServiceCall, ServiceResponse, SupportsResponse
+from homeassistant.core import HomeAssistant, Event, ServiceCall, ServiceResponse, SupportsResponse, callback
 from homeassistant.const import (
     EVENT_STATE_CHANGED,
     EVENT_HOMEASSISTANT_STOP,
@@ -23,6 +23,7 @@ from homeassistant.helpers.entityfilter import generate_filter
 from .const import (
     DOMAIN,
     CONF_DB_URL,
+    CONF_DB_SSL,
     CONF_CHUNK_TIME_INTERVAL,
     CONF_COMPRESS_AFTER,
     CONF_INCLUDE_DOMAINS,
@@ -40,6 +41,7 @@ from .const import (
     CONF_ENABLE_STATISTICS,
     DEFAULT_CHUNK_TIME_INTERVAL,
     DEFAULT_COMPRESS_AFTER,
+    DEFAULT_DB_SSL,
     DEFAULT_RECORD_STATES,
     DEFAULT_RECORD_EVENTS,
     DEFAULT_BATCH_SIZE,
@@ -65,6 +67,7 @@ CONFIG_SCHEMA = vol.Schema(
         DOMAIN: vol.Schema(
             {
                 vol.Required(CONF_DB_URL): cv.string,
+                vol.Optional(CONF_DB_SSL, default=DEFAULT_DB_SSL): cv.boolean,
                 vol.Optional(CONF_CHUNK_TIME_INTERVAL, default=DEFAULT_CHUNK_TIME_INTERVAL): cv.string,
                 vol.Optional(CONF_COMPRESS_AFTER, default=DEFAULT_COMPRESS_AFTER): cv.string,
                 vol.Optional(CONF_RECORD_STATES, default=DEFAULT_RECORD_STATES): cv.boolean,
@@ -171,6 +174,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Prioritizes Options Flow > Config Entry > Default
     record_states = options.get(CONF_RECORD_STATES, config.get(CONF_RECORD_STATES, DEFAULT_RECORD_STATES))
     record_events = options.get(CONF_RECORD_EVENTS, config.get(CONF_RECORD_EVENTS, DEFAULT_RECORD_EVENTS))
+    
+    # SSL configuration (from YAML only)
+    db_ssl = yaml_config.get(CONF_DB_SSL, DEFAULT_DB_SSL)
 
     # Initialize Writer
     # The ScribeWriter runs in a separate thread to handle DB I/O
@@ -186,7 +192,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         max_queue_size=options.get(CONF_MAX_QUEUE_SIZE, config.get(CONF_MAX_QUEUE_SIZE, DEFAULT_MAX_QUEUE_SIZE)),
         buffer_on_failure=options.get(CONF_BUFFER_ON_FAILURE, config.get(CONF_BUFFER_ON_FAILURE, DEFAULT_BUFFER_ON_FAILURE)),
         table_name_states=table_name_states,
-        table_name_events=table_name_events
+        table_name_events=table_name_events,
+        use_ssl=db_ssl
     )
     
     # Start the writer task (async)
@@ -210,80 +217,88 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Forward setup to platforms (Sensor, Binary Sensor)
     await hass.config_entries.async_forward_entry_setups(entry, ["sensor", "binary_sensor"])
 
-    # Event Listener
-    async def handle_event(event: Event):
-        """Handle incoming Home Assistant events.
+    # Event Listener - must be a sync callback, not async!
+    @callback
+    def handle_event(event: Event):
+        """Handle state change events.
         
-        This function is called for EVERY event in Home Assistant.
-        It filters the event and enqueues it for writing if it matches criteria.
+        Note: This must be a synchronous callback (not async) for proper event handling.
         """
-        event_type = event.event_type
-        
-        # Handle State Changes
-        if event_type == EVENT_STATE_CHANGED:
-            if not record_states:
-                return
-                
-            entity_id = event.data.get("entity_id")
-            new_state = event.data.get("new_state")
+        entity_id = event.data.get("entity_id")
+        new_state = event.data.get("new_state")
 
-            if new_state is None:
-                return
-
-            # Apply Include/Exclude Filter
-            if not entity_filter(entity_id):
-                return
-
-            try:
-                state_val = float(new_state.state)
-            except (ValueError, TypeError):
-                state_val = None
-
-            # Filter attributes
-            attributes = dict(new_state.attributes)
-            if exclude_attributes:
-                for attr in list(attributes.keys()):
-                    if attr in exclude_attributes:
-                        del attributes[attr]
-
-            try:
-                data = {
-                    "type": "state",
-                    "time": new_state.last_updated,
-                    "entity_id": entity_id,
-                    "state": new_state.state,
-                    "value": state_val,
-                    "attributes": json.dumps(attributes, cls=JSONEncoder),
-                }
-                _LOGGER.debug(f"Scribe: Enqueueing state change for {entity_id}")
-                writer.enqueue(data)
-            except Exception as e:
-                _LOGGER.error(f"Scribe: Error processing state change for {entity_id}: {e}", exc_info=True)
+        if new_state is None:
             return
 
-        # Handle Generic Events
-        if record_events:
+        # Apply Include/Exclude Filter
+        if not entity_filter(entity_id):
+            _LOGGER.debug(f"Entity {entity_id} filtered out")
+            return
+
+        try:
+            state_val = float(new_state.state)
+        except (ValueError, TypeError):
+            state_val = None
+
+        # Filter Attributes
+        filtered_attrs = {k: v for k, v in new_state.attributes.items() if k not in exclude_attributes}
+
+        try:
+            writer.enqueue({
+                "type": "state",
+                "time": new_state.last_updated,
+                "entity_id": entity_id,
+                "state": new_state.state,
+                "value": state_val,
+                "attributes": json.dumps(filtered_attrs, default=str),
+            })
+        except Exception as e:
+            _LOGGER.error(f"Error enqueueing state for {entity_id}: {e}")
+
+    # Register the event listener for state changes
+    _LOGGER.info(f"Registering event listener (record_states={record_states}, record_events={record_events})")
+    
+    if record_states:
+        entry.async_on_unload(
+            hass.bus.async_listen(EVENT_STATE_CHANGED, handle_event)
+        )
+    
+    # For generic events, listen to all events (but handle_event will filter)
+    if record_events:
+        # Listen to all events except state_changed (already handled above)
+        _other_event_count = {"total": 0}
+        
+        @callback
+        def handle_other_events(event: Event):
+            """Handle non-state-change events."""
+            if event.event_type == EVENT_STATE_CHANGED:
+                return  # Already handled above
+            
+            _other_event_count["total"] += 1
+            if _other_event_count["total"] <= 5:
+                _LOGGER.debug(f"handle_other_events called: {event.event_type}")
+            
             try:
                 data = {
                     "type": "event",
                     "time": event.time_fired,
-                    "event_type": event_type,
+                    "event_type": event.event_type,
                     "event_data": json.dumps(event.data, cls=JSONEncoder),
                     "origin": str(event.origin),
                     "context_id": event.context.id,
                     "context_user_id": event.context.user_id,
                     "context_parent_id": event.context.parent_id,
                 }
-                # _LOGGER.debug(f"Scribe: Enqueueing event {event_type}")
                 writer.enqueue(data)
             except Exception as e:
-                _LOGGER.error(f"Scribe: Error processing event {event_type}: {e}", exc_info=True)
-
-    # Register the event listener
-    # Listening to None means we listen to ALL events
-    entry.async_on_unload(
-        hass.bus.async_listen(None, handle_event) 
-    )
+                _LOGGER.error(f"Scribe: Error processing event {event.event_type}: {e}", exc_info=True)
+        
+        # Use MATCH_ALL to listen to all events
+        from homeassistant.const import MATCH_ALL
+        _LOGGER.info("Registering listener for ALL events (MATCH_ALL)")																												
+        entry.async_on_unload(
+            hass.bus.async_listen(MATCH_ALL, handle_other_events)
+        )
     
     # Register shutdown handler
     async def async_stop_scribe(event):

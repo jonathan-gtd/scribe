@@ -7,17 +7,73 @@ to minimize database connection overhead and blocking.
 import logging
 import asyncio
 import json
+import ssl
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 
 from homeassistant.core import HomeAssistant
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _create_ssl_context() -> ssl.SSLContext:
+    """Create and configure SSL context in executor thread.
+    
+    asyncpg calls ssl.load_cert_chain() synchronously when establishing SSL connections.
+    By creating the SSLContext here (in an executor thread) and passing it to asyncpg,
+    we avoid blocking Home Assistant's event loop.
+    
+    This function must be run via hass.async_add_executor_job().
+    
+    Returns:
+        Configured SSLContext ready to be used by asyncpg
+    """
+    _LOGGER.debug("Creating SSL context in executor thread...")
+    
+    # Create SSL context
+    ssl_context = ssl.create_default_context()
+    
+    # Load system CA certificates
+    try:
+        ssl_context.load_default_certs()
+        _LOGGER.debug("Loaded system CA certificates")
+    except Exception as e:
+        _LOGGER.debug("Could not load system CA certificates: %s", e)
+    
+    # Load PostgreSQL client certificates from standard locations
+    # asyncpg checks these paths: /.postgresql/ (containers) and ~/.postgresql/
+    cert_locations = [
+        (Path("/.postgresql/postgresql.crt"), Path("/.postgresql/postgresql.key")),
+        (Path.home() / ".postgresql" / "postgresql.crt", Path.home() / ".postgresql" / "postgresql.key"),
+    ]
+    
+    for cert_path, key_path in cert_locations:
+        if cert_path.exists():
+            try:
+                key_file = str(key_path) if key_path.exists() else None
+                _LOGGER.debug("Loading PostgreSQL client certificate from %s", cert_path)
+                ssl_context.load_cert_chain(str(cert_path), key_file)
+                break  # Only load from first found location
+            except Exception as e:
+                _LOGGER.debug("Could not load cert chain from %s: %s", cert_path, e)
+    
+    # Load CA certificate for server verification
+    for ca_path in [Path("/.postgresql/root.crt"), Path.home() / ".postgresql" / "root.crt"]:
+        if ca_path.exists():
+            try:
+                _LOGGER.debug("Loading CA certificate from %s", ca_path)
+                ssl_context.load_verify_locations(str(ca_path))
+                break  # Only load from first found location
+            except Exception as e:
+                _LOGGER.debug("Could not load CA cert from %s: %s", ca_path, e)
+    
+    _LOGGER.debug("SSL context created successfully")
+    return ssl_context
 
 class ScribeWriter:
     """Handle database connections and writing.
@@ -41,6 +97,7 @@ class ScribeWriter:
         buffer_on_failure: bool, 
         table_name_states: str, 
         table_name_events: str,
+        use_ssl: bool = False,
         engine: Any = None
     ):
         """Initialize the writer."""
@@ -62,6 +119,7 @@ class ScribeWriter:
         self.buffer_on_failure = buffer_on_failure
         self.table_name_states = table_name_states
         self.table_name_events = table_name_events
+        self.use_ssl = use_ssl
         
         # Stats for sensors
         self._states_written = 0
@@ -74,6 +132,7 @@ class ScribeWriter:
         # Queue
         self._queue: List[Dict[str, Any]] = []
         self._queue_lock = asyncio.Lock()
+        self._flush_pending = False  # Prevent multiple flush tasks
         
         self._engine = engine
         self._task = None
@@ -90,13 +149,34 @@ class ScribeWriter:
         # Create Engine
         if not self._engine:
             try:
-                _LOGGER.debug(f"Creating AsyncEngine for {self.db_url.split('@')[-1]} with pool_size=10, max_overflow=20")
+                _LOGGER.debug(f"Creating AsyncEngine for {self.db_url.split('@')[-1]} (attempt 1)")
+                
+                # Clean URL - remove sslmode parameter as asyncpg doesn't support it in URL
+                clean_url = self._clean_db_url(self.db_url)
+                
+                if self.use_ssl:
+                    # Create SSL context in executor to avoid blocking the event loop
+                    # asyncpg calls ssl.load_cert_chain() synchronously when it detects
+                    # certificates. By providing our own pre-configured SSL context,
+                    # we prevent asyncpg from doing blocking I/O in the event loop.
+                    _LOGGER.debug("SSL enabled, creating SSL context in executor...")
+                    ssl_context = await self.hass.async_add_executor_job(_create_ssl_context)
+                    connect_args = {"ssl": ssl_context}
+                else:
+                    # Disable SSL explicitly to prevent asyncpg from auto-detecting
+                    # certificates and doing blocking I/O
+                    _LOGGER.debug("SSL disabled (default)")
+                    connect_args = {"ssl": False}
+                
+                # Create engine
                 self._engine = create_async_engine(
-                    self.db_url, 
-                    pool_size=10, 
+                    clean_url,
+                    pool_size=10,
                     max_overflow=20,
-                    echo=False # We handle our own logging
+                    echo=False,
+                    connect_args=connect_args
                 )
+                
                 _LOGGER.debug("AsyncEngine created successfully")
             except Exception as e:
                 print(f"DEBUG: Failed to create engine: {e}")
@@ -111,6 +191,17 @@ class ScribeWriter:
         # Start Loop
         self._task = asyncio.create_task(self._run())
         _LOGGER.info("ScribeWriter started successfully")
+
+    def _clean_db_url(self, url: str) -> str:
+        """Remove sslmode parameter from URL as asyncpg handles it via connect_args."""
+        import re
+        # Remove sslmode=xxx from URL (handles both ?sslmode= and &sslmode=)
+        cleaned = re.sub(r'[?&]sslmode=[^&]*', '', url)
+        # Fix URL if we removed the first parameter (? becomes nothing)
+        cleaned = re.sub(r'\?&', '?', cleaned)
+        # Remove trailing ? if no parameters left
+        cleaned = re.sub(r'\?$', '', cleaned)
+        return cleaned
 
     async def stop(self):
         """Stop the writer task."""
@@ -147,11 +238,7 @@ class ScribeWriter:
         
         This is called from the main loop, so it shouldn't block.
         We use a simple list append here since we are in the main thread (asyncio).
-        Wait, if this is called from event listener, it is in the main thread.
-        We don't need a lock for simple list append in asyncio if we are single-threaded event loop,
-        BUT _flush is async and might yield. So we should be careful.
-        Actually, in asyncio, context switches only happen at await. 
-        So `self._queue.append` is atomic relative to other tasks.
+        Context switches only happen at await, so append is atomic.
         """
         if len(self._queue) >= self.max_queue_size:
             self._dropped_events += 1
@@ -161,8 +248,9 @@ class ScribeWriter:
         
         self._queue.append(data)
         
-        # Trigger flush if batch size reached
-        if len(self._queue) >= self.batch_size:
+        # Trigger flush if batch size reached (but only if no flush is already pending)
+        if len(self._queue) >= self.batch_size and not self._flush_pending:
+            self._flush_pending = True
             _LOGGER.debug(f"Batch size reached ({len(self._queue)} >= {self.batch_size}), triggering flush")
             asyncio.create_task(self._flush())
 
@@ -173,20 +261,19 @@ class ScribeWriter:
             return
 
         try:
+            # Create tables
             async with self._engine.begin() as conn:
                 if self.record_states:
                     await self._init_states_table(conn)
                 if self.record_events:
                     await self._init_events_table(conn)
 
-            # Hypertable & Compression (separate transactions for safety)
+            # Hypertable & Compression (each operation in its own transaction)
             if self.record_states:
-                async with self._engine.begin() as conn:
-                    await self._init_hypertable(conn, self.table_name_states, "entity_id")
+                await self._init_hypertable(self.table_name_states, "entity_id")
             
             if self.record_events:
-                async with self._engine.begin() as conn:
-                    await self._init_hypertable(conn, self.table_name_events, "event_type")
+                await self._init_hypertable(self.table_name_events, "event_type")
                     
             _LOGGER.info("Database initialized successfully")
             self._connected = True
@@ -231,34 +318,47 @@ class ScribeWriter:
             ON {self.table_name_events} (event_type, time DESC);
         """))
 
-    async def _init_hypertable(self, conn, table_name, segment_by):
-        """Initialize hypertable and compression."""
+    async def _init_hypertable(self, table_name, segment_by):
+        """Initialize hypertable and compression.
+        
+        Each operation is done in its own transaction to avoid
+        'transaction aborted' errors when one operation fails.
+        """
+        
+        # Convert to hypertable
         try:
             _LOGGER.debug(f"Converting {table_name} to hypertable...")
-            await conn.execute(text(f"SELECT create_hypertable('{table_name}', 'time', chunk_time_interval => INTERVAL '{self.chunk_interval}', if_not_exists => TRUE);"))
+            async with self._engine.begin() as op_conn:
+                await op_conn.execute(text(f"SELECT create_hypertable('{table_name}', 'time', chunk_time_interval => INTERVAL '{self.chunk_interval}', if_not_exists => TRUE);"))
         except Exception as e:
             _LOGGER.debug(f"Hypertable creation failed (might not be TimescaleDB or already exists): {e}")
 
+        # Enable compression
         try:
             _LOGGER.debug(f"Enabling compression for {table_name}...")
-            await conn.execute(text(f"""
-                ALTER TABLE {table_name} SET (
-                    timescaledb.compress,
-                    timescaledb.compress_segmentby = '{segment_by}',
-                    timescaledb.compress_orderby = 'time DESC'
-                );
-            """))
+            async with self._engine.begin() as op_conn:
+                await op_conn.execute(text(f"""
+                    ALTER TABLE {table_name} SET (
+                        timescaledb.compress,
+                        timescaledb.compress_segmentby = '{segment_by}',
+                        timescaledb.compress_orderby = 'time DESC'
+                    );
+                """))
         except Exception as e:
              _LOGGER.debug(f"Compression enable failed: {e}")
 
+        # Add compression policy
         try:
             _LOGGER.debug(f"Adding compression policy for {table_name}...")
-            await conn.execute(text(f"SELECT add_compression_policy('{table_name}', INTERVAL '{self.compress_after}', if_not_exists => TRUE);"))
+            async with self._engine.begin() as op_conn:
+                await op_conn.execute(text(f"SELECT add_compression_policy('{table_name}', INTERVAL '{self.compress_after}', if_not_exists => TRUE);"))
         except Exception as e:
             _LOGGER.debug(f"Compression policy failed: {e}")
 
     async def _flush(self):
         """Flush the queue to the database."""
+        self._flush_pending = False  # Reset flag immediately
+        
         if not self._queue:
             return
 
@@ -316,58 +416,111 @@ class ScribeWriter:
                 _LOGGER.warning(f"Dropped {len(batch)} items (buffering disabled)")
 
     async def get_db_stats(self):
-        """Fetch database statistics."""
+        """Fetch database statistics using TimescaleDB chunks view.
+        
+        Uses 4 separate queries:
+        - States chunk stats (counts)
+        - States size stats (bytes)
+        - Events chunk stats (counts)
+        - Events size stats (bytes)
+        """
         stats = {}
         if not self._engine:
             return stats
+        
+        # =============================================
+        # STATES TABLE STATISTICS
+        # =============================================
+        if self.record_states:
+            # Query 1: States chunk counts
+            try:
+                async with self._engine.connect() as conn:
+                    res = await conn.execute(text(f"""
+                        SELECT 
+                            COUNT(*) AS total_chunks,
+                            SUM(CASE WHEN is_compressed THEN 1 ELSE 0 END) AS compressed_chunks,
+                            SUM(CASE WHEN NOT is_compressed THEN 1 ELSE 0 END) AS uncompressed_chunks
+                        FROM timescaledb_information.chunks
+                        WHERE hypertable_name = '{self.table_name_states}'
+                    """))
+                    row = res.fetchone()
+                    if row:
+                        stats["states_total_chunks"] = row[0] or 0
+                        stats["states_compressed_chunks"] = row[1] or 0
+                        stats["states_uncompressed_chunks"] = row[2] or 0
+            except Exception as e:
+                _LOGGER.debug(f"Failed to get states chunk stats: {e}")
             
-        try:
-            async with self._engine.connect() as conn:
-                # States Table Stats
-                if self.record_states:
-                    try:
-                        res = await conn.execute(text(f"SELECT hypertable_size('{self.table_name_states}')"))
-                        stats["states_size_bytes"] = res.scalar()
-                        
-                        # Try newer format first, fall back to simpler query
-                        try:
-                            res = await conn.execute(text(f"SELECT total_chunks, compressed_total_bytes, uncompressed_total_bytes FROM hypertable_compression_stats('{self.table_name_states}')"))
-                            row = res.fetchone()
-                            if row:
-                                stats["states_total_chunks"] = row[0]
-                                stats["states_compressed_total_bytes"] = row[1] or 0
-                                stats["states_uncompressed_total_bytes"] = row[2] or 0
-                        except Exception:
-                            # Older TimescaleDB version - just get basic size
-                            pass
-                    except Exception as e:
-                        _LOGGER.debug(f"Failed to get states stats: {e}")
+            # Query 2: States size breakdown
+            try:
+                async with self._engine.connect() as conn:
+                    res = await conn.execute(text(f"""
+                        SELECT 
+                            SUM(pg_total_relation_size(chunk_schema || '.' || chunk_name)) AS total_size,
+                            SUM(CASE WHEN is_compressed 
+                                THEN pg_total_relation_size(chunk_schema || '.' || chunk_name) 
+                                ELSE 0 END) AS compressed_size,
+                            SUM(CASE WHEN NOT is_compressed 
+                                THEN pg_total_relation_size(chunk_schema || '.' || chunk_name) 
+                                ELSE 0 END) AS uncompressed_size
+                        FROM timescaledb_information.chunks
+                        WHERE hypertable_name = '{self.table_name_states}'
+                    """))
+                    row = res.fetchone()
+                    if row:
+                        stats["states_total_size"] = row[0] or 0
+                        stats["states_compressed_size"] = row[1] or 0
+                        stats["states_uncompressed_size"] = row[2] or 0
+            except Exception as e:
+                _LOGGER.debug(f"Failed to get states size stats: {e}")
 
-                # Events Table Stats
-                if self.record_events:
-                    try:
-                        res = await conn.execute(text(f"SELECT hypertable_size('{self.table_name_events}')"))
-                        stats["events_size_bytes"] = res.scalar()
-                        
-                        # Try newer format first, fall back to simpler query
-                        try:
-                            res = await conn.execute(text(f"SELECT total_chunks, compressed_total_bytes, uncompressed_total_bytes FROM hypertable_compression_stats('{self.table_name_events}')"))
-                            row = res.fetchone()
-                            if row:
-                                stats["events_total_chunks"] = row[0]
-                                stats["events_compressed_total_bytes"] = row[1] or 0
-                                stats["events_uncompressed_total_bytes"] = row[2] or 0
-                        except Exception:
-                            # Older TimescaleDB version - just get basic size
-                            pass
-                    except Exception as e:
-                        _LOGGER.debug(f"Failed to get events stats: {e}")
-                        
-        except Exception as e:
-            _LOGGER.error(f"Error fetching stats: {e}")
+        # =============================================
+        # EVENTS TABLE STATISTICS
+        # =============================================
+        if self.record_events:
+            # Query 3: Events chunk counts
+            try:
+                async with self._engine.connect() as conn:
+                    res = await conn.execute(text(f"""
+                        SELECT 
+                            COUNT(*) AS total_chunks,
+                            SUM(CASE WHEN is_compressed THEN 1 ELSE 0 END) AS compressed_chunks,
+                            SUM(CASE WHEN NOT is_compressed THEN 1 ELSE 0 END) AS uncompressed_chunks
+                        FROM timescaledb_information.chunks
+                        WHERE hypertable_name = '{self.table_name_events}'
+                    """))
+                    row = res.fetchone()
+                    if row:
+                        stats["events_total_chunks"] = row[0] or 0
+                        stats["events_compressed_chunks"] = row[1] or 0
+                        stats["events_uncompressed_chunks"] = row[2] or 0
+            except Exception as e:
+                _LOGGER.debug(f"Failed to get events chunk stats: {e}")
+            
+            # Query 4: Events size breakdown
+            try:
+                async with self._engine.connect() as conn:
+                    res = await conn.execute(text(f"""
+                        SELECT 
+                            SUM(pg_total_relation_size(chunk_schema || '.' || chunk_name)) AS total_size,
+                            SUM(CASE WHEN is_compressed 
+                                THEN pg_total_relation_size(chunk_schema || '.' || chunk_name) 
+                                ELSE 0 END) AS compressed_size,
+                            SUM(CASE WHEN NOT is_compressed 
+                                THEN pg_total_relation_size(chunk_schema || '.' || chunk_name) 
+                                ELSE 0 END) AS uncompressed_size
+                        FROM timescaledb_information.chunks
+                        WHERE hypertable_name = '{self.table_name_events}'
+                    """))
+                    row = res.fetchone()
+                    if row:
+                        stats["events_total_size"] = row[0] or 0
+                        stats["events_compressed_size"] = row[1] or 0
+                        stats["events_uncompressed_size"] = row[2] or 0
+            except Exception as e:
+                _LOGGER.debug(f"Failed to get events size stats: {e}")
             
         return stats
 
     @property
     def running(self):
-        return self._running
