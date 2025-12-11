@@ -470,6 +470,12 @@ class ScribeWriter:
             return
 
         _LOGGER.debug(f"Writing {len(devices)} devices to database...")
+        
+        # Sanitize sw_version (ensure string)
+        for device in devices:
+            if device.get("sw_version") is not None:
+                device["sw_version"] = str(device["sw_version"])
+
         try:
             async with self._engine.begin() as conn:
                 stmt = text("""
