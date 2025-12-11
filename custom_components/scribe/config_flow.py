@@ -20,8 +20,10 @@ from .const import (
     CONF_SSL_KEY_FILE,
     CONF_INCLUDE_DOMAINS,
     CONF_INCLUDE_ENTITIES,
+    CONF_INCLUDE_ENTITY_GLOBS,
     CONF_EXCLUDE_DOMAINS,
     CONF_EXCLUDE_ENTITIES,
+    CONF_EXCLUDE_ENTITY_GLOBS,
     CONF_EXCLUDE_ATTRIBUTES,
     CONF_RECORD_STATES,
     CONF_RECORD_EVENTS,
@@ -184,6 +186,10 @@ class ScribeOptionsFlowHandler(config_entries.OptionsFlow):
                         default=self.config_entry.options.get(CONF_INCLUDE_ENTITIES, []),
                     ): selector.EntitySelector(selector.EntitySelectorConfig(multiple=True)),
                     vol.Optional(
+                        CONF_INCLUDE_ENTITY_GLOBS,
+                        default=self.config_entry.options.get(CONF_INCLUDE_ENTITY_GLOBS, []),
+                    ): selector.TextSelector(selector.TextSelectorConfig(multiple=True)),
+                    vol.Optional(
                         CONF_EXCLUDE_DOMAINS,
                         default=self.config_entry.options.get(CONF_EXCLUDE_DOMAINS, []),
                     ): selector.TextSelector(selector.TextSelectorConfig(multiple=True)),
@@ -191,6 +197,10 @@ class ScribeOptionsFlowHandler(config_entries.OptionsFlow):
                         CONF_EXCLUDE_ENTITIES,
                         default=self.config_entry.options.get(CONF_EXCLUDE_ENTITIES, []),
                     ): selector.EntitySelector(selector.EntitySelectorConfig(multiple=True)),
+                    vol.Optional(
+                        CONF_EXCLUDE_ENTITY_GLOBS,
+                        default=self.config_entry.options.get(CONF_EXCLUDE_ENTITY_GLOBS, []),
+                    ): selector.TextSelector(selector.TextSelectorConfig(multiple=True)),
                     vol.Optional(
                         CONF_EXCLUDE_ATTRIBUTES,
                         default=self.config_entry.options.get(CONF_EXCLUDE_ATTRIBUTES, []),

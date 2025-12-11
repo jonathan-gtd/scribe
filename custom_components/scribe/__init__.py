@@ -33,8 +33,10 @@ from .const import (
     CONF_COMPRESS_AFTER,
     CONF_INCLUDE_DOMAINS,
     CONF_INCLUDE_ENTITIES,
+    CONF_INCLUDE_ENTITY_GLOBS,
     CONF_EXCLUDE_DOMAINS,
     CONF_EXCLUDE_ENTITIES,
+    CONF_EXCLUDE_ENTITY_GLOBS,
     CONF_EXCLUDE_ATTRIBUTES,
     CONF_RECORD_STATES,
     CONF_RECORD_EVENTS,
@@ -104,8 +106,10 @@ CONFIG_SCHEMA = vol.Schema(
                 vol.Optional(CONF_STATS_SIZE_INTERVAL, default=DEFAULT_STATS_SIZE_INTERVAL): cv.positive_int,
                 vol.Optional(CONF_INCLUDE_DOMAINS, default=[]): vol.All(cv.ensure_list, [cv.string]),
                 vol.Optional(CONF_INCLUDE_ENTITIES, default=[]): vol.All(cv.ensure_list, [cv.entity_id]),
+                vol.Optional(CONF_INCLUDE_ENTITY_GLOBS, default=[]): vol.All(cv.ensure_list, [cv.string]),
                 vol.Optional(CONF_EXCLUDE_DOMAINS, default=[]): vol.All(cv.ensure_list, [cv.string]),
                 vol.Optional(CONF_EXCLUDE_ENTITIES, default=[]): vol.All(cv.ensure_list, [cv.entity_id]),
+                vol.Optional(CONF_EXCLUDE_ENTITY_GLOBS, default=[]): vol.All(cv.ensure_list, [cv.string]),
                 vol.Optional(CONF_EXCLUDE_ENTITIES, default=[]): vol.All(cv.ensure_list, [cv.entity_id]),
                 vol.Optional(CONF_EXCLUDE_ATTRIBUTES, default=[]): vol.All(cv.ensure_list, [cv.string]),
                 vol.Optional(CONF_ENABLE_AREAS, default=DEFAULT_ENABLE_AREAS): cv.boolean,
@@ -178,12 +182,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # YAML Only Settings
     # max_queue_size = yaml_config.get(CONF_MAX_QUEUE_SIZE, DEFAULT_MAX_QUEUE_SIZE)
 
-    # Entity Filter
+    # Helper to get config from Options > Config Entry > YAML
+    def get_config_list(key):
+        val = options.get(key)
+        if val is None:
+            val = config.get(key)
+        if val is None:
+            val = yaml_config.get(key, [])
+        return val
+
     # Sets up the include/exclude logic for domains and entities
-    include_domains = options.get(CONF_INCLUDE_DOMAINS, [])
-    include_entities = options.get(CONF_INCLUDE_ENTITIES, [])
-    exclude_domains = options.get(CONF_EXCLUDE_DOMAINS, [])
-    exclude_entities = options.get(CONF_EXCLUDE_ENTITIES, [])
+    include_domains = get_config_list(CONF_INCLUDE_DOMAINS)
+    include_entities = get_config_list(CONF_INCLUDE_ENTITIES)
+    include_entity_globs = get_config_list(CONF_INCLUDE_ENTITY_GLOBS)
+    exclude_domains = get_config_list(CONF_EXCLUDE_DOMAINS)
+    exclude_entities = get_config_list(CONF_EXCLUDE_ENTITIES)
+    exclude_entity_globs = get_config_list(CONF_EXCLUDE_ENTITY_GLOBS)
+    
     exclude_attributes = set(options.get(CONF_EXCLUDE_ATTRIBUTES, []))
     
     # Merge with YAML exclude attributes if present
@@ -195,6 +210,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         include_entities,
         exclude_domains,
         exclude_entities,
+        include_entity_globs,
+        exclude_entity_globs,
     )
 
     # Determine record_states and record_events for handle_event
