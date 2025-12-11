@@ -137,6 +137,7 @@ class ScribeStatsTotalSizeSensor(ScribeCoordinatorSensor):
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry, "states_total_size", "States Total Size")
         self._attr_native_unit_of_measurement = UnitOfInformation.BYTES
+        self._attr_suggested_unit_of_measurement = UnitOfInformation.MEGABYTES
         self._attr_device_class = SensorDeviceClass.DATA_SIZE
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_icon = "mdi:database"
@@ -152,6 +153,7 @@ class ScribeStatsCompressedSizeSensor(ScribeCoordinatorSensor):
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry, "states_compressed_size", "States Compressed Size")
         self._attr_native_unit_of_measurement = UnitOfInformation.BYTES
+        self._attr_suggested_unit_of_measurement = UnitOfInformation.MEGABYTES
         self._attr_device_class = SensorDeviceClass.DATA_SIZE
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_icon = "mdi:package-variant"
@@ -167,6 +169,7 @@ class ScribeStatsUncompressedSizeSensor(ScribeCoordinatorSensor):
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry, "states_uncompressed_size", "States Uncompressed Size")
         self._attr_native_unit_of_measurement = UnitOfInformation.BYTES
+        self._attr_suggested_unit_of_measurement = UnitOfInformation.MEGABYTES
         self._attr_device_class = SensorDeviceClass.DATA_SIZE
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_icon = "mdi:package-variant-closed"
@@ -225,6 +228,7 @@ class ScribeEventsTotalSizeSensor(ScribeCoordinatorSensor):
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry, "events_total_size", "Events Total Size")
         self._attr_native_unit_of_measurement = UnitOfInformation.BYTES
+        self._attr_suggested_unit_of_measurement = UnitOfInformation.MEGABYTES
         self._attr_device_class = SensorDeviceClass.DATA_SIZE
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_icon = "mdi:database"
@@ -240,6 +244,7 @@ class ScribeEventsCompressedSizeSensor(ScribeCoordinatorSensor):
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry, "events_compressed_size", "Events Compressed Size")
         self._attr_native_unit_of_measurement = UnitOfInformation.BYTES
+        self._attr_suggested_unit_of_measurement = UnitOfInformation.MEGABYTES
         self._attr_device_class = SensorDeviceClass.DATA_SIZE
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_icon = "mdi:package-variant"
@@ -255,6 +260,7 @@ class ScribeEventsUncompressedSizeSensor(ScribeCoordinatorSensor):
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry, "events_uncompressed_size", "Events Uncompressed Size")
         self._attr_native_unit_of_measurement = UnitOfInformation.BYTES
+        self._attr_suggested_unit_of_measurement = UnitOfInformation.MEGABYTES
         self._attr_device_class = SensorDeviceClass.DATA_SIZE
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_icon = "mdi:package-variant-closed"
