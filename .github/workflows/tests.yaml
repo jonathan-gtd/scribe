@@ -12,13 +12,6 @@ jobs:
     strategy:
       matrix:
         include:
-          # Beta - Test both PG17 and PG18
-          - ha-version: "beta"
-            python-version: "3.13"
-            postgres-version: "pg18"
-          - ha-version: "beta"
-            python-version: "3.13"
-            postgres-version: "pg17"
 
           # Stable - Test both PG17 and PG18
           - ha-version: "stable"
