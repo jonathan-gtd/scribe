@@ -5,3 +5,4 @@ psycopg2-binary
 sqlalchemy
 asyncpg
 ruff
+pycares<5.0.0
