@@ -35,8 +35,8 @@ async def test_write_devices_converts_int_to_str(writer):
         "device_id": "test_device",
         "name": "Test Device",
         "name_by_user": None,
-        "model": "Test Model",
-        "manufacturer": "Test Mfg",
+        "model": 12345, # Integer model
+        "manufacturer": 67890, # Integer manufacturer
         "sw_version": 20211110, # Integer version
         "area_id": "test_area",
         "primary_config_entry": "test_entry"
@@ -54,6 +54,12 @@ async def test_write_devices_converts_int_to_str(writer):
     params = call_args[0][1]
     
     assert len(params) == 1
-    # Check that sw_version is a string
+    # Check that fields are strings
     assert isinstance(params[0]["sw_version"], str)
     assert params[0]["sw_version"] == "20211110"
+    
+    assert isinstance(params[0]["model"], str)
+    assert params[0]["model"] == "12345"
+
+    assert isinstance(params[0]["manufacturer"], str)
+    assert params[0]["manufacturer"] == "67890"

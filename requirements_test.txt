@@ -5,3 +5,5 @@ psycopg2-binary
 sqlalchemy
 asyncpg
 ruff
+aiohttp>=3.10.6
+aiodns>=3.2.0
