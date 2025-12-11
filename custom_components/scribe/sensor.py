@@ -77,6 +77,8 @@ async def async_setup_entry(
             ScribeEventsTotalSizeSensor(size_coordinator, entry),
             ScribeEventsCompressedSizeSensor(size_coordinator, entry),
             ScribeEventsUncompressedSizeSensor(size_coordinator, entry),
+            # Ratio
+            ScribeCompressionRatioSensor(size_coordinator, entry),
         ])
     
     async_add_entities(entities, True)
