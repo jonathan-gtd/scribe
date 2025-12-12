@@ -187,19 +187,37 @@ async def test_writer_get_db_stats(writer, mock_db_connection):
     # We need to mock the result of execute().scalar() and fetchone()
     
     # This is tricky because execute is called multiple times.
-    # We can use side_effect to return different mocks or just a generic mock that returns something.
+    # We can use side_effect to return different mocks based on query
     
-    mock_result = MagicMock()
-    mock_result.scalar.return_value = 1024
-    mock_result.fetchone.return_value = (10, 5, 500, 1000)
+    async def execute_side_effect(statement, *args, **kwargs):
+        stmt_str = str(statement)
+        mock_res = MagicMock()
+        
+        if "hypertable_compression_stats" in stmt_str:
+             # Return valid compression stats
+             row = MagicMock()
+             row.before_compression_total_bytes = 200
+             row.after_compression_total_bytes = 100
+             mock_res.fetchone.return_value = row
+        elif "timescaledb_information.chunks" in stmt_str:
+             if "COUNT(*)" in stmt_str:
+                 mock_res.fetchone.return_value = (10, 5, 5) # chunks
+             elif "SUM(pg_total_relation_size" in stmt_str:
+                 mock_res.fetchone.return_value = (1000, 800, 200) # size
+        else:
+             mock_res.fetchone.return_value = (0,) # default
+             mock_res.scalar.return_value = 0
+             
+        return mock_res
     
-    mock_db_connection.execute.return_value = mock_result
+    mock_db_connection.execute.side_effect = execute_side_effect
     
     stats = await writer.get_db_stats()
     
-    assert stats["states_total_size"] == 10
+    assert stats["states_total_size"] == 1000
     assert stats["states_total_chunks"] == 10
-    assert stats["events_total_size"] == 10
+    assert stats["states_before_compression_total_bytes"] == 200
+    assert stats["states_after_compression_total_bytes"] == 100
 
 @pytest.mark.asyncio
 async def test_writer_engine_creation_failure(hass):

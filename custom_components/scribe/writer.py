@@ -788,18 +788,49 @@ class ScribeWriter:
                 _LOGGER.debug(f"Failed to get events size stats: {e}")
             return {}
 
+        async def get_states_compression_stats():
+            try:
+                async with self._engine.connect() as conn:
+                    res = await conn.execute(text(f"SELECT * FROM hypertable_compression_stats('{self.table_name_states}')"))
+                    row = res.fetchone()
+                    if row:
+                        return {
+                            "states_before_compression_total_bytes": row.before_compression_total_bytes or 0,
+                            "states_after_compression_total_bytes": row.after_compression_total_bytes or 0
+                        }
+            except Exception as e:
+                # This might fail if compression is not enabled or table doesn't exist
+                _LOGGER.debug(f"Failed to get states compression stats: {e}")
+            return {}
+
+        async def get_events_compression_stats():
+            try:
+                async with self._engine.connect() as conn:
+                    res = await conn.execute(text(f"SELECT * FROM hypertable_compression_stats('{self.table_name_events}')"))
+                    row = res.fetchone()
+                    if row:
+                        return {
+                            "events_before_compression_total_bytes": row.before_compression_total_bytes or 0,
+                            "events_after_compression_total_bytes": row.after_compression_total_bytes or 0
+                        }
+            except Exception as e:
+                _LOGGER.debug(f"Failed to get events compression stats: {e}")
+            return {}
+
         # Add tasks based on configuration and requested stats_type
         if self.record_states:
             if stats_type in ("chunk", "all"):
                 tasks.append(get_states_chunk_stats())
             if stats_type in ("size", "all"):
                 tasks.append(get_states_size_stats())
+                tasks.append(get_states_compression_stats())
 
         if self.record_events:
             if stats_type in ("chunk", "all"):
                 tasks.append(get_events_chunk_stats())
             if stats_type in ("size", "all"):
                 tasks.append(get_events_size_stats())
+                tasks.append(get_events_compression_stats())
 
         # Execute all tasks concurrently
         if tasks:

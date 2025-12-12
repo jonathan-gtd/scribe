@@ -439,11 +439,15 @@ class ScribeStatesCompressionRatioSensor(ScribeCoordinatorSensor):
 
     @property
     def native_value(self):
-        # We currently lack the "original size of compressed data" metric in writer.py
-        # to calculate a true compression ratio.
-        # We will need to update writer.py to fetch from hypertable_compression_stats.
-        # For now, we return None (Unknown) consistent with current behavior but split by table.
-        return None
+        data = self.coordinator.data
+        before = data.get("states_before_compression_total_bytes", 0)
+        after = data.get("states_after_compression_total_bytes", 0)
+        
+        if not before:
+            return None
+            
+        # Calculate percentage saved (1 - compressed/original)
+        return round((1 - (after / before)) * 100, 1)
 
 class ScribeEventsCompressionRatioSensor(ScribeCoordinatorSensor):
     """Sensor for Events Compression Ratio."""
@@ -457,7 +461,15 @@ class ScribeEventsCompressionRatioSensor(ScribeCoordinatorSensor):
 
     @property
     def native_value(self):
-        return None
+        data = self.coordinator.data
+        before = data.get("events_before_compression_total_bytes", 0)
+        after = data.get("events_after_compression_total_bytes", 0)
+        
+        if not before:
+            return None
+
+        # Calculate percentage saved
+        return round((1 - (after / before)) * 100, 1)
 
 
 class ScribeStatesWrittenSensor(ScribeSensor):
