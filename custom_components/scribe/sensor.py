@@ -318,7 +318,7 @@ class ScribeStatesCompressionRatioSensor(ScribeCoordinatorSensor):
     
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_icon = "mdi:ratio"
+    _attr_icon = "mdi:percent"
 
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry, "states_compression_ratio", "States Compression Ratio")
@@ -432,7 +432,7 @@ class ScribeStatesCompressionRatioSensor(ScribeCoordinatorSensor):
     
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_icon = "mdi:ratio"
+    _attr_icon = "mdi:percent"
 
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry, "states_compression_ratio", "States Compression Ratio")
@@ -454,7 +454,7 @@ class ScribeEventsCompressionRatioSensor(ScribeCoordinatorSensor):
     
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_icon = "mdi:ratio"
+    _attr_icon = "mdi:percent"
 
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry, "events_compression_ratio", "Events Compression Ratio")
@@ -513,7 +513,7 @@ class ScribeBufferSizeSensor(ScribeSensor):
         self.entity_description = SensorEntityDescription(
             key="buffer_size",
             name="Buffer Size",
-            icon="mdi:buffer",
+            icon="mdi:memory",
             state_class=SensorStateClass.MEASUREMENT,
         )
         super().__init__(writer, entry)
