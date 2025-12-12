@@ -3,5 +3,5 @@ __pycache__/
 .pytest_cache/
 *.pyc
 tuto/
-PROCESS.md
 .venv/
+PROCESS.md
