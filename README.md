@@ -223,6 +223,34 @@ Scribe provided helper scripts to backfill data from various sources.
    ```
 </details>
 
+### Recorder Migration
+
+<details>
+<summary><b>Show Recorder Migration Guide</b></summary>
+
+1. Navigate to the `migration` directory:
+   ```bash
+   cd migration
+   ```
+
+2. Install dependencies:
+   ```bash
+   pip install psycopg2-binary python-dotenv
+   ```
+
+3. Configure the migration:
+   ```bash
+   cp .env.example .env
+   nano .env
+   # Fill in [Recorder Configuration], [Scribe Configuration], and [Migration Settings]
+   ```
+
+4. Run the migration:
+   ```bash
+   python3 recorder2scribe.py
+   ```
+</details>
+
 ## Statistics Sensors
 
 Enable sensors by setting their flags in your configuration.
