@@ -380,11 +380,6 @@ A pre-configured Lovelace view containing all useful Scribe sensors (Database St
 
 
 
-
-## Technical Data
-
-For detailed technical information about the architecture, database schema, and data flow, please refer to the [Technical Documentation](TECHNICAL_DOCS.md).
-
 ## License
 
 MIT License - See LICENSE file for details
