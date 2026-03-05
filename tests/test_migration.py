@@ -15,7 +15,7 @@ class AsyncContextManagerMock:
         pass
 
 @pytest.fixture
-def mock_engine():
+def mock_pool():
     """Mock the SQLAlchemy engine."""
     engine = AsyncMock()
     connection = AsyncMock()
@@ -33,9 +33,9 @@ def mock_engine():
     return engine, connection, result
 
 @pytest.mark.asyncio
-async def test_migrate_database_calls_sub_migrations(hass, mock_engine):
+async def test_migrate_database_calls_sub_migrations(hass, mock_pool):
     """Test that migrate_database calls sub-migrations."""
-    engine, _, _ = mock_engine
+    engine, _, _ = mock_pool
     
     with patch("custom_components.scribe.migration._migrate_states_raw_constraints", new_callable=AsyncMock) as mock_constraints, \
          patch("custom_components.scribe.migration.migrate_states_data", new_callable=AsyncMock) as mock_data, \
@@ -51,9 +51,9 @@ async def test_migrate_database_calls_sub_migrations(hass, mock_engine):
         mock_events.assert_called_once_with(engine)
 
 @pytest.mark.asyncio
-async def test_migrate_states_raw_already_done(mock_engine):
+async def test_migrate_states_raw_already_done(mock_pool):
     """Test that migration skips if PK already exists."""
-    engine, connection, result = mock_engine
+    engine, connection, result = mock_pool
     
     # Mock PK check returning true
     result.fetchone.return_value = [1]
@@ -68,9 +68,9 @@ async def test_migrate_states_raw_already_done(mock_engine):
     assert connection.execute.call_count == 1
 
 @pytest.mark.asyncio
-async def test_migrate_states_raw_with_duplicates(mock_engine):
+async def test_migrate_states_raw_with_duplicates(mock_pool):
     """Test migration with duplicates to clean."""
-    engine, connection, result = mock_engine
+    engine, connection, result = mock_pool
     
     # 1. Check PK -> None (not done)
     # 2. Check duplicates -> 5 (found)
@@ -97,9 +97,9 @@ async def test_migrate_states_raw_with_duplicates(mock_engine):
     assert any("ADD CONSTRAINT fk_states_raw_entity" in s for s in sql_calls)
 
 @pytest.mark.asyncio
-async def test_migrate_events_pk_already_done(mock_engine):
+async def test_migrate_events_pk_already_done(mock_pool):
     """Test event migration skips if 'id' column exists."""
-    engine, connection, result = mock_engine
+    engine, connection, result = mock_pool
     
     # 1. Check table events exists -> True
     # 2. Check is hypertable -> False
@@ -116,9 +116,9 @@ async def test_migrate_events_pk_already_done(mock_engine):
     assert not any("ADD COLUMN id" in s for s in sql_calls)
 
 @pytest.mark.asyncio
-async def test_migrate_events_pk_adds_column(mock_engine):
+async def test_migrate_events_pk_adds_column(mock_pool):
     """Test event migration adds column if missing."""
-    engine, connection, result = mock_engine
+    engine, connection, result = mock_pool
     
     # 1. Check table events exists -> True
     # 2. Check is hypertable -> False

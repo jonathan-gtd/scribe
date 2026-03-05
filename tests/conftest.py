@@ -14,39 +14,42 @@ def mock_setup_entry():
 
 @pytest.fixture
 def mock_db_connection():
-    """Mock database connection."""
+    """Mock asyncpg database connection."""
     mock_conn = AsyncMock()
     mock_conn.execute = AsyncMock()
-    mock_conn.execute.return_value = MagicMock()
-    mock_conn.begin = AsyncMock()
-    # Mock context manager for begin()
-    mock_conn.begin.return_value.__aenter__.return_value = mock_conn
-    mock_conn.begin.return_value.__aexit__.return_value = None
+    mock_conn.executemany = AsyncMock()
+    mock_conn.fetchval = AsyncMock()
+    mock_conn.fetchrow = AsyncMock()
+    mock_conn.fetch = AsyncMock()
+    
+    # transaction() returns an async context manager
+    tx_mock = AsyncMock()
+    mock_conn.transaction = MagicMock(return_value=tx_mock)
+    tx_mock.__aenter__.return_value = tx_mock
+    tx_mock.__aexit__.return_value = None
+    
     return mock_conn
 
 @pytest.fixture
-def mock_engine(mock_db_connection):
-    """Mock database engine."""
-    mock_engine = MagicMock()
+def mock_pool(mock_db_connection):
+    """Mock asyncpg connection pool."""
+    mock_pool = MagicMock()
     
-    # connect() returns an async context manager
-    mock_engine.connect.return_value.__aenter__.return_value = mock_db_connection
-    mock_engine.connect.return_value.__aexit__.return_value = None
+    # acquire() returns an async context manager
+    acquire_ctx = AsyncMock()
+    mock_pool.acquire = MagicMock(return_value=acquire_ctx)
+    acquire_ctx.__aenter__.return_value = mock_db_connection
+    acquire_ctx.__aexit__.return_value = None
     
-    # begin() returns an async context manager
-    mock_engine.begin.return_value.__aenter__.return_value = mock_db_connection
-    mock_engine.begin.return_value.__aexit__.return_value = None
+    # close() is async
+    mock_pool.close = AsyncMock()
     
-    # dispose() is async
-    mock_engine.dispose = AsyncMock()
-    
-    return mock_engine
+    return mock_pool
 
 @pytest.fixture(autouse=True)
-def mock_create_async_engine(mock_engine):
-    """Mock create_async_engine."""
-    with patch("sqlalchemy.ext.asyncio.create_async_engine", return_value=mock_engine) as mock_create, \
-         patch("custom_components.scribe.writer.create_async_engine", return_value=mock_engine):
+def mock_create_pool(mock_pool):
+    """Mock create_pool."""
+    with patch("custom_components.scribe.writer.asyncpg.create_pool", new_callable=AsyncMock, return_value=mock_pool) as mock_create:
         yield mock_create
 
 @pytest.fixture

@@ -8,7 +8,7 @@ from collections import deque
 from custom_components.scribe.writer import ScribeWriter
 
 @pytest.fixture
-async def writer(hass, mock_engine):
+async def writer(hass, mock_pool):
     """Create a writer instance."""
     writer = ScribeWriter(
         hass=hass,
@@ -26,21 +26,16 @@ async def writer(hass, mock_engine):
         ssl_root_cert="/tmp/root.crt",
         ssl_cert_file="/tmp/client.crt",
         ssl_key_file="/tmp/client.key",
-        engine=mock_engine
+        engine=mock_pool
     )
     yield writer
     if writer._task:
         await writer.stop()
 
 @pytest.mark.asyncio
-async def test_writer_init_db(writer, mock_engine, mock_db_connection):
+async def test_writer_init_db(writer, mock_pool, mock_db_connection):
     """Test database initialization."""
-    # Mock migration
-    # writer.py does: from . import migration -> usage: migration.migrate_database()
-    # So we patch the function in the module where it is defined, but accessed via writer module?
-    # Actually, verify if writer.py has 'migration' in its namespace.
-    # It does. So we patch 'custom_components.scribe.writer.migration.migrate_database'
-    with patch("custom_components.scribe.writer.migration.migrate_database") as mock_migrate:
+    with patch("custom_components.scribe.migration.migrate_database") as mock_migrate:
         await writer.start()
         await asyncio.sleep(0.1) # Let background init finish
         
@@ -54,7 +49,7 @@ async def test_writer_init_db(writer, mock_engine, mock_db_connection):
         mock_migrate.assert_called_once()
     
     # Verify engine creation
-    assert writer._engine == mock_engine
+    assert writer._pool == mock_pool
     
     # Verify table creation calls
     calls = []
@@ -140,7 +135,7 @@ async def test_writer_enqueue_flush(writer, mock_db_connection):
     assert writer._events_written == 1
 
 @pytest.mark.asyncio
-async def test_writer_no_buffer_on_failure(writer, mock_engine, mock_db_connection):
+async def test_writer_no_buffer_on_failure(writer, mock_pool, mock_db_connection):
     """Test that events are dropped when buffering is disabled."""
     writer.buffer_on_failure = False
     writer.batch_size = 1
@@ -163,7 +158,7 @@ async def test_writer_no_buffer_on_failure(writer, mock_engine, mock_db_connecti
     assert writer._dropped_events == 1
 
 @pytest.mark.asyncio
-async def test_writer_buffer_on_failure(writer, mock_engine, mock_db_connection):
+async def test_writer_buffer_on_failure(writer, mock_pool, mock_db_connection):
     """Test that events are buffered when buffering is enabled."""
     writer.buffer_on_failure = True
     writer.batch_size = 1
@@ -267,11 +262,11 @@ async def test_writer_get_db_stats(writer, mock_db_connection):
     assert stats["states_after_compression_total_bytes"] == 100
 
 @pytest.mark.asyncio
-async def test_writer_engine_creation_failure(hass):
-    """Test engine creation failure."""
+async def test_writer_engine_creation_failure(hass, caplog):
+    """Test failure during pool creation."""
     from custom_components.scribe.writer import ScribeWriter
     
-    with patch("custom_components.scribe.writer.create_async_engine", side_effect=Exception("Engine Error")):
+    with patch("custom_components.scribe.writer.asyncpg.create_pool", side_effect=Exception("Pool Error")):
         writer = ScribeWriter(
             hass=hass,
             db_url="postgresql://user:pass@host/db",
@@ -290,11 +285,11 @@ async def test_writer_engine_creation_failure(hass):
             ssl_key_file=None
         )
         await writer.start()
-        assert writer._engine is None
+        assert writer._pool is None
         assert writer._connected is False
 
 @pytest.mark.asyncio
-async def test_writer_init_db_failure(writer, mock_engine, mock_db_connection):
+async def test_writer_init_db_failure(writer, mock_pool, mock_db_connection):
     """Test init_db failure."""
     mock_db_connection.execute.side_effect = Exception("DB Error")
     
@@ -302,7 +297,7 @@ async def test_writer_init_db_failure(writer, mock_engine, mock_db_connection):
     assert writer._connected is False
 
 @pytest.mark.asyncio
-async def test_writer_hypertable_failure(writer, mock_engine, mock_db_connection):
+async def test_writer_hypertable_failure(writer, mock_pool, mock_db_connection):
     """Test hypertable creation failure (should be logged but not fail init)."""
     # We need to allow initial table creation to succeed, but fail hypertable calls
     
@@ -344,7 +339,7 @@ async def test_writer_start_already_running(writer):
     assert writer.running is True
     
     # Call start again
-    with patch("custom_components.scribe.writer.create_async_engine") as mock_create:
+    with patch("custom_components.scribe.writer.asyncpg.create_pool") as mock_create:
         await writer.start()
         mock_create.assert_not_called()
 
@@ -382,12 +377,12 @@ async def test_writer_run_exception(writer):
 @pytest.mark.asyncio
 async def test_writer_init_db_no_engine(writer):
     """Test init_db with no engine."""
-    writer._engine = None
+    writer._pool = None
     await writer.init_db()
     assert writer._connected is False
 
 @pytest.mark.asyncio
-async def test_writer_compression_policy_failure(writer, mock_engine, mock_db_connection):
+async def test_writer_compression_policy_failure(writer, mock_pool, mock_db_connection):
     """Test compression policy failure."""
     async def side_effect(statement, *args, **kwargs):
         stmt_str = str(statement)
@@ -421,7 +416,7 @@ async def test_writer_buffer_full_drop_oldest(writer):
     writer.enqueue({"type": "state", "entity_id": "sensor.test", "data": 2})
     
     # Mock flush failure to trigger buffering logic
-    writer._engine = MagicMock()
+    writer._pool = MagicMock()
     
     # Mock begin() to return a context manager that adds an item then raises exception
     mock_cm = MagicMock()
@@ -434,7 +429,7 @@ async def test_writer_buffer_full_drop_oldest(writer):
     mock_cm.__aenter__ = AsyncMock(side_effect=mock_enter)
     mock_cm.__aexit__ = AsyncMock()
     
-    writer._engine.begin.return_value = mock_cm
+    writer._pool.begin.return_value = mock_cm
     
     # Trigger flush manually
     await writer._flush()
@@ -451,12 +446,12 @@ async def test_writer_buffer_full_drop_oldest(writer):
 @pytest.mark.asyncio
 async def test_writer_get_db_stats_no_engine(writer):
     """Test get_db_stats with no engine."""
-    writer._engine = None
+    writer._pool = None
     stats = await writer.get_db_stats()
     assert stats == {}
 
 @pytest.mark.asyncio
-async def test_writer_compression_enable_failure(writer, mock_engine, mock_db_connection):
+async def test_writer_compression_enable_failure(writer, mock_pool, mock_db_connection):
     """Test compression enable failure."""
     async def side_effect(statement, *args, **kwargs):
         stmt_str = str(statement)
@@ -480,7 +475,7 @@ async def test_writer_get_db_stats_connect_failure(writer):
     await writer.start()
     
     # Mock connect() to raise exception
-    writer._engine.connect.side_effect = Exception("Connect Error")
+    writer._pool.connect.side_effect = Exception("Connect Error")
     
     stats = await writer.get_db_stats()
     # With PR #9, size stats functions return default 0 values even on failure

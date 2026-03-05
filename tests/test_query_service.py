@@ -3,14 +3,14 @@ from unittest.mock import MagicMock, AsyncMock
 from custom_components.scribe.writer import ScribeWriter
 
 @pytest.fixture
-def mock_engine():
+def mock_pool():
     """Mock the SQLAlchemy engine."""
     engine = MagicMock()
     engine.connect.return_value.__aenter__.return_value = AsyncMock()
     return engine
 
 @pytest.fixture
-async def writer(hass, mock_engine):
+async def writer(hass, mock_pool):
     """Create a writer instance."""
     writer = ScribeWriter(
         hass=hass,
@@ -28,16 +28,16 @@ async def writer(hass, mock_engine):
         ssl_root_cert=None,
         ssl_cert_file=None,
         ssl_key_file=None,
-        engine=mock_engine
+        engine=mock_pool
     )
     yield writer
     if writer._task:
         await writer.stop()
 
 @pytest.mark.asyncio
-async def test_query_select_valid(writer, mock_engine):
+async def test_query_select_valid(writer, mock_pool):
     """Test valid SELECT query."""
-    mock_conn = mock_engine.connect.return_value.__aenter__.return_value
+    mock_conn = mock_pool.connect.return_value.__aenter__.return_value
     
     # Mock result
     mock_result = MagicMock()
@@ -54,9 +54,9 @@ async def test_query_select_valid(writer, mock_engine):
     assert mock_conn.execute.called
 
 @pytest.mark.asyncio
-async def test_ensure_read_only_transaction(writer, mock_engine):
+async def test_ensure_read_only_transaction(writer, mock_pool):
     """Test that the transaction is set to read-only."""
-    mock_conn = mock_engine.connect.return_value.__aenter__.return_value
+    mock_conn = mock_pool.connect.return_value.__aenter__.return_value
     mock_result = MagicMock()
     mock_result.__iter__.return_value = []
     mock_conn.execute.return_value = mock_result
@@ -78,9 +78,9 @@ async def test_ensure_read_only_transaction(writer, mock_engine):
     assert has_read_only, f"Read-only transaction was not enforced. Calls: {calls}"
 
 @pytest.mark.asyncio
-async def test_query_whitespace(writer, mock_engine):
+async def test_query_whitespace(writer, mock_pool):
     """Test query with leading whitespace."""
-    mock_conn = mock_engine.connect.return_value.__aenter__.return_value
+    mock_conn = mock_pool.connect.return_value.__aenter__.return_value
     mock_result = MagicMock()
     mock_result.__iter__.return_value = []
     mock_conn.execute.return_value = mock_result
@@ -89,9 +89,9 @@ async def test_query_whitespace(writer, mock_engine):
     assert mock_conn.execute.called
 
 @pytest.mark.asyncio
-async def test_query_case_insensitive(writer, mock_engine):
+async def test_query_case_insensitive(writer, mock_pool):
     """Test query case insensitivity."""
-    mock_conn = mock_engine.connect.return_value.__aenter__.return_value
+    mock_conn = mock_pool.connect.return_value.__aenter__.return_value
     mock_result = MagicMock()
     mock_result.__iter__.return_value = []
     mock_conn.execute.return_value = mock_result
