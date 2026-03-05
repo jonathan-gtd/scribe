@@ -12,8 +12,6 @@ jobs:
     strategy:
       matrix:
         include:
-
-          # Stable - Test PG18
           - ha-version: "stable"
             python-version: "3.14"
             postgres-version: "pg18"
@@ -56,4 +54,3 @@ jobs:
     - name: Run Unit Tests
       run: |
         pytest tests
-
