@@ -55,10 +55,5 @@ jobs:
 
     - name: Run Unit Tests
       run: |
-        pytest tests --ignore=tests/test_integration.py
+        pytest tests
 
-    - name: Run Integration Tests
-      env:
-        SCRIBE_INTEGRATION_TEST_DB_URL: postgresql://postgres:password@127.0.0.1:5432/scribe
-      run: |
-        pytest tests/test_integration.py
