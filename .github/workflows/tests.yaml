@@ -11,10 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        include:
-          - ha-version: "stable"
-            python-version: "3.14"
-            postgres-version: "pg18"
+        ha-version: ["stable"]
+        python-version: ["3.14"]
+        postgres-version: ["pg18"]
 
     services:
       timescaledb:
