@@ -6,7 +6,7 @@ from custom_components.scribe.writer import ScribeWriter
 @pytest.fixture
 def writer(hass):
     """Create a writer instance with a mock engine."""
-    mock_engine = MagicMock()
+    mock_pool = MagicMock()
     writer = ScribeWriter(
         hass=hass,
         db_url="postgresql://user:pass@host/db",
@@ -20,16 +20,16 @@ def writer(hass):
         buffer_on_failure=False,
         table_name_states="states",
         table_name_events="events",
-        engine=mock_engine
+        engine=mock_pool
     )
     return writer
 
 @pytest.mark.asyncio
 async def test_write_devices_converts_int_to_str(writer):
     """Test that integer sw_version is converted to string."""
-    mock_engine = writer._engine
+    mock_pool = writer._pool
     mock_conn = MagicMock()
-    mock_engine.begin.return_value.__aenter__.return_value = mock_conn
+    mock_pool.begin.return_value.__aenter__.return_value = mock_conn
 
     devices = [{
         "device_id": "test_device",

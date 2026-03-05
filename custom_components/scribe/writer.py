@@ -359,9 +359,9 @@ class ScribeWriter:
         async def _launch_migration(event):
             """Launch migration after HA is fully started."""
             _LOGGER.debug("HA fully started, launching background migration task")
-            from . import migration  # lazy import to avoid circular dependency
-            self.hass.async_create_task(
-                migration.migrate_database(
+            try:
+                from . import migration  # lazy import to avoid circular dependency
+                await migration.migrate_database(
                     self.hass, 
                     self._pool,   # pass pool (migration.py uses it as 'engine')
                     self.record_states, 
@@ -369,7 +369,13 @@ class ScribeWriter:
                     self.chunk_interval,
                     self.compress_after
                 )
-            )
+                
+                # Create the view now that migration is done (the table was renamed/dropped)
+                async with self._pool.acquire() as conn:
+                    await self._init_states_view(conn)
+                    
+            except Exception as e:
+                _LOGGER.error(f"Background migration failed: {e}", exc_info=True)
         
         from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
         self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, _launch_migration)
@@ -507,19 +513,33 @@ class ScribeWriter:
             ON states_raw (metadata_id, time DESC);
         """)
         
-        # 2. Create View 'states' for backward compatibility
-        _LOGGER.debug("Creating/Replacing view 'states'")
-        await conn.execute(f"""
-            CREATE OR REPLACE VIEW {self.table_name_states} AS
-            SELECT
-                s.time,
-                e.entity_id,
-                s.state,
-                s.value,
-                s.attributes
-            FROM states_raw s
-            JOIN entities e ON s.metadata_id = e.id;
-        """)
+        # 2. The view creation is now handled in `_init_states_view` 
+        # to ensure it doesn't conflict with the `states` table before migration.
+        await self._init_states_view(conn)
+
+    async def _init_states_view(self, conn):
+        """Create the backward-compatible states view, if the name isn't taken by a table."""
+        try:
+            is_table = await conn.fetchval(f"SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = '{self.table_name_states}' AND table_type = 'BASE TABLE')")
+            if is_table:
+                _LOGGER.debug(f"'{self.table_name_states}' is currently a table. Skipping view creation until migration finishes.")
+                return
+
+            _LOGGER.debug(f"Creating/Replacing view '{self.table_name_states}'")
+            await conn.execute(f"DROP VIEW IF EXISTS {self.table_name_states} CASCADE;")
+            await conn.execute(f"""
+                CREATE VIEW {self.table_name_states} AS
+                SELECT
+                    s.time,
+                    e.entity_id,
+                    s.state,
+                    s.value,
+                    s.attributes
+                FROM states_raw s
+                JOIN entities e ON s.metadata_id = e.id;
+            """)
+        except Exception as e:
+            _LOGGER.error(f"Failed to create states view: {e}")
 
     async def _init_events_table(self, conn):
         """Initialize events table."""
