@@ -25,7 +25,6 @@ Scribe is built differently. Unlike other integrations that rely on synchronous 
 - [Services](#services)
 - [Dashboard / View](#dashboard--view)
 - [Troubleshooting](#troubleshooting)
-- [Technical Data](#technical-data)
 - [License](#license)
 
 ## Features
@@ -60,7 +59,7 @@ Scribe is built differently. Unlike other integrations that rely on synchronous 
 
 ### 2. Database Setup
 
-You need a running TimescaleDB instance. I recommend PostgreSQL 18.
+You need a running TimescaleDB instance. I recommend PostgreSQL 17 or 18.
 
 #### Option A: Home Assistant OS (Add-on)
 
