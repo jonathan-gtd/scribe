@@ -4,15 +4,19 @@ import pytest
 import asyncio
 import asyncpg
 from datetime import datetime
+from unittest.mock import patch
 from custom_components.scribe.writer import ScribeWriter
 
 # Get DB URL from env or skip
 DB_URL = os.getenv("SCRIBE_INTEGRATION_TEST_DB_URL")
 
 @pytest.fixture(autouse=True)
-def mock_create_async_engine():
-    """Override the mock to use the real engine for integration tests."""
-    yield
+def disable_mock_pool():
+    """Disable the autouse mock_create_pool from conftest.py for integration tests."""
+    # We patch it back to the real create_pool
+    from asyncpg import create_pool
+    with patch("custom_components.scribe.writer.asyncpg.create_pool", side_effect=create_pool) as mock:
+        yield mock
 
 @pytest.mark.skipif(not DB_URL, reason="Integration test DB URL not set")
 @pytest.mark.asyncio
@@ -38,13 +42,18 @@ async def test_integration_write_and_read(hass, socket_enabled):
     await writer.start()
     
     try:
-        # 2. Write Data
+        # 2. Add entity metadata first! 
+        # In scribe 3.0, states_raw joins with entities.
+        # Since we bypass HA setup, we must ensure the entity exists in the entities table.
+        # ScribeWriter uses _ensure_metadata_ids in _flush, but it needs a real entity record.
+        
+        # 3. Write Data
         # State
         writer.enqueue({
             "type": "state",
             "entity_id": "sensor.integration_test",
             "state": "123.45",
-            "attributes": '{"unit": "C"}',
+            "attributes": {"unit": "C"},
             "time": datetime.now(),
             "value": 123.45
         })
@@ -53,7 +62,7 @@ async def test_integration_write_and_read(hass, socket_enabled):
         writer.enqueue({
             "type": "event",
             "event_type": "integration_event",
-            "event_data": '{"foo": "bar"}',
+            "event_data": {"foo": "bar"},
             "time": datetime.now(),
             "origin": "LOCAL",
             "context_id": "ctx_1",
@@ -62,13 +71,13 @@ async def test_integration_write_and_read(hass, socket_enabled):
         })
         
         # Wait for flush
-        await asyncio.sleep(2)
+        await asyncio.sleep(3)
         
-        # 3. Verify with direct DB connection
+        # 4. Verify with direct DB connection
         conn = await asyncpg.connect(DB_URL)
         
         try:
-            # Check States
+            # Check States (should work through the view)
             row = await conn.fetchrow("SELECT * FROM states WHERE entity_id = 'sensor.integration_test'")
             assert row is not None
             assert row["state"] == "123.45"
@@ -77,7 +86,8 @@ async def test_integration_write_and_read(hass, socket_enabled):
             # Check Events
             row = await conn.fetchrow("SELECT * FROM events WHERE event_type = 'integration_event'")
             assert row is not None
-            assert "bar" in row["event_data"]
+            # event_data is JSONB in DB, asyncpg returns it as a dict
+            assert row["event_data"]["foo"] == "bar"
             
         finally:
             await conn.close()
@@ -109,13 +119,15 @@ async def test_integration_compression_setup(hass, socket_enabled):
     
     conn = await asyncpg.connect(DB_URL)
     try:
-        # Check if compression is enabled on hypertables
-        # We query timescaledb_information.hypertables or similar
-        # But simpler: check if compression stats view has entries or just check pg_settings/config
-        
-        # Let's check timescaledb_information.jobs for compression policies
+        # Check for compression policies in TimescaleDB jobs
+        # In scribe 3.0, we have policies for 'states_raw' and 'events' (or custom name)
         rows = await conn.fetch("SELECT * FROM timescaledb_information.jobs WHERE proc_name = 'policy_compression'")
-        # We expect at least 2 jobs (states and events)
+        
+        # We expect at least one for states_raw and one for events
+        # Note: hypertable name for states is hardcoded to 'states_raw'
+        hypertable_names = [row['hypertable_name'] for row in rows]
+        assert "states_raw" in hypertable_names
+        assert "events" in hypertable_names
         assert len(rows) >= 2
         
     finally:
