@@ -6,7 +6,7 @@ import asyncpg
 import logging
 import sys
 from datetime import datetime
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch
 from custom_components.scribe.writer import ScribeWriter
 
 # Configure logging to see DEBUG logs in CI
