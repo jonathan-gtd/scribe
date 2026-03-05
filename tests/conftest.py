@@ -47,12 +47,8 @@ def mock_pool(mock_db_connection):
     return mock_pool
 
 @pytest.fixture(autouse=True)
-def mock_create_pool(mock_pool, request):
+def mock_create_pool(mock_pool):
     """Mock create_pool."""
-    if "test_integration.py" in request.node.fspath.strpath:
-        yield
-        return
-        
     with patch("custom_components.scribe.writer.asyncpg.create_pool", new_callable=AsyncMock, return_value=mock_pool) as mock_create:
         yield mock_create
 
