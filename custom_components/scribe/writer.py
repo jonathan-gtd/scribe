@@ -3,6 +3,9 @@
 This module handles the asynchronous writing of data to the TimescaleDB database.
 It implements an asyncio-based writer that buffers events and writes them in batches
 to minimize database connection overhead and blocking.
+
+NOTE: This version uses asyncpg directly (no SQLAlchemy) to avoid the greenlet
+dependency which is not available on Python 3.14 / Alpine Linux (Home Assistant OS).
 """
 import logging
 import asyncio
@@ -14,15 +17,14 @@ from collections import deque
 import json
 import math
 
+import asyncpg
+
 from homeassistant.helpers.json import JSONEncoder
-
-from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import create_async_engine
-
 from homeassistant.core import HomeAssistant
 
-from . import migration
+# NOTE: 'migration' is imported lazily (inside methods) to avoid circular imports.
+# __init__.py imports ScribeWriter, so a top-level 'from . import migration' here
+# would trigger a circular import before the package is fully initialized.
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -70,12 +72,23 @@ def _create_ssl_context(ssl_root_cert=None, ssl_cert_file=None, ssl_key_file=Non
     _LOGGER.debug("SSL context created successfully")
     return ssl_context
 
+
+def _normalize_dsn(db_url: str) -> str:
+    """Convert SQLAlchemy-style DSN to plain asyncpg DSN.
+    
+    asyncpg uses postgresql:// (or postgres://), not postgresql+asyncpg://.
+    """
+    return db_url.replace("postgresql+asyncpg://", "postgresql://")
+
+
 class ScribeWriter:
     """Handle database connections and writing.
     
     This class runs as an asyncio task. It maintains a queue of events to be written.
     Data is flushed to the database when the queue reaches BATCH_SIZE or when
     FLUSH_INTERVAL seconds have passed.
+    
+    Uses asyncpg directly (no SQLAlchemy) to avoid the greenlet dependency.
     """
 
     def __init__(
@@ -108,11 +121,8 @@ class ScribeWriter:
         """Initialize the writer."""
         self.hass = hass
         
-        # Ensure db_url uses asyncpg
-        if "postgresql://" in db_url and "postgresql+asyncpg://" not in db_url:
-            self.db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
-        else:
-            self.db_url = db_url
+        # Normalize DSN - strip SQLAlchemy dialect prefix if present
+        self.db_url = _normalize_dsn(db_url)
             
         self.chunk_interval = chunk_interval
         self.compress_after = compress_after
@@ -146,10 +156,13 @@ class ScribeWriter:
         
         # Queue
         self._queue: deque = deque(maxlen=max_queue_size)
-        self._queue: deque = deque(maxlen=max_queue_size)
         self._flush_pending = False  # Prevent multiple flush tasks
         
-        self._engine = engine
+        # asyncpg connection pool (replaces SQLAlchemy engine)
+        self._pool: asyncpg.Pool = None
+        # Keep _engine as alias for migration.py compatibility
+        self._engine = None
+        
         self._task = None
         self._running = False
         
@@ -157,6 +170,40 @@ class ScribeWriter:
         self._entity_id_map: Dict[str, int] = {}
         # Reverse Cache: metadata_id -> entity_id (for debugging/renames if needed)
         self._metadata_id_map: Dict[int, str] = {}
+
+    # ------------------------------------------------------------------
+    # Internal helpers: acquire connection with/without transaction
+    # ------------------------------------------------------------------
+
+    async def _execute(self, sql: str, *args):
+        """Execute a statement (no return value needed) using a pooled connection."""
+        async with self._pool.acquire() as conn:
+            await conn.execute(sql, *args)
+
+    async def _execute_many(self, sql: str, args_list: list):
+        """Execute a statement for each row in args_list inside a transaction."""
+        async with self._pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.executemany(sql, args_list)
+
+    async def _fetchval(self, sql: str, *args):
+        """Fetch a single scalar value."""
+        async with self._pool.acquire() as conn:
+            return await conn.fetchval(sql, *args)
+
+    async def _fetchrow(self, sql: str, *args):
+        """Fetch a single row."""
+        async with self._pool.acquire() as conn:
+            return await conn.fetchrow(sql, *args)
+
+    async def _fetch(self, sql: str, *args):
+        """Fetch all rows."""
+        async with self._pool.acquire() as conn:
+            return await conn.fetch(sql, *args)
+
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
 
     async def start(self):
         """Start the writer task."""
@@ -167,11 +214,12 @@ class ScribeWriter:
             _LOGGER.debug("Starting ScribeWriter...")
             self._running = True
             
-            # Create Engine
-            if not self._engine:
+            # Create connection pool
+            if not self._pool:
                 try:
-                    _LOGGER.debug(f"Creating AsyncEngine for {self.db_url.split('@')[-1]} (attempt 1)")
+                    _LOGGER.debug(f"Creating asyncpg pool for {self.db_url.split('@')[-1]}")
                     
+                    ssl_arg = False  # default: no SSL
                     if self.use_ssl:
                         # Resolve paths relative to HA config dir if they are relative
                         def resolve_path(path_str):
@@ -187,33 +235,26 @@ class ScribeWriter:
                         key_file = resolve_path(self.ssl_key_file)
 
                         # Create SSL context in executor to avoid blocking the event loop
-                        # We pass the resolved paths
                         _LOGGER.debug("SSL enabled, creating SSL context in executor...")
-                        ssl_context = await self.hass.async_add_executor_job(
+                        ssl_arg = await self.hass.async_add_executor_job(
                             _create_ssl_context, 
                             root_cert, 
                             cert_file, 
                             key_file
                         )
-                        connect_args = {"ssl": ssl_context}
-                    else:
-                        # Disable SSL explicitly to prevent asyncpg from auto-detecting
-                        # certificates and doing blocking I/O
-                        _LOGGER.debug("SSL disabled (default)")
-                        connect_args = {"ssl": False}
-                    
-                    # Create engine
-                    self._engine = create_async_engine(
-                        self.db_url,
-                        pool_size=10,
-                        max_overflow=20,
-                        echo=False,
-                        connect_args=connect_args
+
+                    self._pool = await asyncpg.create_pool(
+                        dsn=self.db_url,
+                        min_size=1,
+                        max_size=10,
+                        ssl=ssl_arg,
                     )
-                    
-                    _LOGGER.debug("AsyncEngine created successfully")
+                    # Expose pool as _engine so migration.py can use it
+                    self._engine = self._pool
+
+                    _LOGGER.debug("asyncpg pool created successfully")
                 except Exception as e:
-                    _LOGGER.error(f"Failed to create engine: {e}", exc_info=True)
+                    _LOGGER.error(f"Failed to create pool: {e}", exc_info=True)
                     return
 
             # Perform initialization in background to avoid blocking bootstrap
@@ -239,14 +280,11 @@ class ScribeWriter:
         """Fetch initial row counts from database."""
         _LOGGER.debug("Fetching initial row counts...")
         try:
-            async with self._engine.connect() as conn:
-                if self.record_states:
-                    res = await conn.execute(text(f"SELECT count(*) FROM {self.table_name_states}"))
-                    self._states_written = res.scalar() or 0
-                
-                if self.record_events:
-                    res = await conn.execute(text(f"SELECT count(*) FROM {self.table_name_events}"))
-                    self._events_written = res.scalar() or 0
+            if self.record_states:
+                self._states_written = await self._fetchval(f"SELECT count(*) FROM {self.table_name_states}") or 0
+            
+            if self.record_events:
+                self._events_written = await self._fetchval(f"SELECT count(*) FROM {self.table_name_events}") or 0
                     
             _LOGGER.debug(f"Initial counts: states={self._states_written}, events={self._events_written}")
         except Exception as e:
@@ -259,33 +297,31 @@ class ScribeWriter:
             return
 
         try:
-            async with self._engine.begin() as conn:
-                # Insert missing entities
-                # We use ON CONFLICT DO NOTHING to handle race conditions safely
-                await conn.execute(
-                    text("INSERT INTO entities (entity_id) VALUES (:entity_id) ON CONFLICT (entity_id) DO NOTHING"),
-                    [{"entity_id": eid} for eid in missing]
-                )
-                
-                # Fetch IDs for the missing ones
-                result = await conn.execute(
-                    text("SELECT entity_id, id FROM entities WHERE entity_id = ANY(:eids)"),
-                    {"eids": missing}
-                )
-                
-                count = 0
-                for row in result:
-                    self._entity_id_map[row.entity_id] = row.id
-                    self._metadata_id_map[row.id] = row.entity_id
-                    count += 1
-                
-                if count > 0:
-                    _LOGGER.debug(f"Registered {count} new entities")
+            async with self._pool.acquire() as conn:
+                async with conn.transaction():
+                    # Insert missing entities
+                    await conn.executemany(
+                        "INSERT INTO entities (entity_id) VALUES ($1) ON CONFLICT (entity_id) DO NOTHING",
+                        [(eid,) for eid in missing]
+                    )
+                    
+                    # Fetch IDs for the missing ones
+                    rows = await conn.fetch(
+                        "SELECT entity_id, id FROM entities WHERE entity_id = ANY($1)",
+                        missing
+                    )
+                    
+                    count = 0
+                    for row in rows:
+                        self._entity_id_map[row['entity_id']] = row['id']
+                        self._metadata_id_map[row['id']] = row['entity_id']
+                        count += 1
+                    
+                    if count > 0:
+                        _LOGGER.debug(f"Registered {count} new entities")
                     
         except Exception as e:
             _LOGGER.error(f"Error registering new entities: {e}")
-
-
 
     async def stop(self):
         """Stop the writer task."""
@@ -306,26 +342,28 @@ class ScribeWriter:
         except Exception as e:
             _LOGGER.error(f"Error during final flush: {e}", exc_info=True)
         
-        if self._engine:
+        if self._pool:
             try:
-                await self._engine.dispose()
-                _LOGGER.debug("Engine disposed")
+                await self._pool.close()
+                self._pool = None
+                self._engine = None
+                _LOGGER.debug("Pool closed")
             except Exception as e:
-                 _LOGGER.error(f"Error disposing engine: {e}", exc_info=True)
+                 _LOGGER.error(f"Error closing pool: {e}", exc_info=True)
 
     async def _run(self):
         """Main loop."""
         _LOGGER.debug("ScribeWriter loop started")
         
         # 1. Register listener to launch migration AFTER HA finishes bootstrap
-        # We do this here as well to be safe, but only if not already done
         async def _launch_migration(event):
             """Launch migration after HA is fully started."""
             _LOGGER.debug("HA fully started, launching background migration task")
+            from . import migration  # lazy import to avoid circular dependency
             self.hass.async_create_task(
                 migration.migrate_database(
                     self.hass, 
-                    self._engine, 
+                    self._pool,   # pass pool (migration.py uses it as 'engine')
                     self.record_states, 
                     self.enable_table_entities,
                     self.chunk_interval,
@@ -370,55 +408,59 @@ class ScribeWriter:
         except Exception as e:
             _LOGGER.error(f"Error enqueuing data: {e}", exc_info=True)
 
+    # ------------------------------------------------------------------
+    # Database initialisation
+    # ------------------------------------------------------------------
+
     async def init_db(self):
         """Initialize database tables."""
         _LOGGER.debug("Initializing database...")
-        if not self._engine:
+        if not self._pool:
             return
 
         try:
             # 1. Check and Perform Migration (own transaction)
             if self.record_states:
-                async with self._engine.begin() as conn:
-                    await self._check_and_migrate_states(conn)
+                async with self._pool.acquire() as conn:
+                    async with conn.transaction():
+                        await self._check_and_migrate_states(conn)
             
             # 2. Create tables (own transaction)
-            async with self._engine.begin() as conn:
-                # Initialize entities FIRST (states view depends on it)
-                if self.enable_table_entities:
-                     # This will also evolve the schema if needed
-                    await self._init_entities_table(conn)
-                
-                # Always init users table
-                if self.enable_table_users:
-                    await self._init_users_table(conn)
-                
-                if self.enable_table_areas:
-                    await self._init_areas_table(conn)
-                if self.enable_table_devices:
-                    await self._init_devices_table(conn)
-                if self.enable_table_integrations:
-                    await self._init_integrations_table(conn)
-                
-                # Initialize states and events AFTER entities table exists
-                if self.record_states:
-                    await self._init_states_table(conn)
-                if self.record_events:
-                    await self._init_events_table(conn)
+            async with self._pool.acquire() as conn:
+                async with conn.transaction():
+                    # Initialize entities FIRST (states view depends on it)
+                    if self.enable_table_entities:
+                        await self._init_entities_table(conn)
+                    
+                    # Always init users table
+                    if self.enable_table_users:
+                        await self._init_users_table(conn)
+                    
+                    if self.enable_table_areas:
+                        await self._init_areas_table(conn)
+                    if self.enable_table_devices:
+                        await self._init_devices_table(conn)
+                    if self.enable_table_integrations:
+                        await self._init_integrations_table(conn)
+                    
+                    # Initialize states and events AFTER entities table exists
+                    if self.record_states:
+                        await self._init_states_table(conn)
+                    if self.record_events:
+                        await self._init_events_table(conn)
 
             # Hypertable & Compression (each operation in its own transaction)
             if self.record_states:
                 try:
-                     # Hypertable on states_raw using metadata_id
-                     await self._init_hypertable("states_raw", "metadata_id")
+                    await self._init_hypertable("states_raw", "metadata_id")
                 except Exception as e:
-                     _LOGGER.error(f"Failed to init hypertable/compression for states: {e}", exc_info=True)
+                    _LOGGER.error(f"Failed to init hypertable/compression for states: {e}", exc_info=True)
             
             if self.record_events:
                 try:
                     await self._init_hypertable(self.table_name_events, "event_type")
                 except Exception as e:
-                     _LOGGER.error(f"Failed to init hypertable/compression for events: {e}", exc_info=True)
+                    _LOGGER.error(f"Failed to init hypertable/compression for events: {e}", exc_info=True)
                     
             _LOGGER.info("Database initialized successfully")
             self._connected = True
@@ -430,37 +472,28 @@ class ScribeWriter:
     async def _check_and_migrate_states(self, conn):
         """Check if migration from 'states' (legacy) to 'states_raw' is needed."""
         try:
-            # Check if 'states' table exists
-            res = await conn.execute(text(
+            states_exists = await conn.fetchval(
                 "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'states' AND table_type = 'BASE TABLE')"
-            ))
-            states_exists = res.scalar()
+            )
             
-            # Check if 'states_raw' exists
-            res = await conn.execute(text(
+            states_raw_exists = await conn.fetchval(
                 "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'states_raw')"
-            ))
-            states_raw_exists = res.scalar()
+            )
             
             if states_exists and not states_raw_exists:
                 _LOGGER.warning("Detected legacy 'states' table. Starting migration to 'states_raw'...")
                 _LOGGER.info("1/2 Renaming 'states' to 'states_legacy'. Data migration will happen in background.")
-                
-                # 1. Rename old table
-                # This is fast. The rest (creating new tables) happens in subsequent init_db steps.
-                # Data migration (INSERT SELECT) is handled by migration.migrate_database background task.
-                await conn.execute(text("ALTER TABLE states RENAME TO states_legacy"))
+                await conn.execute("ALTER TABLE states RENAME TO states_legacy")
                 
         except Exception as e:
             _LOGGER.error(f"Migration check failed: {e}")
-            # We don't raise here to allow startup to continue
 
     async def _init_states_table(self, conn):
         """Initialize states_raw table and View."""
         
         # 1. Create states_raw
         _LOGGER.debug("Creating table states_raw if not exists")
-        await conn.execute(text("""
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS states_raw (
                 time TIMESTAMPTZ NOT NULL,
                 metadata_id INTEGER NOT NULL,
@@ -468,15 +501,15 @@ class ScribeWriter:
                 value DOUBLE PRECISION,
                 attributes JSONB
             );
-        """))
-        await conn.execute(text("""
+        """)
+        await conn.execute("""
             CREATE INDEX IF NOT EXISTS states_raw_meta_time_idx 
             ON states_raw (metadata_id, time DESC);
-        """))
+        """)
         
         # 2. Create View 'states' for backward compatibility
         _LOGGER.debug("Creating/Replacing view 'states'")
-        await conn.execute(text(f"""
+        await conn.execute(f"""
             CREATE OR REPLACE VIEW {self.table_name_states} AS
             SELECT
                 s.time,
@@ -486,12 +519,12 @@ class ScribeWriter:
                 s.attributes
             FROM states_raw s
             JOIN entities e ON s.metadata_id = e.id;
-        """))
+        """)
 
     async def _init_events_table(self, conn):
         """Initialize events table."""
         _LOGGER.debug(f"Creating table {self.table_name_events} if not exists")
-        await conn.execute(text(f"""
+        await conn.execute(f"""
             CREATE TABLE IF NOT EXISTS {self.table_name_events} (
                 time TIMESTAMPTZ NOT NULL,
                 event_type TEXT NOT NULL,
@@ -501,16 +534,16 @@ class ScribeWriter:
                 context_user_id TEXT,
                 context_parent_id TEXT
             );
-        """))
-        await conn.execute(text(f"""
+        """)
+        await conn.execute(f"""
             CREATE INDEX IF NOT EXISTS {self.table_name_events}_type_time_idx 
             ON {self.table_name_events} (event_type, time DESC);
-        """))
+        """)
 
     async def _init_users_table(self, conn):
         """Initialize users table."""
         _LOGGER.debug("Creating table users if not exists")
-        await conn.execute(text("""
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id TEXT PRIMARY KEY,
                 name TEXT,
@@ -519,11 +552,11 @@ class ScribeWriter:
                 system_generated BOOLEAN,
                 group_ids JSONB
             );
-        """))
+        """)
 
     async def write_users(self, users: list[dict]):
         """Write users to the database (upsert)."""
-        if not self._engine or not users:
+        if not self._pool or not users:
             return
 
         _LOGGER.debug(f"Writing {len(users)} users to database...")
@@ -534,28 +567,32 @@ class ScribeWriter:
                 for field in text_fields:
                     if user.get(field) is not None:
                         user[field] = str(user[field]).replace("\0", "")
+                if user.get("group_ids"):
+                    user["group_ids"] = self._sanitize_obj(user["group_ids"])
 
-            async with self._engine.begin() as conn:
-                # Upsert users
-                # We use ON CONFLICT DO UPDATE to update existing users
-                stmt = text("""
-                    INSERT INTO users (user_id, name, is_owner, is_active, system_generated, group_ids)
-                    VALUES (:user_id, :name, :is_owner, :is_active, :system_generated, :group_ids)
-                    ON CONFLICT (user_id) DO UPDATE SET
-                        name = EXCLUDED.name,
-                        is_owner = EXCLUDED.is_owner,
-                        is_active = EXCLUDED.is_active,
-                        system_generated = EXCLUDED.system_generated,
-                        group_ids = EXCLUDED.group_ids;
-                """)
-                
-                # Sanitize group_ids just in case
-                for user in users:
-                    if user.get("group_ids"):
-                        user["group_ids"] = self._sanitize_obj(user["group_ids"])
+            rows = [
+                (
+                    u.get("user_id"),
+                    u.get("name"),
+                    u.get("is_owner"),
+                    u.get("is_active"),
+                    u.get("system_generated"),
+                    json.dumps(u["group_ids"]) if u.get("group_ids") else None,
+                )
+                for u in users
+            ]
 
-                await conn.execute(stmt, users)
-                _LOGGER.debug("Users written successfully")
+            await self._execute_many("""
+                INSERT INTO users (user_id, name, is_owner, is_active, system_generated, group_ids)
+                VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+                ON CONFLICT (user_id) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    is_owner = EXCLUDED.is_owner,
+                    is_active = EXCLUDED.is_active,
+                    system_generated = EXCLUDED.system_generated,
+                    group_ids = EXCLUDED.group_ids;
+            """, rows)
+            _LOGGER.debug("Users written successfully")
         except Exception as e:
             _LOGGER.error(f"Error writing users: {e}", exc_info=True)
 
@@ -564,10 +601,10 @@ class ScribeWriter:
         _LOGGER.debug("Creating table entities if not exists")
         
         # Ensure schema is up to date (migrate from old text-PK schema if needed)
+        from . import migration  # lazy import to avoid circular dependency
         await migration.migrate_entities_table(conn)
         
-        # 1. Create table if not exists (with ID and all constraints)
-        await conn.execute(text("""
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS entities (
                 id SERIAL PRIMARY KEY,
                 entity_id TEXT UNIQUE,
@@ -579,103 +616,107 @@ class ScribeWriter:
                 area_id TEXT,
                 capabilities JSONB
             );
-        """))
+        """)
         
         # Index for JOIN performance with states_raw
-        await conn.execute(text("CREATE INDEX IF NOT EXISTS entities_entity_id_idx ON entities (entity_id)"))
+        await conn.execute("CREATE INDEX IF NOT EXISTS entities_entity_id_idx ON entities (entity_id)")
         
         # Populate Cache on startup
         try:
-             result = await conn.execute(text("SELECT entity_id, id FROM entities"))
-             rows = result.fetchall()
-             for row in rows:
-                 self._entity_id_map[row[0]] = row[1]
-                 self._metadata_id_map[row[1]] = row[0]
-             _LOGGER.debug(f"Loaded {len(self._entity_id_map)} entities into ID cache")
+            rows = await conn.fetch("SELECT entity_id, id FROM entities")
+            for row in rows:
+                self._entity_id_map[row['entity_id']] = row['id']
+                self._metadata_id_map[row['id']] = row['entity_id']
+            _LOGGER.debug(f"Loaded {len(self._entity_id_map)} entities into ID cache")
         except Exception as e:
-             _LOGGER.warning(f"Failed to populate entity cache: {e}")
+            _LOGGER.warning(f"Failed to populate entity cache: {e}")
 
     async def write_entities(self, entities: list[dict]):
         """Write entities to the database (upsert)."""
-        if not self._engine or not entities:
+        if not self._pool or not entities:
             return
 
         _LOGGER.debug(f"Writing {len(entities)} entities to database...")
         try:
-            # Sanitize text fields (ensure string, remove null bytes)
             text_fields = ["entity_id", "unique_id", "platform", "domain", "name", "device_id", "area_id"]
             for entity in entities:
                 for field in text_fields:
                     if entity.get(field) is not None:
                         entity[field] = str(entity[field]).replace("\0", "")
+                if entity.get("capabilities"):
+                    entity["capabilities"] = self._sanitize_obj(entity["capabilities"])
 
-            async with self._engine.begin() as conn:
-                # Upsert entities
-                stmt = text("""
-                    INSERT INTO entities (entity_id, unique_id, platform, domain, name, device_id, area_id, capabilities)
-                    VALUES (:entity_id, :unique_id, :platform, :domain, :name, :device_id, :area_id, :capabilities)
-                    ON CONFLICT (entity_id) DO UPDATE SET
-                        unique_id = EXCLUDED.unique_id,
-                        platform = EXCLUDED.platform,
-                        domain = EXCLUDED.domain,
-                        name = EXCLUDED.name,
-                        device_id = EXCLUDED.device_id,
-                        area_id = EXCLUDED.area_id,
-                        capabilities = EXCLUDED.capabilities;
-                """)
-                
-                # Sanitize capabilities to handle Infinity/NaN
-                for entity in entities:
-                    if entity.get("capabilities"):
-                        entity["capabilities"] = self._sanitize_obj(entity["capabilities"])
-                        
-                await conn.execute(stmt, entities)
-                _LOGGER.debug("Entities written successfully")
+            rows = [
+                (
+                    e.get("entity_id"),
+                    e.get("unique_id"),
+                    e.get("platform"),
+                    e.get("domain"),
+                    e.get("name"),
+                    e.get("device_id"),
+                    e.get("area_id"),
+                    json.dumps(e["capabilities"]) if e.get("capabilities") else None,
+                )
+                for e in entities
+            ]
+
+            await self._execute_many("""
+                INSERT INTO entities (entity_id, unique_id, platform, domain, name, device_id, area_id, capabilities)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+                ON CONFLICT (entity_id) DO UPDATE SET
+                    unique_id = EXCLUDED.unique_id,
+                    platform = EXCLUDED.platform,
+                    domain = EXCLUDED.domain,
+                    name = EXCLUDED.name,
+                    device_id = EXCLUDED.device_id,
+                    area_id = EXCLUDED.area_id,
+                    capabilities = EXCLUDED.capabilities;
+            """, rows)
+            _LOGGER.debug("Entities written successfully")
         except Exception as e:
             _LOGGER.error(f"Error writing entities: {e}", exc_info=True)
 
     async def _init_areas_table(self, conn):
         """Initialize areas table."""
         _LOGGER.debug("Creating table areas if not exists")
-        await conn.execute(text("""
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS areas (
                 area_id TEXT PRIMARY KEY,
                 name TEXT,
                 picture TEXT
             );
-        """))
+        """)
 
     async def write_areas(self, areas: list[dict]):
         """Write areas to the database (upsert)."""
-        if not self._engine or not areas:
+        if not self._pool or not areas:
             return
 
         _LOGGER.debug(f"Writing {len(areas)} areas to database...")
         try:
-            # Sanitize text fields (ensure string, remove null bytes)
             text_fields = ["area_id", "name", "picture"]
             for area in areas:
                 for field in text_fields:
                     if area.get(field) is not None:
                         area[field] = str(area[field]).replace("\0", "")
 
-            async with self._engine.begin() as conn:
-                stmt = text("""
-                    INSERT INTO areas (area_id, name, picture)
-                    VALUES (:area_id, :name, :picture)
-                    ON CONFLICT (area_id) DO UPDATE SET
-                        name = EXCLUDED.name,
-                        picture = EXCLUDED.picture;
-                """)
-                await conn.execute(stmt, areas)
-                _LOGGER.debug("Areas written successfully")
+            rows = [(a.get("area_id"), a.get("name"), a.get("picture")) for a in areas]
+
+            await self._execute_many("""
+                INSERT INTO areas (area_id, name, picture)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (area_id) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    picture = EXCLUDED.picture;
+            """, rows)
+            _LOGGER.debug("Areas written successfully")
         except Exception as e:
             _LOGGER.error(f"Error writing areas: {e}", exc_info=True)
 
     async def _init_devices_table(self, conn):
         """Initialize devices table."""
         _LOGGER.debug("Creating table devices if not exists")
-        await conn.execute(text("""
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS devices (
                 device_id TEXT PRIMARY KEY,
                 name TEXT,
@@ -686,45 +727,56 @@ class ScribeWriter:
                 area_id TEXT,
                 primary_config_entry TEXT
             );
-        """))
+        """)
 
     async def write_devices(self, devices: list[dict]):
         """Write devices to the database (upsert)."""
-        if not self._engine or not devices:
+        if not self._pool or not devices:
             return
 
         _LOGGER.debug(f"Writing {len(devices)} devices to database...")
         
         try:
-            # Sanitize text fields (ensure string, remove null bytes)
             text_fields = ["device_id", "name", "name_by_user", "model", "manufacturer", "sw_version", "area_id", "primary_config_entry"]
             for device in devices:
                 for field in text_fields:
                     if device.get(field) is not None:
                         device[field] = str(device[field]).replace("\0", "")
 
-            async with self._engine.begin() as conn:
-                stmt = text("""
-                    INSERT INTO devices (device_id, name, name_by_user, model, manufacturer, sw_version, area_id, primary_config_entry)
-                    VALUES (:device_id, :name, :name_by_user, :model, :manufacturer, :sw_version, :area_id, :primary_config_entry)
-                    ON CONFLICT (device_id) DO UPDATE SET
-                        name = EXCLUDED.name,
-                        name_by_user = EXCLUDED.name_by_user,
-                        model = EXCLUDED.model,
-                        manufacturer = EXCLUDED.manufacturer,
-                        sw_version = EXCLUDED.sw_version,
-                        area_id = EXCLUDED.area_id,
-                        primary_config_entry = EXCLUDED.primary_config_entry;
-                """)
-                await conn.execute(stmt, devices)
-                _LOGGER.debug("Devices written successfully")
+            rows = [
+                (
+                    d.get("device_id"),
+                    d.get("name"),
+                    d.get("name_by_user"),
+                    d.get("model"),
+                    d.get("manufacturer"),
+                    d.get("sw_version"),
+                    d.get("area_id"),
+                    d.get("primary_config_entry"),
+                )
+                for d in devices
+            ]
+
+            await self._execute_many("""
+                INSERT INTO devices (device_id, name, name_by_user, model, manufacturer, sw_version, area_id, primary_config_entry)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                ON CONFLICT (device_id) DO UPDATE SET
+                    name = EXCLUDED.name,
+                    name_by_user = EXCLUDED.name_by_user,
+                    model = EXCLUDED.model,
+                    manufacturer = EXCLUDED.manufacturer,
+                    sw_version = EXCLUDED.sw_version,
+                    area_id = EXCLUDED.area_id,
+                    primary_config_entry = EXCLUDED.primary_config_entry;
+            """, rows)
+            _LOGGER.debug("Devices written successfully")
         except Exception as e:
             _LOGGER.error(f"Error writing devices: {e}", exc_info=True)
 
     async def _init_integrations_table(self, conn):
         """Initialize integrations table."""
         _LOGGER.debug("Creating table integrations if not exists")
-        await conn.execute(text("""
+        await conn.execute("""
             CREATE TABLE IF NOT EXISTS integrations (
                 entry_id TEXT PRIMARY KEY,
                 domain TEXT,
@@ -732,34 +784,42 @@ class ScribeWriter:
                 state TEXT,
                 source TEXT
             );
-        """))
+        """)
 
     async def write_integrations(self, integrations: list[dict]):
         """Write integrations to the database (upsert)."""
-        if not self._engine or not integrations:
+        if not self._pool or not integrations:
             return
 
         _LOGGER.debug(f"Writing {len(integrations)} integrations to database...")
         try:
-            # Sanitize text fields (ensure string, remove null bytes)
             text_fields = ["entry_id", "domain", "title", "state", "source"]
             for integration in integrations:
                 for field in text_fields:
                     if integration.get(field) is not None:
                         integration[field] = str(integration[field]).replace("\0", "")
 
-            async with self._engine.begin() as conn:
-                stmt = text("""
-                    INSERT INTO integrations (entry_id, domain, title, state, source)
-                    VALUES (:entry_id, :domain, :title, :state, :source)
-                    ON CONFLICT (entry_id) DO UPDATE SET
-                        domain = EXCLUDED.domain,
-                        title = EXCLUDED.title,
-                        state = EXCLUDED.state,
-                        source = EXCLUDED.source;
-                """)
-                await conn.execute(stmt, integrations)
-                _LOGGER.debug("Integrations written successfully")
+            rows = [
+                (
+                    i.get("entry_id"),
+                    i.get("domain"),
+                    i.get("title"),
+                    i.get("state"),
+                    i.get("source"),
+                )
+                for i in integrations
+            ]
+
+            await self._execute_many("""
+                INSERT INTO integrations (entry_id, domain, title, state, source)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (entry_id) DO UPDATE SET
+                    domain = EXCLUDED.domain,
+                    title = EXCLUDED.title,
+                    state = EXCLUDED.state,
+                    source = EXCLUDED.source;
+            """, rows)
+            _LOGGER.debug("Integrations written successfully")
         except Exception as e:
             _LOGGER.error(f"Error writing integrations: {e}", exc_info=True)
 
@@ -773,32 +833,40 @@ class ScribeWriter:
         # Convert to hypertable
         try:
             _LOGGER.debug(f"Converting {table_name} to hypertable...")
-            async with self._engine.begin() as op_conn:
-                await op_conn.execute(text(f"SELECT create_hypertable('{table_name}', 'time', chunk_time_interval => INTERVAL '{self.chunk_interval}', if_not_exists => TRUE);"))
+            async with self._pool.acquire() as conn:
+                await conn.execute(
+                    f"SELECT create_hypertable('{table_name}', 'time', chunk_time_interval => INTERVAL '{self.chunk_interval}', if_not_exists => TRUE);"
+                )
         except Exception as e:
             _LOGGER.warning(f"Hypertable creation failed (might not be TimescaleDB or already exists): {e}")
 
         # Enable compression
         try:
             _LOGGER.debug(f"Enabling compression for {table_name}...")
-            async with self._engine.begin() as op_conn:
-                await op_conn.execute(text(f"""
+            async with self._pool.acquire() as conn:
+                await conn.execute(f"""
                     ALTER TABLE {table_name} SET (
                         timescaledb.compress,
                         timescaledb.compress_segmentby = '{segment_by}',
                         timescaledb.compress_orderby = 'time DESC'
                     );
-                """))
+                """)
         except Exception as e:
-             _LOGGER.debug(f"Compression enable failed: {e}")
+            _LOGGER.debug(f"Compression enable failed: {e}")
 
         # Add compression policy
         try:
             _LOGGER.debug(f"Adding compression policy for {table_name}...")
-            async with self._engine.begin() as op_conn:
-                await op_conn.execute(text(f"SELECT add_compression_policy('{table_name}', INTERVAL '{self.compress_after}', if_not_exists => TRUE);"))
+            async with self._pool.acquire() as conn:
+                await conn.execute(
+                    f"SELECT add_compression_policy('{table_name}', INTERVAL '{self.compress_after}', if_not_exists => TRUE);"
+                )
         except Exception as e:
             _LOGGER.debug(f"Compression policy failed: {e}")
+
+    # ------------------------------------------------------------------
+    # Sanitization
+    # ------------------------------------------------------------------
 
     def _sanitize_obj(self, obj: Any, depth: int = 0) -> Any:
         try:
@@ -824,6 +892,10 @@ class ScribeWriter:
         except Exception as e:
             _LOGGER.error(f"Error serializing obj: {e}", exc_info=True)
             return obj
+
+    # ------------------------------------------------------------------
+    # Flush / write batch
+    # ------------------------------------------------------------------
 
     async def _flush(self):
         """Flush the queue to the database."""
@@ -855,7 +927,6 @@ class ScribeWriter:
                     
                     for x in sanitized_batch:
                         if x['type'] == 'state':
-                            # Ensure strict typing for text fields
                             for field in ['entity_id', 'state']:
                                 if x.get(field) is not None:
                                     x[field] = str(x[field]).replace('\0', '')
@@ -864,7 +935,6 @@ class ScribeWriter:
                                 x['attributes'] = json.dumps(x['attributes'], default=str)
                             states_res.append(x)
                         elif x['type'] == 'event':
-                            # Ensure strict typing for text fields
                             for field in ['event_type', 'origin', 'context_id', 'context_user_id', 'context_parent_id']:
                                 if x.get(field) is not None:
                                     x[field] = str(x[field]).replace('\0', '')
@@ -879,17 +949,14 @@ class ScribeWriter:
 
                 # Resolve Metadata IDs for states
                 if states_data:
-                    # Collect unique entity IDs
                     eids = set()
                     for s in states_data:
                         if 'entity_id' in s:
                             eids.add(s['entity_id'])
                     
-                    # Ensure they exist in DB/Cache
                     if eids:
                         await self._ensure_metadata_ids(list(eids))
                     
-                    # Map to metadata_id
                     final_states_data = []
                     for s in states_data:
                         eid = s.pop('entity_id', None)
@@ -897,43 +964,40 @@ class ScribeWriter:
                             s['metadata_id'] = self._entity_id_map[eid]
                             final_states_data.append(s)
                         else:
-                             # Should not happen after ensure_metadata_ids unless DB error
                             _LOGGER.warning(f"Skipping state for unknown entity_id: {eid}")
                     
                     states_data = final_states_data
 
-                async with self._engine.begin() as conn:
-                    if states_data:
-                        await conn.execute(
-                            text("INSERT INTO states_raw (time, metadata_id, state, value, attributes) VALUES (:time, :metadata_id, :state, :value, :attributes)"),
-                            states_data
-                        )
-                    if events_data:
-                        await conn.execute(
-                            text(f"INSERT INTO {self.table_name_events} (time, event_type, event_data, origin, context_id, context_user_id, context_parent_id) VALUES (:time, :event_type, :event_data, :origin, :context_id, :context_user_id, :context_parent_id)"),
-                            events_data
-                        )
+                async with self._pool.acquire() as conn:
+                    async with conn.transaction():
+                        if states_data:
+                            await conn.executemany(
+                                "INSERT INTO states_raw (time, metadata_id, state, value, attributes) VALUES ($1, $2, $3, $4, $5::jsonb)",
+                                [(s['time'], s['metadata_id'], s.get('state'), s.get('value'), s.get('attributes')) for s in states_data]
+                            )
+                        if events_data:
+                            await conn.executemany(
+                                f"INSERT INTO {self.table_name_events} (time, event_type, event_data, origin, context_id, context_user_id, context_parent_id) VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7)",
+                                [(e['time'], e['event_type'], e.get('event_data'), e.get('origin'), e.get('context_id'), e.get('context_user_id'), e.get('context_parent_id')) for e in events_data]
+                            )
                 
                 duration = time.time() - start_time
                 self._states_written += len(states_data)
                 self._events_written += len(events_data)
                 
-                # Update history for rates
                 self._states_history.append((time.time(), len(states_data)))
                 self._events_history.append((time.time(), len(events_data)))
                 
                 self._last_write_duration = duration
                 
                 if not self._connected:
-                     _LOGGER.info(f"Database connection restored. Flushed {len(states_data)} states and {len(events_data)} events.")
+                    _LOGGER.info(f"Database connection restored. Flushed {len(states_data)} states and {len(events_data)} events.")
 
                 self._connected = True
                 self._last_error = None
 
-            except SQLAlchemyError as e:
-                # simplify log message for DB errors
-                msg = str(e.orig) if hasattr(e, "orig") else str(e)
-                # If msg is still too long/ugly, just truncating or picking the first line
+            except asyncpg.PostgresError as e:
+                msg = str(e)
                 if "\n" in msg:
                     msg = msg.split("\n")[0]
                 
@@ -952,63 +1016,42 @@ class ScribeWriter:
                 
                 if self.buffer_on_failure:
                     _LOGGER.warning(f"Buffering {len(batch)} items due to failure. Current queue size: {len(self._queue)}")
-                    # Prepend back to queue
-                    # We want to keep [OldBatch] + [NewQueue], but capped at max_queue_size.
-                    # Since we want to drop OLDEST items if full, we want the TAIL of this combined list.
-                    # deque(..., maxlen=N) keeps the tail (newest items).
-                    # So we reconstruct the deque with the combined list.
                     self._queue = deque(batch + list(self._queue), maxlen=self.max_queue_size)
                     
-                    # Calculate dropped
-                    # current_len = len(self._queue)
-                    # total_len = len(batch) + len(self._queue) - len(batch) # wait, this is just len(batch) + old_len
-                    # Actually, we can't easily know how many were dropped by deque without checking lengths before/after
-                    # But we know we added len(batch).
-                    # If we were full, we dropped some.
-                    
-                    # Let's just log the current state
                     if len(self._queue) == self.max_queue_size:
-                         _LOGGER.warning(f"Buffer full! Queue size: {len(self._queue)}")
+                        _LOGGER.warning(f"Buffer full! Queue size: {len(self._queue)}")
                 else:
                     self._dropped_events += len(batch)
                     _LOGGER.warning(f"Dropped {len(batch)} items (buffering disabled)")
         except Exception as e:
             _LOGGER.error(f"Critical error in _flush: {e}", exc_info=True)
 
-
-
+    # ------------------------------------------------------------------
+    # Entity rename
+    # ------------------------------------------------------------------
 
     async def rename_entity(self, old_entity_id: str, new_entity_id: str):
         """Rename an entity in the database (Metadata only).
         
         Updates the entity_id in 'entities' table.
         The 'states_raw' table uses metadata_id, so no data migration of history is needed!
-        This works instantly even with compressed chunks.
         """
-        if not self._engine:
+        if not self._pool:
             return
 
         _LOGGER.info(f"Renaming entity {old_entity_id} to {new_entity_id}")
         
         try:
-            async with self._engine.begin() as conn:
-                # 1. Update entities table
-                # We check if new_entity_id already exists to avoid Unique Violation
-                # If it exists, it's a merge scenario which is complex, we just warn.
-                
-                # Simple case: Rename
-                try:
-                    await conn.execute(
-                        text("UPDATE entities SET entity_id = :new_id WHERE entity_id = :old_id"),
-                        {"new_id": new_entity_id, "old_id": old_entity_id}
-                    )
-                except SQLAlchemyError as e:
-                     # Check for unique violation
-                    msg = str(e)
-                    if "unique constraint" in msg.lower():
+            async with self._pool.acquire() as conn:
+                async with conn.transaction():
+                    try:
+                        await conn.execute(
+                            "UPDATE entities SET entity_id = $1 WHERE entity_id = $2",
+                            new_entity_id, old_entity_id
+                        )
+                    except asyncpg.UniqueViolationError:
                         _LOGGER.warning(f"Cannot rename {old_entity_id} to {new_entity_id}: Target already exists.")
-                    else:
-                        raise e
+                        return
                 
             # Update cache
             if old_entity_id in self._entity_id_map:
@@ -1021,67 +1064,57 @@ class ScribeWriter:
         except Exception as e:
             _LOGGER.error(f"Failed to rename entity {old_entity_id} to {new_entity_id}: {e}")
 
+    # ------------------------------------------------------------------
+    # Query / stats
+    # ------------------------------------------------------------------
 
     async def query(self, sql: str):
         """Execute a read-only query against the database."""
-        if not self._engine:
+        if not self._pool:
             raise RuntimeError("Database not connected")
 
-        # Security: Enforce Read-Only Transaction
         _LOGGER.debug("Executing query (Read-Only): %s", sql)
         try:
-            async with self._engine.connect() as conn:
-                # set transaction to read only
-                await conn.begin()
-                await conn.execute(text("SET LOCAL TRANSACTION READ ONLY"))
-                
-                try:
-                    result = await conn.execute(text(sql))
-                    # Convert rows to list of dicts
-                    return [dict(row._mapping) for row in result]
-                finally:
-                    await conn.rollback()
+            async with self._pool.acquire() as conn:
+                async with conn.transaction():
+                    await conn.execute("SET LOCAL TRANSACTION READ ONLY")
+                    try:
+                        rows = await conn.fetch(sql)
+                        return [dict(row) for row in rows]
+                    except Exception:
+                        raise
         except Exception as e:
             _LOGGER.error("Error executing query: %s", e)
             raise e
+
     async def get_db_stats(self, stats_type: str = "all"):
         """Fetch database statistics using TimescaleDB chunks view.
         
         Args:
             stats_type: Type of stats to fetch - "chunk", "size", or "all"
-        
-        Uses 4 separate queries:
-        - States chunk stats (counts)
-        - States size stats (bytes)
-        - Events chunk stats (counts)
-        - Events size stats (bytes)
         """
         stats = {}
-        if not self._engine:
+        if not self._pool:
             return stats
         
-        # Prepare tasks for concurrent execution
         tasks = []
         
-        # Helper functions for queries
         async def get_states_chunk_stats():
             try:
-                async with self._engine.connect() as conn:
-                    res = await conn.execute(text("""
-                        SELECT 
-                            COUNT(*) AS total_chunks,
-                            SUM(CASE WHEN is_compressed THEN 1 ELSE 0 END) AS compressed_chunks,
-                            SUM(CASE WHEN NOT is_compressed THEN 1 ELSE 0 END) AS uncompressed_chunks
-                        FROM timescaledb_information.chunks
-                        WHERE hypertable_name = 'states_raw'
-                    """))
-                    row = res.fetchone()
-                    if row:
-                        return {
-                            "states_total_chunks": row[0] or 0,
-                            "states_compressed_chunks": row[1] or 0,
-                            "states_uncompressed_chunks": row[2] or 0
-                        }
+                row = await self._fetchrow("""
+                    SELECT 
+                        COUNT(*) AS total_chunks,
+                        SUM(CASE WHEN is_compressed THEN 1 ELSE 0 END) AS compressed_chunks,
+                        SUM(CASE WHEN NOT is_compressed THEN 1 ELSE 0 END) AS uncompressed_chunks
+                    FROM timescaledb_information.chunks
+                    WHERE hypertable_name = 'states_raw'
+                """)
+                if row:
+                    return {
+                        "states_total_chunks": row['total_chunks'] or 0,
+                        "states_compressed_chunks": row['compressed_chunks'] or 0,
+                        "states_uncompressed_chunks": row['uncompressed_chunks'] or 0
+                    }
             except Exception as e:
                 _LOGGER.debug(f"Failed to get states chunk stats: {e}")
             return {}
@@ -1089,35 +1122,24 @@ class ScribeWriter:
         async def get_states_size_stats():
             total_bytes = 0
             compressed_bytes = 0
+            before_bytes = 0
+            after_bytes = 0
 
             try:
-                # 1. Get Total Size (Compressed + Uncompressed)
-                async with self._engine.connect() as conn:
-                    res_total = await conn.execute(text("SELECT total_bytes FROM hypertable_detailed_size('states_raw')"))
-                    row_total = res_total.fetchone()
-                    total_bytes = (row_total[0] if row_total else 0) or 0
+                total_bytes = await self._fetchval("SELECT total_bytes FROM hypertable_detailed_size('states_raw')") or 0
             except Exception as e:
                 _LOGGER.debug(f"Failed to get states total size: {e}")
             
             try:
-                # 2. Get Compressed Size
-                async with self._engine.connect() as conn:
-                    res_comp = await conn.execute(text("SELECT after_compression_total_bytes FROM hypertable_compression_stats('states_raw')"))
-                    row_comp = res_comp.fetchone()
-                    compressed_bytes = (row_comp[0] if row_comp else 0) or 0
+                compressed_bytes = await self._fetchval("SELECT after_compression_total_bytes FROM hypertable_compression_stats('states_raw')") or 0
             except Exception as e:
                 _LOGGER.debug(f"Failed to get states compressed size: {e}")
 
-            # Get compression stats for the ratio sensors
-            before_bytes = 0
-            after_bytes = 0
             try:
-                async with self._engine.connect() as conn:
-                    res_ratio = await conn.execute(text("SELECT before_compression_total_bytes, after_compression_total_bytes FROM hypertable_compression_stats('states_raw')"))
-                    row_ratio = res_ratio.fetchone()
-                    if row_ratio:
-                        before_bytes = row_ratio[0] or 0
-                        after_bytes = row_ratio[1] or 0
+                row = await self._fetchrow("SELECT before_compression_total_bytes, after_compression_total_bytes FROM hypertable_compression_stats('states_raw')")
+                if row:
+                    before_bytes = row['before_compression_total_bytes'] or 0
+                    after_bytes = row['after_compression_total_bytes'] or 0
             except Exception as e:
                 _LOGGER.debug(f"Failed to get states compression ratio stats: {e}")
 
@@ -1131,22 +1153,20 @@ class ScribeWriter:
 
         async def get_events_chunk_stats():
             try:
-                async with self._engine.connect() as conn:
-                    res = await conn.execute(text(f"""
-                        SELECT 
-                            COUNT(*) AS total_chunks,
-                            SUM(CASE WHEN is_compressed THEN 1 ELSE 0 END) AS compressed_chunks,
-                            SUM(CASE WHEN NOT is_compressed THEN 1 ELSE 0 END) AS uncompressed_chunks
-                        FROM timescaledb_information.chunks
-                        WHERE hypertable_name = '{self.table_name_events}'
-                    """))
-                    row = res.fetchone()
-                    if row:
-                        return {
-                            "events_total_chunks": row[0] or 0,
-                            "events_compressed_chunks": row[1] or 0,
-                            "events_uncompressed_chunks": row[2] or 0
-                        }
+                row = await self._fetchrow(f"""
+                    SELECT 
+                        COUNT(*) AS total_chunks,
+                        SUM(CASE WHEN is_compressed THEN 1 ELSE 0 END) AS compressed_chunks,
+                        SUM(CASE WHEN NOT is_compressed THEN 1 ELSE 0 END) AS uncompressed_chunks
+                    FROM timescaledb_information.chunks
+                    WHERE hypertable_name = '{self.table_name_events}'
+                """)
+                if row:
+                    return {
+                        "events_total_chunks": row['total_chunks'] or 0,
+                        "events_compressed_chunks": row['compressed_chunks'] or 0,
+                        "events_uncompressed_chunks": row['uncompressed_chunks'] or 0
+                    }
             except Exception as e:
                 _LOGGER.debug(f"Failed to get events chunk stats: {e}")
             return {}
@@ -1154,35 +1174,24 @@ class ScribeWriter:
         async def get_events_size_stats():
             total_bytes = 0
             compressed_bytes = 0
+            before_bytes = 0
+            after_bytes = 0
 
             try:
-                # 1. Get Total Size (Compressed + Uncompressed)
-                async with self._engine.connect() as conn:
-                    res_total = await conn.execute(text(f"SELECT total_bytes FROM hypertable_detailed_size('{self.table_name_events}')"))
-                    row_total = res_total.fetchone()
-                    total_bytes = (row_total[0] if row_total else 0) or 0
+                total_bytes = await self._fetchval(f"SELECT total_bytes FROM hypertable_detailed_size('{self.table_name_events}')") or 0
             except Exception as e:
                 _LOGGER.debug(f"Failed to get events total size: {e}")
             
             try:
-                # 2. Get Compressed Size
-                async with self._engine.connect() as conn:
-                    res_comp = await conn.execute(text(f"SELECT after_compression_total_bytes FROM hypertable_compression_stats('{self.table_name_events}')"))
-                    row_comp = res_comp.fetchone()
-                    compressed_bytes = (row_comp[0] if row_comp else 0) or 0
+                compressed_bytes = await self._fetchval(f"SELECT after_compression_total_bytes FROM hypertable_compression_stats('{self.table_name_events}')") or 0
             except Exception as e:
                 _LOGGER.debug(f"Failed to get events compressed size: {e}")
 
-            # Get compression stats for the ratio sensors
-            before_bytes = 0
-            after_bytes = 0
             try:
-                async with self._engine.connect() as conn:
-                    res_ratio = await conn.execute(text(f"SELECT before_compression_total_bytes, after_compression_total_bytes FROM hypertable_compression_stats('{self.table_name_events}')"))
-                    row_ratio = res_ratio.fetchone()
-                    if row_ratio:
-                        before_bytes = row_ratio[0] or 0
-                        after_bytes = row_ratio[1] or 0
+                row = await self._fetchrow(f"SELECT before_compression_total_bytes, after_compression_total_bytes FROM hypertable_compression_stats('{self.table_name_events}')")
+                if row:
+                    before_bytes = row['before_compression_total_bytes'] or 0
+                    after_bytes = row['after_compression_total_bytes'] or 0
             except Exception as e:
                 _LOGGER.debug(f"Failed to get events compression ratio stats: {e}")
 
@@ -1196,34 +1205,28 @@ class ScribeWriter:
 
         async def get_states_compression_stats():
             try:
-                async with self._engine.connect() as conn:
-                    res = await conn.execute(text(f"SELECT * FROM hypertable_compression_stats('{self.table_name_states}')"))
-                    row = res.fetchone()
-                    if row:
-                        return {
-                            "states_before_compression_total_bytes": row.before_compression_total_bytes or 0,
-                            "states_after_compression_total_bytes": row.after_compression_total_bytes or 0
-                        }
+                row = await self._fetchrow(f"SELECT * FROM hypertable_compression_stats('{self.table_name_states}')")
+                if row:
+                    return {
+                        "states_before_compression_total_bytes": row['before_compression_total_bytes'] or 0,
+                        "states_after_compression_total_bytes": row['after_compression_total_bytes'] or 0
+                    }
             except Exception as e:
-                # This might fail if compression is not enabled or table doesn't exist
                 _LOGGER.debug(f"Failed to get states compression stats: {e}")
             return {}
 
         async def get_events_compression_stats():
             try:
-                async with self._engine.connect() as conn:
-                    res = await conn.execute(text(f"SELECT * FROM hypertable_compression_stats('{self.table_name_events}')"))
-                    row = res.fetchone()
-                    if row:
-                        return {
-                            "events_before_compression_total_bytes": row.before_compression_total_bytes or 0,
-                            "events_after_compression_total_bytes": row.after_compression_total_bytes or 0
-                        }
+                row = await self._fetchrow(f"SELECT * FROM hypertable_compression_stats('{self.table_name_events}')")
+                if row:
+                    return {
+                        "events_before_compression_total_bytes": row['before_compression_total_bytes'] or 0,
+                        "events_after_compression_total_bytes": row['after_compression_total_bytes'] or 0
+                    }
             except Exception as e:
                 _LOGGER.debug(f"Failed to get events compression stats: {e}")
             return {}
 
-        # Add tasks based on configuration and requested stats_type
         if self.record_states:
             if stats_type in ("chunk", "all"):
                 tasks.append(get_states_chunk_stats())
@@ -1238,13 +1241,16 @@ class ScribeWriter:
                 tasks.append(get_events_size_stats())
                 tasks.append(get_events_compression_stats())
 
-        # Execute all tasks concurrently
         if tasks:
             results = await asyncio.gather(*tasks)
             for result in results:
                 stats.update(result)
             
         return stats
+
+    # ------------------------------------------------------------------
+    # Properties
+    # ------------------------------------------------------------------
 
     @property
     def running(self):
