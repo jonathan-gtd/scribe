@@ -15,10 +15,10 @@ jobs:
 
           # Stable - Test both PG17 and PG18
           - ha-version: "stable"
-            python-version: "3.13"
+            python-version: "3.14"
             postgres-version: "pg18"
           - ha-version: "stable"
-            python-version: "3.13"
+            python-version: "3.14"
             postgres-version: "pg17"
 
     services:
