@@ -1,3 +1,12 @@
+> [!WARNING]
+> # ⚠️ v3.0.0 Database Schema Migration
+> 
+> **Version 3.0.0 introduces a major database schema optimization (`states_raw` table).**
+> 
+> *The automated background migration ran perfectly on my own production setup without any issues.*
+> **However, it is strongly recommended to perform a database backup before updating.**
+>
+
 # Scribe - High-Performance TimescaleDB Integration for Home Assistant
 
 Scribe is a next-generation component that writes Home Assistant states and events to a TimescaleDB database. 

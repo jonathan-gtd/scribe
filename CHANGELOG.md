@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.0.0] - 2026-03-05
+
+### Changed (Breaking Changes)
+- **Database Schema**: Major database schema migration. The integration now uses a new `states_raw` underlying table with optimized primary and foreign keys for hypertable chunks. Legacy data from `states_legacy` is migrated in the background to prevent Home Assistant startup timeouts. 
+- **Dependencies**: Added explicit requirement for `greenlet>=3.3.2` to support newer Python/Home Assistant versions during async DB operations.
+
 ## [2.12.7] - 2026-01-11
 
 ### Fixed
