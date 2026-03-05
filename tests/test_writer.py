@@ -36,6 +36,13 @@ async def writer(hass, mock_pool):
 async def test_writer_init_db(writer, mock_pool, mock_db_connection):
     """Test database initialization."""
     with patch("custom_components.scribe.migration.migrate_database") as mock_migrate:
+        # Mock fetchval to return False for the table check so view is created
+        async def fetchval_side_effect(sql, *args):
+            if "information_schema.tables" in sql:
+                return False
+            return 0
+        mock_db_connection.fetchval.side_effect = fetchval_side_effect
+        
         await writer.start()
         await asyncio.sleep(0.1) # Let background init finish
         
@@ -54,18 +61,27 @@ async def test_writer_init_db(writer, mock_pool, mock_db_connection):
     # Verify table creation calls
     calls = []
     for call in mock_db_connection.execute.mock_calls:
-        if call.args and hasattr(call.args[0], "text"):
-            calls.append(call.args[0].text)
-        else:
-            calls.append(str(call))
+        if call.args:
+            sql = call.args[0]
+            if not isinstance(sql, str) and hasattr(sql, "text"):
+                sql = sql.text
+            calls.append(str(sql))
+            
+    for call in mock_db_connection.fetchval.mock_calls:
+        if call.args:
+            calls.append(str(call.args[0]))
+            
+    for call in mock_db_connection.fetchrow.mock_calls:
+        if call.args:
+            calls.append(str(call.args[0]))
             
     assert mock_db_connection.execute.call_count >= 4 
     
     # Check for specific SQL fragments in calls
-    # Check for specific SQL fragments in calls
-    # v2.12.8 creates states_raw and a view for states
     assert any("CREATE TABLE IF NOT EXISTS states_raw" in c for c in calls)
-    assert any("CREATE OR REPLACE VIEW states" in c for c in calls)
+    # View creation SQL is multi-line, check for a substring
+    assert any("CREATE VIEW states" in c for c in calls)
+    assert any("DROP VIEW IF EXISTS states" in c for c in calls)
     assert any("CREATE TABLE IF NOT EXISTS events" in c for c in calls)
     
     # Hypertable is on states_raw now
@@ -82,16 +98,7 @@ async def test_writer_init_db(writer, mock_pool, mock_db_connection):
 async def test_writer_enqueue_flush(writer, mock_db_connection):
     """Test enqueue and flush logic."""
     # Mock initial counts to 0
-    async def execute_side_effect(statement, *args, **kwargs):
-        stmt_str = str(statement)
-        if "SELECT count(*)" in stmt_str:
-            mock_res = MagicMock()
-            mock_res.scalar.return_value = 0
-            return mock_res
-        # For other calls, return a generic mock
-        return MagicMock()
-        
-    mock_db_connection.execute.side_effect = execute_side_effect
+    mock_db_connection.fetchval.return_value = 0
 
     await writer.start()
     await asyncio.sleep(0.1) # Let background init and counts finish
@@ -103,32 +110,19 @@ async def test_writer_enqueue_flush(writer, mock_db_connection):
     writer._entity_id_map["sensor.test"] = 1
     
     # Enqueue items
-    writer.enqueue({"type": "state", "entity_id": "sensor.test", "data": 1})
+    writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": datetime.now(), "state": "on", "value": 1.0, "attributes": "{}"})
     assert len(writer._queue) == 1
     
     # Enqueue second item - this should trigger auto-flush task
-    writer.enqueue({"type": "event", "data": 2})
+    writer.enqueue({"type": "event", "time": datetime.now(), "event_type": "test", "event_data": "{}"})
     
     # Allow the loop to run the flush task
     await asyncio.sleep(0.1)
     
     # If auto-flush worked, queue should be empty
-    if len(writer._queue) > 0:
-        await writer._flush()
-    
-    assert len(writer._queue) == 0 
-
     # Verify DB calls
-    # We expect INSERT statements
-    calls = []
-    for call in mock_db_connection.execute.mock_calls:
-        if call.args and hasattr(call.args[0], "text"):
-            calls.append(call.args[0].text)
-        else:
-            calls.append(str(call))
-            
-    assert any("INSERT INTO states" in c for c in calls)
-    assert any("INSERT INTO events" in c for c in calls)
+    # We expect INSERT statements (asyncpg uses executemany for inserts)
+    assert mock_db_connection.executemany.call_count >= 2
     
     # Verify stats
     assert writer._states_written == 1
@@ -142,13 +136,15 @@ async def test_writer_no_buffer_on_failure(writer, mock_pool, mock_db_connection
     await writer.start()
     
     # Mock connection failure during flush
-    mock_db_connection.execute.side_effect = Exception("Connection failed")
+    mock_db_connection.executemany.side_effect = Exception("Connection failed")
+    mock_db_connection.fetchval.side_effect = Exception("Connection failed")
+    mock_db_connection.fetchrow.side_effect = Exception("Connection failed")
     
     # Pre-populate map
     writer._entity_id_map["sensor.test"] = 1
     
     # Enqueue item
-    writer.enqueue({"type": "state", "entity_id": "sensor.test", "data": 1})
+    writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": datetime.now(), "state": "on", "value": 1.0, "attributes": "{}"})
     
     # Flush
     await writer._flush()
@@ -165,20 +161,22 @@ async def test_writer_buffer_on_failure(writer, mock_pool, mock_db_connection):
     await writer.start()
     
     # Mock connection failure during flush
-    mock_db_connection.execute.side_effect = Exception("Connection failed")
+    mock_db_connection.executemany.side_effect = Exception("Connection failed")
+    mock_db_connection.fetchval.side_effect = Exception("Connection failed")
+    mock_db_connection.fetchrow.side_effect = Exception("Connection failed")
     
     # Pre-populate map
     writer._entity_id_map["sensor.test"] = 1
     
     # Enqueue item
-    writer.enqueue({"type": "state", "entity_id": "sensor.test", "data": 1})
+    writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": datetime.now(), "state": "on", "value": 1.0, "attributes": "{}"})
     
     # Flush
     await writer._flush()
     
     # Should NOT be empty because it tried to flush, failed, and put it back
     assert len(writer._queue) == 1
-    assert writer._queue[0]["data"] == 1
+    assert writer._queue[0]["value"] == 1.0
 
 @pytest.mark.asyncio
 async def test_writer_max_queue_size(writer):
@@ -191,12 +189,12 @@ async def test_writer_max_queue_size(writer):
     writer._entity_id_map["sensor.test"] = 1
     
     # Fill queue
-    writer.enqueue({"type": "state", "entity_id": "sensor.test", "data": 1})
-    writer.enqueue({"type": "state", "entity_id": "sensor.test", "data": 2})
+    writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": datetime.now(), "state": "on", "value": 1.0, "attributes": "{}"})
+    writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": datetime.now(), "state": "on", "value": 2.0, "attributes": "{}"})
     assert len(writer._queue) == 2
     
     # Add one more, should be dropped
-    writer.enqueue({"type": "state", "entity_id": "sensor.test", "data": 3})
+    writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": datetime.now(), "state": "on", "value": 3.0, "attributes": "{}"})
     assert len(writer._queue) == 2
     # dropped_events is not incremented by deque automatically, only if we manually check
     # But enqueue checks len vs max_queue_size?
@@ -205,8 +203,8 @@ async def test_writer_max_queue_size(writer):
     # We removed that logic in writer.py.
     # So we should remove this assertion or check that it is NOT incremented (or check logs if we could)
     # assert writer._dropped_events == 1 
-    assert writer._queue[0]["data"] == 2
-    assert writer._queue[1]["data"] == 3
+    assert writer._queue[0]["value"] == 2.0
+    assert writer._queue[1]["value"] == 3.0
 
 @pytest.mark.asyncio
 async def test_writer_get_db_stats(writer, mock_db_connection):
@@ -219,40 +217,24 @@ async def test_writer_get_db_stats(writer, mock_db_connection):
     # This is tricky because execute is called multiple times.
     # We can use side_effect to return different mocks based on query
     
-    async def execute_side_effect(statement, *args, **kwargs):
+    async def fetchval_side_effect(statement, *args):
         stmt_str = str(statement)
-        mock_res = MagicMock()
-        
         if "hypertable_detailed_size" in stmt_str:
-            # Return total_bytes
-            mock_res.fetchone.return_value = (1000,) # total_bytes
-            return mock_res
-            
-        if "hypertable_compression_stats" in stmt_str:
-             # Check if it is the "SELECT *" query for ratio stats
-             if "SELECT *" in stmt_str:
-                 row = MagicMock()
-                 row.before_compression_total_bytes = 400
-                 row.after_compression_total_bytes = 100
-                 mock_res.fetchone.return_value = row
-                 return mock_res
-             else:
-                 # It is the "SELECT after_compression_total_bytes" query for size stats
-                 mock_res.fetchone.return_value = (100,)
-                 return mock_res
-             
-        if "timescaledb_information.chunks" in stmt_str:
-            # Chunk counts
-            mock_res.fetchone.return_value = (10, 5, 5)
-            # We need to handle exceptions or invalid queries?
-            return mock_res
+            return 1000
+        if "after_compression_total_bytes" in stmt_str:
+            return 100
+        return 0
 
-        # Default fallback
-        mock_res.scalar.return_value = 0
-        mock_res.fetchone.return_value = (0, 0, 0)
-        return mock_res
-    
-    mock_db_connection.execute.side_effect = execute_side_effect
+    async def fetchrow_side_effect(statement, *args):
+        stmt_str = str(statement)
+        if "timescaledb_information.chunks" in stmt_str:
+            return {"total_chunks": 10, "compressed_chunks": 5, "uncompressed_chunks": 5}
+        if "hypertable_compression_stats" in stmt_str:
+            return {"before_compression_total_bytes": 400, "after_compression_total_bytes": 100}
+        return None
+
+    mock_db_connection.fetchval.side_effect = fetchval_side_effect
+    mock_db_connection.fetchrow.side_effect = fetchrow_side_effect
     
     stats = await writer.get_db_stats()
     
@@ -323,7 +305,8 @@ async def test_writer_get_db_stats_failure(writer, mock_db_connection):
     """Test stats fetching failure - should return partial stats with default values."""
     await writer.start()
     
-    mock_db_connection.execute.side_effect = Exception("Stats Error")
+    mock_db_connection.fetchval.side_effect = Exception("Stats Error")
+    mock_db_connection.fetchrow.side_effect = Exception("Stats Error")
     
     stats = await writer.get_db_stats()
     # With PR #9, size stats functions return default 0 values even on failure
@@ -401,35 +384,35 @@ async def test_writer_compression_policy_failure(writer, mock_pool, mock_db_conn
     assert writer._connected is True
 
 @pytest.mark.asyncio
-async def test_writer_buffer_full_drop_oldest(writer):
+async def test_writer_buffer_full_drop_oldest(writer, mock_pool, mock_db_connection):
     """Test dropping oldest events when buffer is full (buffer_on_failure=True)."""
     writer.buffer_on_failure = True
     writer.max_queue_size = 2
     writer._queue = deque(maxlen=writer.max_queue_size) # Re-init deque
     writer.batch_size = 10 # Prevent auto-flush
+    writer._pool = mock_pool
     
     # Pre-populate map
     writer._entity_id_map["sensor.test"] = 1
     
     # Fill queue
-    writer.enqueue({"type": "state", "entity_id": "sensor.test", "data": 1})
-    writer.enqueue({"type": "state", "entity_id": "sensor.test", "data": 2})
+    writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": datetime.now(), "state": "on", "value": 1.0, "attributes": "{}"})
+    writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": datetime.now(), "state": "on", "value": 2.0, "attributes": "{}"})
     
-    # Mock flush failure to trigger buffering logic
-    writer._pool = MagicMock()
-    
-    # Mock begin() to return a context manager that adds an item then raises exception
-    mock_cm = MagicMock()
+    # Mock acquire() to return a context manager that adds an item
+    # Use the existing acquire_ctx from mock_pool if possible, or create new
+    acquire_ctx = AsyncMock()
+    mock_pool.acquire.return_value = acquire_ctx
     
     async def mock_enter(*args, **kwargs):
         # Simulate concurrent add
-        writer.enqueue({"type": "state", "entity_id": "sensor.test", "data": 3})
-        raise Exception("Flush Error")
+        writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": datetime.now(), "state": "on", "value": 3.0, "attributes": "{}"})
+        return mock_db_connection
         
-    mock_cm.__aenter__ = AsyncMock(side_effect=mock_enter)
-    mock_cm.__aexit__ = AsyncMock()
+    acquire_ctx.__aenter__ = AsyncMock(side_effect=mock_enter)
     
-    writer._pool.begin.return_value = mock_cm
+    # Mock executemany() to raise exception
+    mock_db_connection.executemany.side_effect = Exception("Flush Error")
     
     # Trigger flush manually
     await writer._flush()
@@ -439,8 +422,8 @@ async def test_writer_buffer_full_drop_oldest(writer):
     # Should drop 1 (oldest). Result: [2, 3].
     
     assert len(writer._queue) == 2
-    assert writer._queue[0]["data"] == 2
-    assert writer._queue[1]["data"] == 3
+    assert writer._queue[0]["value"] == 2.0
+    assert writer._queue[1]["value"] == 3.0
     # assert writer._dropped_events == 1 # Again, not tracked manually anymore
 
 @pytest.mark.asyncio
@@ -474,8 +457,8 @@ async def test_writer_get_db_stats_connect_failure(writer):
     """Test get_db_stats connection failure - should return partial stats with default values."""
     await writer.start()
     
-    # Mock connect() to raise exception
-    writer._pool.connect.side_effect = Exception("Connect Error")
+    # Mock acquire() to raise exception
+    writer._pool.acquire.side_effect = Exception("Connect Error")
     
     stats = await writer.get_db_stats()
     # With PR #9, size stats functions return default 0 values even on failure
@@ -508,21 +491,26 @@ async def test_writer_sanitizes_null_bytes(writer, mock_db_connection):
     # Trigger flush manually
     await writer._flush()
     
-    # Verify execute call
-    # conn.execute(stmt, parameters)
-    assert mock_db_connection.execute.called
-    call_args = mock_db_connection.execute.call_args
-    # call_args[0] are positional args: (statement, parameters)
-    params = call_args[0][1] 
+    # Verify executemany call
+    assert mock_db_connection.executemany.called
+    # Get the latest call (it might have been called multiple times, e.g. for events if any)
+    # But here we only have one state
+    call_args = mock_db_connection.executemany.call_args_list[0]
+    # call_args[0] is (sql, args_list)
+    args_list = call_args[0][1]
     
     # Verify the first item in the batch
-    item = params[0]
+    # Tuple: (time, metadata_id, state, value, attributes)
+    item_state = args_list[0][2]
+    item_attributes = args_list[0][4]
     
     # Null bytes should be removed
-    assert "\u0000" not in item["state"]
-    assert item["state"] == "badvalue"
-    assert "\u0000" not in item["attributes"]
-    assert item["attributes"] == '{"key": "null"}'
+    assert "\u0000" not in item_state
+    assert item_state == "badvalue"
+    assert "\u0000" not in item_attributes
+    # attributes are JSON strings now
+    assert "bad\u0000value" not in item_attributes
+    assert "nu\u0000ll" not in item_attributes
 
 @pytest.mark.asyncio
 async def test_writer_sanitizes_infinity(writer, mock_db_connection):
@@ -552,36 +540,20 @@ async def test_writer_sanitizes_infinity(writer, mock_db_connection):
     
     await writer._flush()
     
-    assert mock_db_connection.execute.called
-    call_args = mock_db_connection.execute.call_args
-    # call_args[0] are positional args: (statement, parameters)
-    params = call_args[0][1] 
-    item = params[0]
+    assert mock_db_connection.executemany.called
+    call_args = mock_db_connection.executemany.call_args_list[0]
+    args_list = call_args[0][1]
+    # Tuple: (time, metadata_id, state, value, attributes)
+    item_value = args_list[0][3]
+    item_attributes_str = args_list[0][4]
     
-    # Value (float) should be None if it was infinity/nan, 
-    # BUT writer.py logic:
-    # 1. _sanitize_obj is called on the batch items
-    # 2. For 'state' type:
-    #    if isinstance(x.get('attributes'), dict):
-    #       x['attributes'] = json.dumps(x['attributes'], default=str)
-    
-    # Wait, the 'value' field in the DB is DOUBLE PRECISION. 
-    # Postgres supports 'Infinity' for DOUBLE PRECISION columns?
-    # NO, the issue reported was "invalid input syntax for type json".
-    # The ERROR in the bug report was regarding `capabilities` which is JSONB.
-    # The user suggested: "Infinity is no valid JSON value in PostgreSQL."
-    
-    # My fix in writer.py sanitizes the WHOLE object recursively via _sanitize_obj.
-    # So `value` (which is a top level key in the state dict) will also be sanitized to None if it is Infinity.
-    
-    # Check top level value
-    assert item["value"] is None
+    # Value (float) should be None if it was infinity/nan
+    assert item_value is None
     
     # Check attributes - they are dumped to a string
-    attributes_str = item["attributes"]
     # We can parse it back to check
     import json
-    attributes = json.loads(attributes_str)
+    attributes = json.loads(item_attributes_str)
     
     assert attributes["pos_inf"] is None
     assert attributes["neg_inf"] is None

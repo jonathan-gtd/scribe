@@ -13,13 +13,10 @@ jobs:
       matrix:
         include:
 
-          # Stable - Test both PG17 and PG18
+          # Stable - Test PG18
           - ha-version: "stable"
             python-version: "3.14"
             postgres-version: "pg18"
-          - ha-version: "stable"
-            python-version: "3.14"
-            postgres-version: "pg17"
 
     services:
       timescaledb:

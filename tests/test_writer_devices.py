@@ -1,11 +1,11 @@
 """Test ScribeWriter device writing."""
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, AsyncMock
 from custom_components.scribe.writer import ScribeWriter
 
 @pytest.fixture
 def writer(hass):
-    """Create a writer instance with a mock engine."""
+    """Create a writer instance with a mock pool."""
     mock_pool = MagicMock()
     writer = ScribeWriter(
         hass=hass,
@@ -19,18 +19,17 @@ def writer(hass):
         max_queue_size=100,
         buffer_on_failure=False,
         table_name_states="states",
-        table_name_events="events",
-        engine=mock_pool
+        table_name_events="events"
     )
+    # Inject mock pool
+    writer._pool = mock_pool
+    # Mock _execute_many
+    writer._execute_many = AsyncMock()
     return writer
 
 @pytest.mark.asyncio
 async def test_write_devices_converts_int_to_str(writer):
     """Test that integer sw_version is converted to string."""
-    mock_pool = writer._pool
-    mock_conn = MagicMock()
-    mock_pool.begin.return_value.__aenter__.return_value = mock_conn
-
     devices = [{
         "device_id": "test_device",
         "name": "Test Device",
@@ -44,22 +43,26 @@ async def test_write_devices_converts_int_to_str(writer):
 
     await writer.write_devices(devices)
 
-    # Verify that execute was called
-    assert mock_conn.execute.called
+    # Verify that _execute_many was called
+    assert writer._execute_many.called
     
-    # Get the arguments passed to execute
-    # call_args[0] is positional args (stmt, parameters)
-    # call_args[0][1] is the list of parameters (devices)
-    call_args = mock_conn.execute.call_args
-    params = call_args[0][1]
+    # Get the arguments passed to _execute_many
+    # call_args[0][1] is the list of parameters (rows)
+    call_args = writer._execute_many.call_args
+    params = call_args[0][1] # This is the 'rows' list
     
     assert len(params) == 1
-    # Check that fields are strings
-    assert isinstance(params[0]["sw_version"], str)
-    assert params[0]["sw_version"] == "20211110"
+    # row is (device_id, name, name_by_user, model, manufacturer, sw_version, area_id, primary_config_entry)
+    row = params[0]
     
-    assert isinstance(params[0]["model"], str)
-    assert params[0]["model"] == "12345"
+    # sw_version is index 5
+    assert isinstance(row[5], str)
+    assert row[5] == "20211110"
+    
+    # model is index 3
+    assert isinstance(row[3], str)
+    assert row[3] == "12345"
 
-    assert isinstance(params[0]["manufacturer"], str)
-    assert params[0]["manufacturer"] == "67890"
+    # manufacturer is index 4
+    assert isinstance(row[4], str)
+    assert row[4] == "67890"

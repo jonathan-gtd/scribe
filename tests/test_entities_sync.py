@@ -72,6 +72,7 @@ async def test_entities_sync(hass: HomeAssistant, mock_writer, mock_entity_regis
 
         # Run setup
         await async_setup_entry(hass, entry)
+        await hass.async_block_till_done()
 
         # Verify write_entities was called
         assert mock_writer.write_entities.called

@@ -31,22 +31,29 @@ async def migrate_database(
         _LOGGER.info("⏳ Migration or initialization needed. Waiting 60 seconds for Home Assistant to complete bootstrap...")
         await asyncio.sleep(60)
 
-    _LOGGER.info("🔧 Starting background database migration...")
+    if not skip_delay:
+        _LOGGER.info("🔧 Starting background database migration...")
 
+    performed_any = False
     try:
         if record_states and enable_table_entities:
             # 1. Add constraints FIRST (PK/FK on empty table = instant)
-            await _migrate_states_raw_constraints(pool, chunk_time_interval, compress_after)
+            if await _migrate_states_raw_constraints(pool, chunk_time_interval, compress_after):
+                performed_any = True
 
             # 2. Migrate legacy data (chunks, non-blocking)
-            await migrate_states_data(pool)
+            if await migrate_states_data(pool):
+                performed_any = True
 
             # 3. Convert to hypertable AFTER data (avoid blocking bootstrap)
-            await _convert_to_hypertable(pool, chunk_time_interval, compress_after)
+            if await _convert_to_hypertable(pool, chunk_time_interval, compress_after):
+                performed_any = True
 
-        await _migrate_events_pk(pool)
+        if await _migrate_events_pk(pool):
+            performed_any = True
 
-        _LOGGER.info("🎉 All database migrations completed successfully!")
+        if performed_any:
+            _LOGGER.info("🎉 All database migrations completed successfully!")
 
     except Exception as e:
         _LOGGER.error(f"❌ Database migration failed: {e}", exc_info=True)
@@ -70,7 +77,7 @@ async def _migrate_states_raw_constraints(pool: asyncpg.Pool, chunk_time_interva
 
                 if pk_exists:
                     _LOGGER.debug("✅ states_raw: PK already exists, skipping")
-                    return
+                    return False
 
                 _LOGGER.info("📊 states_raw: Checking for duplicate rows...")
 
@@ -119,7 +126,8 @@ async def _migrate_states_raw_constraints(pool: asyncpg.Pool, chunk_time_interva
                     FOREIGN KEY (metadata_id) 
                     REFERENCES entities(id)
                 """)
-                _LOGGER.info("✅ states_raw: FOREIGN KEY added")
+                _LOGGER.debug("✅ states_raw: FOREIGN KEY added")
+                return True
 
     except Exception as e:
         _LOGGER.error(f"❌ states_raw constraints migration failed: {e}")
@@ -147,10 +155,10 @@ async def _convert_to_hypertable(pool: asyncpg.Pool, chunk_time_interval: str = 
                         if_not_exists => TRUE
                     )
                 """)
-                _LOGGER.info(f"✅ states_raw: Converted to hypertable ({chunk_time_interval} chunks)")
+                _LOGGER.debug("✅ states_raw: Converted to hypertable ({chunk_time_interval} chunks)")
 
                 # Add compression policy
-                _LOGGER.info(f"🗜️ states_raw: Adding compression policy (compress after {compress_after})...")
+                _LOGGER.debug(f"🗜️ states_raw: Adding compression policy (compress after {compress_after})...")
                 await conn.execute("""
                     ALTER TABLE states_raw SET (
                         timescaledb.compress,
@@ -160,9 +168,11 @@ async def _convert_to_hypertable(pool: asyncpg.Pool, chunk_time_interval: str = 
                 await conn.execute(f"""
                     SELECT add_compression_policy('states_raw', INTERVAL '{compress_after}')
                 """)
-                _LOGGER.info(f"✅ states_raw: Compression enabled (after {compress_after})")
+                _LOGGER.debug(f"✅ states_raw: Compression enabled (after {compress_after})")
+                return True
             else:
                 _LOGGER.debug("✅ states_raw: Already a hypertable")
+                return False
 
     except Exception as e:
         _LOGGER.warning(f"⚠️ states_raw: Could not convert to hypertable: {e}")
@@ -184,7 +194,7 @@ async def _migrate_events_pk(pool: asyncpg.Pool):
             """)
             if not table_exists:
                 _LOGGER.debug("events table not found (or custom name used), skipping events migration")
-                return
+                return False
 
             # Check if it's a TimescaleDB hypertable (skip if yes)
             is_hypertable = await conn.fetchrow("""
@@ -192,8 +202,8 @@ async def _migrate_events_pk(pool: asyncpg.Pool):
                 WHERE hypertable_name = 'events'
             """)
             if is_hypertable:
-                _LOGGER.info("ℹ️ events: Skipping PK migration (TimescaleDB hypertable)")
-                return
+                _LOGGER.debug("ℹ️ events: Skipping PK migration (TimescaleDB hypertable)")
+                return False
 
             # Check if 'id' column already exists
             id_exists = await conn.fetchrow("""
@@ -202,7 +212,7 @@ async def _migrate_events_pk(pool: asyncpg.Pool):
             """)
             if id_exists:
                 _LOGGER.debug("✅ events: ID column already exists, skipping")
-                return
+                return False
 
             _LOGGER.info("🔑 events: Adding 'id' BIGSERIAL PRIMARY KEY column...")
             _LOGGER.info("   (This might take a while on large tables)")
@@ -213,7 +223,8 @@ async def _migrate_events_pk(pool: asyncpg.Pool):
                     ADD COLUMN id BIGSERIAL PRIMARY KEY
                 """)
 
-            _LOGGER.info("✅ events: PRIMARY KEY added successfully")
+            _LOGGER.debug("✅ events: PRIMARY KEY added successfully")
+            return True
 
     except Exception as e:
         _LOGGER.error(f"❌ events migration failed: {e}")
@@ -267,7 +278,7 @@ async def migrate_states_data(pool: asyncpg.Pool):
                 "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'states_legacy')"
             )
             if not legacy_exists:
-                return
+                return False
 
         _LOGGER.info("📊 states_legacy: Found legacy data. Starting background migration...")
 
@@ -329,7 +340,8 @@ async def migrate_states_data(pool: asyncpg.Pool):
                 _LOGGER.info("Dropping legacy states table...")
                 await conn.execute("DROP TABLE states_legacy")
 
-        _LOGGER.info("✅ Data migration completed successfully!")
+        _LOGGER.debug("✅ Data migration completed successfully!")
+        return True
 
     except Exception as e:
         _LOGGER.error(f"❌ Data migration failed: {e}")

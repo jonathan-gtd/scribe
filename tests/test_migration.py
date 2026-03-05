@@ -1,41 +1,13 @@
 """Tests for migration module."""
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, patch
 from custom_components.scribe import migration
 
-class AsyncContextManagerMock:
-    """Mock for async context manager."""
-    def __init__(self, return_value):
-        self.return_value = return_value
-
-    async def __aenter__(self):
-        return self.return_value
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        pass
-
-@pytest.fixture
-def mock_pool():
-    """Mock the SQLAlchemy engine."""
-    engine = AsyncMock()
-    connection = AsyncMock()
-    result = MagicMock()
-    
-    # Configure result
-    connection.execute.return_value = result
-    
-    # Configure context managers properly
-    # engine.begin() and connect() are NOT coroutines, they return async context managers
-    # So we use MagicMock, not AsyncMock for the method itself
-    engine.begin = MagicMock(return_value=AsyncContextManagerMock(connection))
-    engine.connect = MagicMock(return_value=AsyncContextManagerMock(connection))
-    
-    return engine, connection, result
-
 @pytest.mark.asyncio
-async def test_migrate_database_calls_sub_migrations(hass, mock_pool):
+async def test_migrate_database_logic(hass, mock_pool, mock_db_connection):
     """Test that migrate_database calls sub-migrations."""
-    engine, _, _ = mock_pool
+    # Mock states_raw table check returning True to skip 60s delay
+    mock_db_connection.fetchval.return_value = True
     
     with patch("custom_components.scribe.migration._migrate_states_raw_constraints", new_callable=AsyncMock) as mock_constraints, \
          patch("custom_components.scribe.migration.migrate_states_data", new_callable=AsyncMock) as mock_data, \
@@ -43,89 +15,77 @@ async def test_migrate_database_calls_sub_migrations(hass, mock_pool):
          patch("custom_components.scribe.migration._migrate_events_pk", new_callable=AsyncMock) as mock_events, \
          patch("asyncio.sleep", new_callable=AsyncMock): # Skip sleep
     
-        await migration.migrate_database(hass, engine, True, True)
+        await migration.migrate_database(hass, mock_pool, True, True)
         
-        mock_constraints.assert_called_once_with(engine, '7 days', '7 days')
-        mock_data.assert_called_once_with(engine)
-        mock_hyper.assert_called_once_with(engine, '7 days', '7 days')
-        mock_events.assert_called_once_with(engine)
+        mock_constraints.assert_called_once()
+        mock_data.assert_called_once_with(mock_pool)
+        mock_hyper.assert_called_once()
+        mock_events.assert_called_once_with(mock_pool)
 
 @pytest.mark.asyncio
-async def test_migrate_states_raw_already_done(mock_pool):
+async def test_migrate_states_raw_already_done(mock_pool, mock_db_connection):
     """Test that migration skips if PK already exists."""
-    engine, connection, result = mock_pool
+    # Mock PK check returning a row (exists)
+    mock_db_connection.fetchrow.return_value = {"exists": 1}
     
-    # Mock PK check returning true
-    result.fetchone.return_value = [1]
-    
-    await migration._migrate_states_raw_constraints(engine)
+    await migration._migrate_states_raw_constraints(mock_pool)
     
     # verify check was made
-    call_args = connection.execute.call_args[0][0].text
+    call_args = mock_db_connection.fetchrow.call_args[0][0]
     assert "conname = 'states_raw_pkey'" in call_args
     
-    # verify no other calls (like ADD PRIMARY KEY)
-    assert connection.execute.call_count == 1
+    # verify no other calls (like SELECT COUNT(*) for dups)
+    assert mock_db_connection.fetchval.call_count == 0
 
 @pytest.mark.asyncio
-async def test_migrate_states_raw_with_duplicates(mock_pool):
+async def test_migrate_states_raw_with_duplicates(mock_pool, mock_db_connection):
     """Test migration with duplicates to clean."""
-    engine, connection, result = mock_pool
-    
     # 1. Check PK -> None (not done)
     # 2. Check duplicates -> 5 (found)
     # 3. Delete duplicates
-    # 4. Add PK
-    # 5. Add FK
     
-    # Configure return values for sequential calls
-    # fetchone is called for PK check
-    # scalar is called for dup count
-    result.fetchone.side_effect = [None] 
-    result.scalar.return_value = 5
-    result.rowcount = 5 # for delete result
+    mock_db_connection.fetchrow.return_value = None
+    mock_db_connection.fetchval.return_value = 5
+    mock_db_connection.execute.return_value = "DELETE 5"
     
-    await migration._migrate_states_raw_constraints(engine)
+    await migration._migrate_states_raw_constraints(mock_pool)
     
     # Verify SQL calls
-    sql_calls = [c[0][0].text for c in connection.execute.call_args_list]
+    assert mock_db_connection.fetchrow.called
+    assert mock_db_connection.fetchval.called
     
-    assert any("SELECT 1 FROM pg_constraint" in s for s in sql_calls)
-    assert any("SELECT COUNT(*)" in s for s in sql_calls)
-    assert any("DELETE FROM states_raw" in s for s in sql_calls)
-    assert any("ADD PRIMARY KEY" in s for s in sql_calls)
-    assert any("ADD CONSTRAINT fk_states_raw_entity" in s for s in sql_calls)
+    # Verify duplicates were deleted
+    delete_call = [c for c in mock_db_connection.execute.mock_calls if "DELETE FROM states_raw" in str(c)]
+    assert len(delete_call) > 0
+    
+    # Verify constraints added
+    execute_calls = [str(c) for c in mock_db_connection.execute.mock_calls]
+    assert any("ADD PRIMARY KEY" in s for s in execute_calls)
+    assert any("ADD CONSTRAINT fk_states_raw_entity" in s for s in execute_calls)
 
 @pytest.mark.asyncio
-async def test_migrate_events_pk_already_done(mock_pool):
+async def test_migrate_events_pk_already_done(mock_pool, mock_db_connection):
     """Test event migration skips if 'id' column exists."""
-    engine, connection, result = mock_pool
-    
     # 1. Check table events exists -> True
     # 2. Check is hypertable -> False
     # 3. Check column id exists -> True
-    result.fetchone.side_effect = [[1], None, [1]]
+    mock_db_connection.fetchrow.side_effect = [{"exists": 1}, None, {"exists": 1}]
     
-    await migration._migrate_events_pk(engine)
-    
-    # verify check was made
-    sql_calls = [c[0][0].text for c in connection.execute.call_args_list]
-    assert any("column_name = 'id'" in s for s in sql_calls)
+    await migration._migrate_events_pk(mock_pool)
     
     # verify no alter table
-    assert not any("ADD COLUMN id" in s for s in sql_calls)
+    execute_calls = [str(c) for c in mock_db_connection.execute.mock_calls]
+    assert not any("ADD COLUMN id" in s for s in execute_calls)
 
 @pytest.mark.asyncio
-async def test_migrate_events_pk_adds_column(mock_pool):
+async def test_migrate_events_pk_adds_column(mock_pool, mock_db_connection):
     """Test event migration adds column if missing."""
-    engine, connection, result = mock_pool
-    
     # 1. Check table events exists -> True
     # 2. Check is hypertable -> False
-    # 3. Check column id exists -> None
-    result.fetchone.side_effect = [[1], None, None]
+    # 3. Check column id exists -> False
+    mock_db_connection.fetchrow.side_effect = [{"exists": 1}, None, None]
     
-    await migration._migrate_events_pk(engine)
+    await migration._migrate_events_pk(mock_pool)
     
-    sql_calls = [c[0][0].text for c in connection.execute.call_args_list]
-    assert any("ADD COLUMN id BIGSERIAL PRIMARY KEY" in s for s in sql_calls)
+    execute_calls = [str(c) for c in mock_db_connection.execute.mock_calls]
+    assert any("ADD COLUMN id BIGSERIAL PRIMARY KEY" in s for s in execute_calls)

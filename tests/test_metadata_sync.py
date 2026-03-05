@@ -89,6 +89,7 @@ async def test_metadata_sync(hass: HomeAssistant, mock_writer, mock_registries):
 
         # Run setup
         await async_setup_entry(hass, entry)
+        await hass.async_block_till_done()
 
         # Verify write_areas
         assert mock_writer.write_areas.called
