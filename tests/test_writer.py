@@ -42,11 +42,13 @@ async def test_writer_init_db(writer, mock_engine, mock_db_connection):
     # It does. So we patch 'custom_components.scribe.writer.migration.migrate_database'
     with patch("custom_components.scribe.writer.migration.migrate_database") as mock_migrate:
         await writer.start()
+        await asyncio.sleep(0.1) # Let background init finish
         
         # Fire HA started event to trigger migration
         from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
         writer.hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
         await writer.hass.async_block_till_done()
+        await asyncio.sleep(0.1) # Let migration task get scheduled and run
         
         # Verify migration was scheduled
         mock_migrate.assert_called_once()
@@ -97,6 +99,7 @@ async def test_writer_enqueue_flush(writer, mock_db_connection):
     mock_db_connection.execute.side_effect = execute_side_effect
 
     await writer.start()
+    await asyncio.sleep(0.1) # Let background init and counts finish
     
     # Reset side_effect for flush (or just ensure it works)
     mock_db_connection.execute.side_effect = None
@@ -307,11 +310,16 @@ async def test_writer_hypertable_failure(writer, mock_engine, mock_db_connection
         stmt_str = str(statement)
         if "create_hypertable" in stmt_str:
             raise Exception("Hypertable Error")
-        return MagicMock()
+        mock_res = MagicMock()
+        mock_res.scalar.return_value = 0
+        mock_res.fetchone.return_value = (0,)
+        mock_res.fetchall.return_value = []
+        return mock_res
         
     mock_db_connection.execute.side_effect = side_effect
     
     await writer.start()
+    await asyncio.sleep(0.1)
     # Should still be connected because hypertable failure is caught
     assert writer._connected is True
 
@@ -385,11 +393,16 @@ async def test_writer_compression_policy_failure(writer, mock_engine, mock_db_co
         stmt_str = str(statement)
         if "add_compression_policy" in stmt_str:
             raise Exception("Policy Error")
-        return MagicMock()
+        mock_res = MagicMock()
+        mock_res.scalar.return_value = 0
+        mock_res.fetchone.return_value = (0,)
+        mock_res.fetchall.return_value = []
+        return mock_res
         
     mock_db_connection.execute.side_effect = side_effect
     
     await writer.start()
+    await asyncio.sleep(0.1)
     assert writer._connected is True
 
 @pytest.mark.asyncio
@@ -449,11 +462,16 @@ async def test_writer_compression_enable_failure(writer, mock_engine, mock_db_co
         stmt_str = str(statement)
         if "timescaledb.compress" in stmt_str:
             raise Exception("Compression Enable Error")
-        return MagicMock()
+        mock_res = MagicMock()
+        mock_res.scalar.return_value = 0
+        mock_res.fetchone.return_value = (0,)
+        mock_res.fetchall.return_value = []
+        return mock_res
         
     mock_db_connection.execute.side_effect = side_effect
     
     await writer.start()
+    await asyncio.sleep(0.1)
     assert writer._connected is True
 
 @pytest.mark.asyncio

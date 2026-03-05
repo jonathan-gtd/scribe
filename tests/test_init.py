@@ -215,9 +215,10 @@ async def test_statistics_setup(hass, mock_config_entry):
         mock_coord.async_config_entry_first_refresh = AsyncMock()
         
         await async_setup_entry(hass, mock_config_entry)
+        await hass.async_block_till_done()
         
         mock_coord_cls.assert_called_once()
-        mock_coord.async_config_entry_first_refresh.assert_called_once()
+        mock_coord.async_refresh.assert_called_once()
         assert hass.data[DOMAIN][mock_config_entry.entry_id]["chunk_coordinator"] == mock_coord
 
 @pytest.mark.asyncio

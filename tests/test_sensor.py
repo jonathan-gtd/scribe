@@ -90,7 +90,7 @@ async def test_adaptive_units():
     sensor = ScribeStatsTotalSizeSensor(coordinator, entry)
     assert sensor.native_value == 500
     assert sensor.native_unit_of_measurement == UnitOfInformation.KILOBYTES
-    assert sensor.suggested_display_precision == 0
+    assert sensor.suggested_display_precision == 1
 
     # 2. Test MB (< 1 GB)
     # 10.5 MB = 11010048 B
@@ -197,5 +197,6 @@ async def test_async_setup_entry_statistics(hass):
     # 6 Chunk - Enabled
     # 6 Size - Enabled
     # 2 Ratio - Enabled
-    # Total = 20
-    assert len(entities) == 20
+    # 2 Original Size - Enabled
+    # Total = 22
+    assert len(entities) == 22

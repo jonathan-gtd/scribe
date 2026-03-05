@@ -12,8 +12,7 @@
     "issue_tracker": "https://github.com/jonathan-gtd/scribe/issues",
     "requirements": [
         "sqlalchemy>=2.0.0",
-        "asyncpg>=0.28.0",
-        "greenlet>=3.3.2"
+        "asyncpg>=0.28.0"
     ],
     "version": "3.0.0"
 }
