@@ -24,6 +24,7 @@ Scribe is built differently. Unlike other integrations that rely on synchronous 
 - [Statistics Sensors](#statistics-sensors)
 - [Services](#services)
 - [Dashboard / View](#dashboard--view)
+- [Ecosystem / Related Projects](#ecosystem--related-projects)
 - [Troubleshooting](#troubleshooting)
 - [License](#license)
 
@@ -387,6 +388,13 @@ A pre-configured Lovelace view containing all useful Scribe sensors (Database St
 4.  Copy the content of [`lovelace_scribe_view.yaml`](lovelace_scribe_view.yaml) and paste it into the editor.
 
 
+
+## Ecosystem / Related Projects
+
+Check out these related projects that work great with Scribe:
+
+- [timescale_database_reader](https://github.com/remmob/timescale_database_reader): A custom component to read data back from TimescaleDB into Home Assistant sensors.
+- [timescale-plotly-card](https://github.com/remmob/timescale-plotly-card): A highly customizable Plotly-based card for Home Assistant that can query TimescaleDB directly.
 
 ## License
 
