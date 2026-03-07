@@ -534,8 +534,11 @@ class ScribeWriter:
                     s.state,
                     s.value,
                     s.attributes
-                FROM states_raw s
-                JOIN entities e ON s.metadata_id = e.id;
+                FROM entities e
+                CROSS JOIN LATERAL (
+                    SELECT * FROM states_raw s 
+                    WHERE s.metadata_id = e.id
+                ) s;
             """)
         except Exception as e:
             _LOGGER.error(f"Failed to create states view: {e}")
@@ -637,8 +640,8 @@ class ScribeWriter:
             );
         """)
         
-        # Index for JOIN performance with states_raw
-        await conn.execute("CREATE INDEX IF NOT EXISTS entities_entity_id_idx ON entities (entity_id)")
+        # Index for entity lookup by entity_id (UNIQUE constraint already creates an index)
+        # await conn.execute("CREATE INDEX IF NOT EXISTS entities_entity_id_idx ON entities (entity_id)")
         
         # Populate Cache on startup
         try:
