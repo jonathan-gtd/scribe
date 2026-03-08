@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.2.1] - 2026-03-08
+
+### Added
+- **Global Translations**: Updated all translation files (`es`, `it`, `pt`, `nl`, `de`, `ru`, `sv`, `da`, `ja`, `pl`, `sk`) to support the new multi-step configuration UI.
+
+### Fixed
+- **Sensor Accuracy**: Refined size sensors to always return raw bytes, ensuring Home Assistant correctly handles adaptive unit scaling (kB/MB/GB/TB).
+
 ## [3.2.0] - 2026-03-08
 
 ### Added
