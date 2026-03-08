@@ -79,34 +79,33 @@ async def test_chunk_coordinator_sensors():
 
 @pytest.mark.asyncio
 async def test_adaptive_units():
-    """Test adaptive units logic for size sensors."""
+    """Test that size sensors always return raw bytes as native_value.
+
+    HA handles unit conversion and display via device_class=DATA_SIZE +
+    suggested_unit_of_measurement. native_value must always be bytes.
+    """
     coordinator = MagicMock()
     entry = MagicMock()
     entry.entry_id = "test_entry"
-    
-    # 1. Test kB (< 1 MB)
-    # 500 kB = 512000 B
+
+    # States sensors use GiB as suggested display unit
     coordinator.data = {"states_total_size": 512000}
     sensor = ScribeStatsTotalSizeSensor(coordinator, entry)
-    assert sensor.native_value == 500
-    assert sensor.native_unit_of_measurement == UnitOfInformation.KILOBYTES
-    assert sensor.suggested_display_precision == 1
+    assert sensor.native_value == 512000
+    assert sensor.native_unit_of_measurement == UnitOfInformation.BYTES
+    assert sensor.suggested_unit_of_measurement == UnitOfInformation.GIBIBYTES
 
-    # 2. Test MB (< 1 GB)
-    # 10.5 MB = 11010048 B
     coordinator.data = {"states_total_size": 11010048}
     sensor = ScribeStatsTotalSizeSensor(coordinator, entry)
-    assert sensor.native_value == 10.5
-    assert sensor.native_unit_of_measurement == UnitOfInformation.MEGABYTES
-    assert sensor.suggested_display_precision == 1
+    assert sensor.native_value == 11010048
+    assert sensor.native_unit_of_measurement == UnitOfInformation.BYTES
 
-    # 3. Test GB (>= 1 GB)
-    # 2.45 GB = 2630667468.8 B -> 2630667469 B
-    coordinator.data = {"states_total_size": 2630667469}
-    sensor = ScribeStatsTotalSizeSensor(coordinator, entry)
-    assert sensor.native_value == 2.45
-    assert sensor.native_unit_of_measurement == UnitOfInformation.GIGABYTES
-    assert sensor.suggested_display_precision == 2
+    # Events sensors use MiB as suggested display unit
+    coordinator.data = {"events_total_size": 2630667469}
+    sensor = ScribeEventsTotalSizeSensor(coordinator, entry)
+    assert sensor.native_value == 2630667469
+    assert sensor.native_unit_of_measurement == UnitOfInformation.BYTES
+    assert sensor.suggested_unit_of_measurement == UnitOfInformation.MEBIBYTES
 
 @pytest.mark.asyncio
 async def test_size_coordinator_sensors():
@@ -128,26 +127,28 @@ async def test_size_coordinator_sensors():
     entry = MagicMock()
     entry.entry_id = "test_entry"
     
-    # States
+    mb = 1024 * 1024
+
+    # States — native_value is raw bytes
     s1 = ScribeStatsTotalSizeSensor(coordinator, entry)
-    assert s1.native_value == 10.5
-    assert s1.native_unit_of_measurement == UnitOfInformation.MEGABYTES
-    
+    assert s1.native_value == 10.5 * mb
+    assert s1.native_unit_of_measurement == UnitOfInformation.BYTES
+
     s2 = ScribeStatsCompressedSizeSensor(coordinator, entry)
-    assert s2.native_value == 8.1
+    assert s2.native_value == 8.1 * mb
 
     s3 = ScribeStatsUncompressedSizeSensor(coordinator, entry)
-    assert s3.native_value == 2.4
-    
-    # Events
+    assert s3.native_value == 2.4 * mb
+
+    # Events — native_value is raw bytes
     e1 = ScribeEventsTotalSizeSensor(coordinator, entry)
-    assert e1.native_value == 20.0
-    
+    assert e1.native_value == 20.0 * mb
+
     e2 = ScribeEventsCompressedSizeSensor(coordinator, entry)
-    assert e2.native_value == 15.0
-    
+    assert e2.native_value == 15.0 * mb
+
     e3 = ScribeEventsUncompressedSizeSensor(coordinator, entry)
-    assert e3.native_value == 5.0
+    assert e3.native_value == 5.0 * mb
 
 @pytest.mark.asyncio
 async def test_async_setup_entry_statistics(hass):
