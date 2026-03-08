@@ -347,33 +347,12 @@ response_variable: query_result
 
 ## Troubleshooting
 
-### No data being written
-1. Check Home Assistant logs for errors
-2. Verify database connection with `psql -U scribe -h host -d scribe`
-3. Enable `enable_stats_io: true` to monitor buffer and writes
-4. Check `sensor.scribe_buffer_size` - if it's growing, there's a DB issue
-
 ### High memory usage
 - Reduce `max_queue_size`
 - Reduce `flush_interval` for faster writes
 - Check `sensor.scribe_buffer_size`
 
-### SSL Configuration
-
-You can configure SSL certificates for the database connection. This is useful if your database requires client certificate authentication or if you need to verify the server's certificate.
-
-*   **SSL Root Certificate**: Path to the CA certificate (e.g., `certs/root.crt`).
-*   **SSL Certificate File**: Path to the client certificate (e.g., `certs/client.crt`).
-*   **SSL Key File**: Path to the client key (e.g., `certs/client.key`).
-
-**Note on Paths**: You can use absolute paths or paths relative to your Home Assistant configuration directory. For example, if you create a `certs` folder in your config directory, you can simply use `certs/client.crt`.
-
-### Statistics not updating
-- Ensure coordinator flags are enabled (`enable_stats_chunk`, `enable_stats_size`)
-- Check update intervals aren't too long
-- View Home Assistant logs for coordinator errors
-
-### Performance Tuning (PostgreSQL)
+### Performance tuning
 
 If the `states` view is slow (several seconds per query), it is likely due to the PostgreSQL query planner choosing a **Hash Join** instead of a **Nested Loop**, which prevents TimescaleDB from pruning chunks effectively.
 
