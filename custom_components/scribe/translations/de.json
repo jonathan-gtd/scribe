@@ -2,44 +2,122 @@
     "config": {
         "step": {
             "user": {
-                "title": "Scribe konfigurieren",
-                "description": "Scribe speichert Ihren Home Assistant-Verlauf in TimescaleDB.\n\nWeitere Informationen finden Sie in der [TimescaleDB-Dokumentation](https://docs.timescale.com/).",
+                "title": "Verbindung zu TimescaleDB herstellen",
+                "description": "Geben Sie die PostgreSQL-Verbindungs-URL für Ihre TimescaleDB-Instanz ein.",
                 "data": {
-                    "db_url": "Datenbank-URL (postgresql://user:pass@host:5432/db)",
-                    "chunk_time_interval": "Chunk-Zeitintervall (z. B. 30 days)",
-                    "compress_after": "Komprimieren nach (z. B. 7 days)",
-                    "record_states": "Zustände aufzeichnen (Sensorverlauf)",
-                    "record_events": "Ereignisse aufzeichnen (Automatisierungsauslöser usw.)"
+                    "db_url": "Datenbank-URL"
+                },
+                "data_description": {
+                    "db_url": "Vollständige PostgreSQL-Verbindungs-URL"
                 }
             }
         },
         "error": {
-            "cannot_connect": "Verbindung zur Datenbank fehlgeschlagen. Überprüfen Sie Ihre URL.",
-            "must_record_something": "Sie müssen mindestens eine Aufzeichnungsoption auswählen (Zustände oder Ereignisse)."
+            "cannot_connect": "Verbindung zur Datenbank fehlgeschlagen."
         },
         "abort": {
             "already_configured": "Scribe ist bereits konfiguriert.",
-            "single_instance_allowed": "Es ist nur eine Instanz von Scribe zulässig. Bitte entfernen Sie zuerst die vorhandene, wenn Sie neu konfigurieren möchten.",
-            "ui_configuration_disabled": "Die UI-Konfiguration ist derzeit zur Gewährleistung der Stabilität deaktiviert. Bitte konfigurieren Sie Scribe über configuration.yaml."
+            "single_instance_allowed": "Es ist nur eine Scribe-Instanz zulässig."
         }
     },
     "options": {
         "step": {
             "init": {
-                "title": "Scribe-Optionen",
+                "title": "Aufzeichnung & Filterung",
                 "data": {
-                    "chunk_time_interval": "Chunk-Zeitintervall",
-                    "compress_after": "Komprimieren nach",
-                    "batch_size": "Batch-Größe (Ereignisse)",
-                    "flush_interval": "Flush-Intervall (Sekunden)",
-                    "record_states": "Zustände aufzeichnen",
+                    "record_states": "Zustandsänderungen aufzeichnen",
                     "record_events": "Ereignisse aufzeichnen",
                     "include_domains": "Domänen einschließen",
-                    "include_entities": "Entitäten einschließen",
                     "exclude_domains": "Domänen ausschließen",
-                    "exclude_entities": "Entitäten ausschließen"
+                    "include_entities": "Entitäten einschließen",
+                    "exclude_entities": "Entitäten ausschließen",
+                    "include_entity_globs": "Entitäts-Globs einschließen",
+                    "exclude_entity_globs": "Entitäts-Globs ausschließen",
+                    "exclude_attributes": "Attribute ausschließen"
+                },
+                "data_description": {
+                    "record_states": "Write every state change to TimescaleDB",
+                    "record_events": "Write Home Assistant events to TimescaleDB",
+                    "include_domains": "Only record entities from these domains.",
+                    "exclude_domains": "Never record entities from these domains",
+                    "include_entities": "Only record these specific entities.",
+                    "exclude_entities": "Never record these specific entities",
+                    "include_entity_globs": "Only record entities matching these patterns",
+                    "exclude_entity_globs": "Never record entities matching these patterns",
+                    "exclude_attributes": "Drop these attribute keys before writing"
+                }
+            },
+            "performance": {
+                "title": "Leistung",
+                "data": {
+                    "batch_size": "Batch-Größe",
+                    "flush_interval": "Flush-Intervall (Sekunden)",
+                    "max_queue_size": "Maximale Warteschlangengröße",
+                    "buffer_on_failure": "Pufferung bei Datenbankfehler"
+                },
+                "data_description": {
+                    "batch_size": "Number of rows accumulated before a flush is triggered",
+                    "flush_interval": "Maximum seconds between automatic flushes",
+                    "max_queue_size": "Maximum pending writes before oldest are dropped",
+                    "buffer_on_failure": "Keep events in memory and retry when the database becomes available again"
+                }
+            },
+            "stats": {
+                "title": "Statistik-Sensoren",
+                "data": {
+                    "enable_stats_io": "I/O-Statistiksensoren aktivieren",
+                    "enable_stats_chunk": "Chunk-Statistiksensoren aktivieren",
+                    "stats_chunk_interval": "Refresh interval",
+                    "enable_stats_size": "Größen-Statistiksensoren aktivieren",
+                    "stats_size_interval": "Refresh interval"
+                },
+                "data_description": {
+                    "enable_stats_io": "Expose write counters, buffer size and duration as sensors",
+                    "enable_stats_chunk": "Expose per-table chunk counts",
+                    "stats_chunk_interval": "How often stats are refreshed from the database",
+                    "enable_stats_size": "Expose per-table sizes and compression ratios",
+                    "stats_size_interval": "How often stats are refreshed from the database"
+                }
+            },
+            "metadata": {
+                "title": "Metadaten-Tabellen",
+                "data": {
+                    "enable_table_areas": "Sync areas table",
+                    "enable_table_devices": "Sync devices table",
+                    "enable_table_entities": "Sync entities table",
+                    "enable_table_integrations": "Sync integrations table",
+                    "enable_table_users": "Sync users table"
+                },
+                "data_description": {
+                    "enable_table_areas": "Keep a mirror of HA areas in TimescaleDB",
+                    "enable_table_devices": "Keep a mirror of HA devices in TimescaleDB",
+                    "enable_table_entities": "Keep a mirror of entity registry in TimescaleDB",
+                    "enable_table_integrations": "Keep a mirror of integrations in TimescaleDB",
+                    "enable_table_users": "Keep a mirror of HA users in TimescaleDB"
+                }
+            },
+            "advanced": {
+                "title": "Erweitert (TimescaleDB & SSL)",
+                "data": {
+                    "chunk_time_interval": "Chunk time interval",
+                    "compress_after": "Compress after",
+                    "db_ssl": "Enable SSL",
+                    "ssl_root_cert": "SSL root certificate path",
+                    "ssl_cert_file": "SSL client certificate path",
+                    "ssl_key_file": "SSL client key path"
+                },
+                "data_description": {
+                    "chunk_time_interval": "TimescaleDB chunk interval",
+                    "compress_after": "Compress chunks older than this interval",
+                    "db_ssl": "Require an SSL/TLS connection",
+                    "ssl_root_cert": "Path to the CA certificate file",
+                    "ssl_cert_file": "Path to the client certificate file",
+                    "ssl_key_file": "Path to the client private key file"
                 }
             }
+        },
+        "error": {
+            "must_record_something": "Mindestens eine Option muss aktiviert sein."
         }
     }
 }

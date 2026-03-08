@@ -2,44 +2,122 @@
     "config": {
         "step": {
             "user": {
-                "title": "Configureer Scribe",
-                "description": "Scribe slaat uw Home Assistant-geschiedenis op in TimescaleDB.\n\nVoor meer informatie, zie de [TimescaleDB Documentatie](https://docs.timescale.com/).",
+                "title": "Verbinden met TimescaleDB",
+                "description": "Voer de PostgreSQL-verbindings-URL in voor uw TimescaleDB-instantie.\n\nFormaat: `postgresql://gebruiker:wachtwoord@host:5432/dbname`\n\nExtra opties (SSL, filtering, chunk-intervallen) zijn beschikbaar na installatie via **Configureren**.",
                 "data": {
-                    "db_url": "Database URL (postgresql://user:pass@host:5432/db)",
-                    "chunk_time_interval": "Chunk Tijdsinterval (bijv. 30 days)",
-                    "compress_after": "Comprimeren Na (bijv. 7 days)",
-                    "record_states": "Staten Opnemen (Sensorgeschiedenis)",
-                    "record_events": "Gebeurtenissen Opnemen (Automatiseringstriggers, enz.)"
+                    "db_url": "Database URL"
+                },
+                "data_description": {
+                    "db_url": "Volledige PostgreSQL-verbindings-URL, bijv. postgresql://scribe:geheim@192.168.1.10:5432/scribe"
                 }
             }
         },
         "error": {
-            "cannot_connect": "Kan geen verbinding maken met de database. Controleer uw URL.",
-            "must_record_something": "U moet ten minste één opnameoptie selecteren (Staten of Gebeurtenissen)."
+            "cannot_connect": "Kan geen verbinding maken met de database. Controleer de URL en zorg ervoor dat PostgreSQL bereikbaar is."
         },
         "abort": {
-            "already_configured": "Scribe is al geconfigureerd.",
-            "single_instance_allowed": "Er is slechts één exemplaar van Scribe toegestaan. Verwijder eerst het bestaande exemplaar als u opnieuw wilt configureren.",
-            "ui_configuration_disabled": "UI-configuratie is momenteel uitgeschakeld om stabiliteit te garanderen. Configureer Scribe via configuration.yaml."
+            "already_configured": "Scribe is al geconfigureerd. Gebruik **Configureren** om instellingen te wijzigen.",
+            "single_instance_allowed": "Slechts één Scribe-instantie is toegestaan."
         }
     },
     "options": {
         "step": {
             "init": {
-                "title": "Scribe Opties",
+                "title": "Opname & Filtering",
                 "data": {
-                    "chunk_time_interval": "Chunk Tijdsinterval",
-                    "compress_after": "Comprimeren Na",
-                    "batch_size": "Batchgrootte (Gebeurtenissen)",
-                    "flush_interval": "Flush Interval (Seconden)",
-                    "record_states": "Staten Opnemen",
-                    "record_events": "Gebeurtenissen Opnemen",
-                    "include_domains": "Domeinen Insluiten",
-                    "include_entities": "Entiteiten Insluiten",
-                    "exclude_domains": "Domeinen Uitsluiten",
-                    "exclude_entities": "Entiteiten Uitsluiten"
+                    "record_states": "Statusveranderingen opnemen",
+                    "record_events": "Gebeurtenissen opnemen",
+                    "include_domains": "Domeinen opnemen",
+                    "exclude_domains": "Domeinen uitsluiten",
+                    "include_entities": "Entiteiten opnemen",
+                    "exclude_entities": "Entiteiten uitsluiten",
+                    "include_entity_globs": "Entiteitspatronen opnemen",
+                    "exclude_entity_globs": "Entiteitspatronen uitsluiten",
+                    "exclude_attributes": "Attributen uitsluiten"
+                },
+                "data_description": {
+                    "record_states": "Write every state change to TimescaleDB",
+                    "record_events": "Write Home Assistant events to TimescaleDB",
+                    "include_domains": "Only record entities from these domains.",
+                    "exclude_domains": "Never record entities from these domains",
+                    "include_entities": "Only record these specific entities.",
+                    "exclude_entities": "Never record these specific entities",
+                    "include_entity_globs": "Only record entities matching these patterns",
+                    "exclude_entity_globs": "Never record entities matching these patterns",
+                    "exclude_attributes": "Drop these attribute keys before writing"
+                }
+            },
+            "performance": {
+                "title": "Prestaties",
+                "data": {
+                    "batch_size": "Batchgrootte",
+                    "flush_interval": "Verzendinterval (seconden)",
+                    "max_queue_size": "Maximale wachtrijgrootte",
+                    "buffer_on_failure": "Bufferen bij fouten"
+                },
+                "data_description": {
+                    "batch_size": "Number of rows accumulated before a flush is triggered",
+                    "flush_interval": "Maximum seconds between automatic flushes",
+                    "max_queue_size": "Maximum pending writes before oldest are dropped",
+                    "buffer_on_failure": "Keep events in memory and retry when the database becomes available again"
+                }
+            },
+            "stats": {
+                "title": "Statistieksensoren",
+                "data": {
+                    "enable_stats_io": "I/O-statistieksensoren inschakelen",
+                    "enable_stats_chunk": "Chunk-statistieksensoren inschakelen",
+                    "stats_chunk_interval": "Refresh interval",
+                    "enable_stats_size": "Grootte-statistieksensoren inschakelen",
+                    "stats_size_interval": "Refresh interval"
+                },
+                "data_description": {
+                    "enable_stats_io": "Expose write counters, buffer size and duration as sensors",
+                    "enable_stats_chunk": "Expose per-table chunk counts",
+                    "stats_chunk_interval": "How often stats are refreshed from the database",
+                    "enable_stats_size": "Expose per-table sizes and compression ratios",
+                    "stats_size_interval": "How often stats are refreshed from the database"
+                }
+            },
+            "metadata": {
+                "title": "Metadatatabellen",
+                "data": {
+                    "enable_table_areas": "Sync areas table",
+                    "enable_table_devices": "Sync devices table",
+                    "enable_table_entities": "Sync entities table",
+                    "enable_table_integrations": "Sync integrations table",
+                    "enable_table_users": "Sync users table"
+                },
+                "data_description": {
+                    "enable_table_areas": "Keep a mirror of HA areas in TimescaleDB",
+                    "enable_table_devices": "Keep a mirror of HA devices in TimescaleDB",
+                    "enable_table_entities": "Keep a mirror of entity registry in TimescaleDB",
+                    "enable_table_integrations": "Keep a mirror of integrations in TimescaleDB",
+                    "enable_table_users": "Keep a mirror of HA users in TimescaleDB"
+                }
+            },
+            "advanced": {
+                "title": "Geavanceerd (TimescaleDB & SSL)",
+                "data": {
+                    "chunk_time_interval": "Chunk time interval",
+                    "compress_after": "Compress after",
+                    "db_ssl": "Enable SSL",
+                    "ssl_root_cert": "SSL root certificate path",
+                    "ssl_cert_file": "SSL client certificate path",
+                    "ssl_key_file": "SSL client key path"
+                },
+                "data_description": {
+                    "chunk_time_interval": "TimescaleDB chunk interval",
+                    "compress_after": "Compress chunks older than this interval",
+                    "db_ssl": "Require an SSL/TLS connection",
+                    "ssl_root_cert": "Path to the CA certificate file",
+                    "ssl_cert_file": "Path to the client certificate file",
+                    "ssl_key_file": "Path to the client private key file"
                 }
             }
+        },
+        "error": {
+            "must_record_something": "Ten minste één van 'Statusveranderingen opnemen' of 'Gebeurtenissen opnemen' moet zijn ingeschakeld."
         }
     }
 }
