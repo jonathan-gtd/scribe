@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.0.1-beta.3] - 2026-03-08
+
+### Fixed (Performance)
+- **`states` View**: Implemented a `MATERIALIZED` CTE for the entities lookup. This optimization forces the PostgreSQL planner to use a Nested Loop join even on systems with slow storage (HDDs) or high `random_page_cost`. This ensures that TimescaleDB can use segment-by pruning during query execution, significantly improving performance for view-based queries.
+
+## [3.0.1-beta.1] - 2026-03-07
+
+### Fixed
+- **Query Performance**: Implemented `CROSS JOIN LATERAL` in the `states` view to improve chunk pruning by the PostgreSQL planner.
+- **Schema**: Removed redundant index on `states_raw` to favor a meta-id first index.
+
+
 ## [3.0.0] - 2026-03-05
 
 ### Changed (Breaking Changes)

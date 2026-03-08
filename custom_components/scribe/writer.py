@@ -528,13 +528,16 @@ class ScribeWriter:
             await conn.execute(f"DROP VIEW IF EXISTS {self.table_name_states} CASCADE;")
             await conn.execute(f"""
                 CREATE VIEW {self.table_name_states} AS
+                WITH drive AS MATERIALIZED (
+                    SELECT * FROM entities
+                )
                 SELECT
                     s.time,
                     e.entity_id,
                     s.state,
                     s.value,
                     s.attributes
-                FROM entities e
+                FROM drive e
                 CROSS JOIN LATERAL (
                     SELECT * FROM states_raw s 
                     WHERE s.metadata_id = e.id
