@@ -138,16 +138,17 @@ class ScribeCoordinatorSensor(CoordinatorEntity, SensorEntity):
 class ScribeSizeSensor(ScribeCoordinatorSensor):
     """Base class for sensors reporting raw bytes.
 
-    native_unit_of_measurement is fixed to BYTES so that Home Assistant
-    always receives a stable unit and can apply its own adaptive display
-    (SensorDeviceClass.DATA_SIZE triggers auto-scaling in the UI).
-    Changing the native unit dynamically causes HA to mis-convert values
-    when its stored preference no longer matches the reported unit.
+    native_unit_of_measurement is fixed to BYTES so HA always receives a
+    stable unit for correct conversion. suggested_unit_of_measurement is
+    fixed to MEBIBYTES so HA displays a human-readable value without
+    caching issues (changing native unit dynamically causes wrong conversions
+    when HA's stored preference no longer matches the reported unit).
     """
 
     _attr_device_class = SensorDeviceClass.DATA_SIZE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = UnitOfInformation.BYTES
+    _attr_suggested_unit_of_measurement = UnitOfInformation.MEBIBYTES
     _attr_suggested_display_precision = 2
 
     @property
@@ -163,14 +164,16 @@ class ScribeSizeSensor(ScribeCoordinatorSensor):
 
 class ScribeStatsTotalSizeSensor(ScribeSizeSensor):
     """Sensor for States total size."""
-    
+    _attr_suggested_unit_of_measurement = UnitOfInformation.GIBIBYTES
+
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry, "states_total_size", "States Total Size")
         self._attr_icon = "mdi:database"
 
 class ScribeStatsCompressedSizeSensor(ScribeSizeSensor):
     """Sensor for States compressed size."""
-    
+    _attr_suggested_unit_of_measurement = UnitOfInformation.GIBIBYTES
+
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry, "states_compressed_size", "States Compressed Size")
         self._attr_icon = "mdi:package-variant"
@@ -178,7 +181,8 @@ class ScribeStatsCompressedSizeSensor(ScribeSizeSensor):
 
 class ScribeStatsUncompressedSizeSensor(ScribeSizeSensor):
     """Sensor for States uncompressed size."""
-    
+    _attr_suggested_unit_of_measurement = UnitOfInformation.GIBIBYTES
+
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry, "states_uncompressed_size", "States Uncompressed Size")
         self._attr_icon = "mdi:package-variant-closed"
@@ -186,7 +190,8 @@ class ScribeStatsUncompressedSizeSensor(ScribeSizeSensor):
 
 class ScribeStatsOriginalSizeSensor(ScribeSizeSensor):
     """Sensor for States original size (before compression)."""
-    
+    _attr_suggested_unit_of_measurement = UnitOfInformation.GIBIBYTES
+
     def __init__(self, coordinator, entry):
         super().__init__(coordinator, entry, "states_before_compression_total_bytes", "States Original Size")
         self._attr_icon = "mdi:database-search"

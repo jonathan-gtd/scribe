@@ -23,14 +23,10 @@
     "options": {
         "step": {
             "init": {
-                "title": "Scribe Options",
+                "title": "Recording & Filtering",
                 "data": {
                     "record_states": "Record state changes",
                     "record_events": "Record events",
-                    "batch_size": "Batch size",
-                    "flush_interval": "Flush interval (seconds)",
-                    "max_queue_size": "Max queue size",
-                    "buffer_on_failure": "Buffer on database failure",
                     "include_domains": "Include domains",
                     "exclude_domains": "Exclude domains",
                     "include_entities": "Include entities",
@@ -42,17 +38,81 @@
                 "data_description": {
                     "record_states": "Write every state change to TimescaleDB",
                     "record_events": "Write Home Assistant events (automations, scripts…) to TimescaleDB",
-                    "batch_size": "Number of rows accumulated before a flush is triggered (default 500)",
-                    "flush_interval": "Maximum seconds between automatic flushes (default 5)",
-                    "max_queue_size": "Maximum pending writes before oldest are dropped (default 10000)",
-                    "buffer_on_failure": "Keep events in memory and retry when the database becomes available again",
-                    "include_domains": "Only record entities from these domains (e.g. sensor, light). Leave empty to include all.",
+                    "include_domains": "Only record entities from these domains. Leave empty to include all.",
                     "exclude_domains": "Never record entities from these domains",
                     "include_entities": "Only record these specific entities. Leave empty to include all.",
                     "exclude_entities": "Never record these specific entities",
                     "include_entity_globs": "Only record entities matching these patterns (e.g. sensor.temp_*)",
                     "exclude_entity_globs": "Never record entities matching these patterns",
                     "exclude_attributes": "Drop these attribute keys before writing (saves space)"
+                }
+            },
+            "performance": {
+                "title": "Performance",
+                "data": {
+                    "batch_size": "Batch size",
+                    "flush_interval": "Flush interval (seconds)",
+                    "max_queue_size": "Max queue size",
+                    "buffer_on_failure": "Buffer on database failure"
+                },
+                "data_description": {
+                    "batch_size": "Number of rows accumulated before a flush is triggered (default 500)",
+                    "flush_interval": "Maximum seconds between automatic flushes (default 5)",
+                    "max_queue_size": "Maximum pending writes before oldest are dropped (default 10000)",
+                    "buffer_on_failure": "Keep events in memory and retry when the database becomes available again"
+                }
+            },
+            "stats": {
+                "title": "Statistics Sensors",
+                "data": {
+                    "enable_stats_io": "Enable I/O statistics sensors",
+                    "enable_stats_chunk": "Enable chunk statistics sensors",
+                    "stats_chunk_interval": "Chunk stats refresh interval",
+                    "enable_stats_size": "Enable size statistics sensors",
+                    "stats_size_interval": "Size stats refresh interval"
+                },
+                "data_description": {
+                    "enable_stats_io": "Expose real-time write counters, buffer size and write duration as sensors",
+                    "enable_stats_chunk": "Expose per-table chunk counts (total / compressed / uncompressed) as sensors",
+                    "stats_chunk_interval": "How often (in minutes) chunk stats are refreshed from the database",
+                    "enable_stats_size": "Expose per-table sizes and compression ratios as sensors",
+                    "stats_size_interval": "How often (in minutes) size stats are refreshed from the database"
+                }
+            },
+            "metadata": {
+                "title": "Metadata Tables",
+                "data": {
+                    "enable_table_areas": "Sync areas table",
+                    "enable_table_devices": "Sync devices table",
+                    "enable_table_entities": "Sync entities table",
+                    "enable_table_integrations": "Sync integrations table",
+                    "enable_table_users": "Sync users table"
+                },
+                "data_description": {
+                    "enable_table_areas": "Keep a mirror of Home Assistant areas in TimescaleDB",
+                    "enable_table_devices": "Keep a mirror of Home Assistant devices in TimescaleDB",
+                    "enable_table_entities": "Keep a mirror of the entity registry in TimescaleDB",
+                    "enable_table_integrations": "Keep a mirror of config entries (integrations) in TimescaleDB",
+                    "enable_table_users": "Keep a mirror of Home Assistant users in TimescaleDB"
+                }
+            },
+            "advanced": {
+                "title": "Advanced (TimescaleDB & SSL)",
+                "data": {
+                    "chunk_time_interval": "Chunk time interval",
+                    "compress_after": "Compress after",
+                    "db_ssl": "Enable SSL",
+                    "ssl_root_cert": "SSL root certificate path",
+                    "ssl_cert_file": "SSL client certificate path",
+                    "ssl_key_file": "SSL client key path"
+                },
+                "data_description": {
+                    "chunk_time_interval": "TimescaleDB chunk interval (e.g. '7 days'). Affects new chunks only.",
+                    "compress_after": "Compress chunks older than this interval (e.g. '7 days'). Requires TimescaleDB compression.",
+                    "db_ssl": "Require an SSL/TLS connection to PostgreSQL",
+                    "ssl_root_cert": "Path to the CA certificate file (e.g. /ssl/ca.crt)",
+                    "ssl_cert_file": "Path to the client certificate file for mTLS",
+                    "ssl_key_file": "Path to the client private key file for mTLS"
                 }
             }
         },

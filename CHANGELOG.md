@@ -2,21 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
-## [3.1.0-beta.1] - 2026-03-08
+## [3.2.0] - 2026-03-08
 
 ### Added
-- **UI Configuration**: The integration options can now be fully configured from the Home Assistant UI (Batch size, Flush interval, Filters, etc.).
-- **Filtering**: Added support for entity globs (`include_entity_globs` and `exclude_entity_globs`).
-- **Security**: Added strict validation for custom table names to prevent SQL injection.
+- **UI Configuration**: The integration options can now be fully configured from the Home Assistant UI via organized steps (Recording, Performance, Stats, Metadata, Advanced).
+- **Filtering**: Added support for entity lookup and glob filtering (`include_entity_globs` and `exclude_entity_globs`).
+- **Security**: Strict validation for custom table names to prevent SQL injection.
+- **Improved Sensors**: Statistics sensors now grouped by category (I/O, Chunk, Size) with configurable refresh intervals.
 
 ### Fixed (Performance)
-- **`states` View**: Implemented a `MATERIALIZED` CTE for the entities lookup. This optimization forces the PostgreSQL planner to use a Nested Loop join regardless of storage costs, enabling **TimescaleDB Segment Pruning**.
-- **Sensors**: Restored stability of database size sensors by using Home Assistant's native DATA_SIZE scaling.
+- **`states` View**: Implemented a `MATERIALIZED` CTE for the entities lookup. This optimization ensures **TimescaleDB Segment Pruning** regardless of hardware type or PostgreSQL cost settings.
+- **Native Scaling**: Size sensors now use Home Assistant's native `DATA_SIZE` device class for consistent unit display.
 
 ### Changed
-- **Codebase**: Major refactor for better stability and error handling.
-- **SSL/TLS**: Improved certificate loading logic with clearer warnings for missing files.
-- **Translations**: Expanded and improved French localizations.
+- **Core Refactor**: Major codebase cleanup for better stability, error handling, and SSL/TLS reliability.
+- **Translations**: Complete French and English localizations for all UI options.
 
 
 ## [3.0.0] - 2026-03-05

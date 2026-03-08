@@ -23,14 +23,10 @@
     "options": {
         "step": {
             "init": {
-                "title": "Options Scribe",
+                "title": "Enregistrement & Filtrage",
                 "data": {
                     "record_states": "Enregistrer les changements d'état",
                     "record_events": "Enregistrer les événements",
-                    "batch_size": "Taille du lot",
-                    "flush_interval": "Intervalle d'envoi (secondes)",
-                    "max_queue_size": "Taille max de la file d'attente",
-                    "buffer_on_failure": "Mise en tampon en cas d'échec",
                     "include_domains": "Inclure les domaines",
                     "exclude_domains": "Exclure les domaines",
                     "include_entities": "Inclure les entités",
@@ -42,17 +38,81 @@
                 "data_description": {
                     "record_states": "Écrire chaque changement d'état dans TimescaleDB",
                     "record_events": "Écrire les événements Home Assistant (automations, scripts…) dans TimescaleDB",
-                    "batch_size": "Nombre de lignes accumulées avant un envoi forcé (défaut 500)",
-                    "flush_interval": "Nombre maximal de secondes entre deux envois automatiques (défaut 5)",
-                    "max_queue_size": "Nombre max d'écritures en attente avant suppression des plus anciennes (défaut 10000)",
-                    "buffer_on_failure": "Conserver les événements en mémoire et réessayer quand la base redevient disponible",
-                    "include_domains": "N'enregistrer que les entités de ces domaines (ex. sensor, light). Laisser vide pour tout inclure.",
+                    "include_domains": "N'enregistrer que les entités de ces domaines. Laisser vide pour tout inclure.",
                     "exclude_domains": "Ne jamais enregistrer les entités de ces domaines",
                     "include_entities": "N'enregistrer que ces entités spécifiques. Laisser vide pour tout inclure.",
                     "exclude_entities": "Ne jamais enregistrer ces entités spécifiques",
                     "include_entity_globs": "N'enregistrer que les entités correspondant à ces motifs (ex. sensor.temp_*)",
                     "exclude_entity_globs": "Ne jamais enregistrer les entités correspondant à ces motifs",
                     "exclude_attributes": "Supprimer ces clés d'attributs avant l'écriture (économise de l'espace)"
+                }
+            },
+            "performance": {
+                "title": "Performance",
+                "data": {
+                    "batch_size": "Taille du lot",
+                    "flush_interval": "Intervalle d'envoi (secondes)",
+                    "max_queue_size": "Taille max de la file d'attente",
+                    "buffer_on_failure": "Mise en tampon en cas d'échec"
+                },
+                "data_description": {
+                    "batch_size": "Nombre de lignes accumulées avant un envoi forcé (défaut 500)",
+                    "flush_interval": "Nombre maximal de secondes entre deux envois automatiques (défaut 5)",
+                    "max_queue_size": "Nombre max d'écritures en attente avant suppression des plus anciennes (défaut 10000)",
+                    "buffer_on_failure": "Conserver les événements en mémoire et réessayer quand la base redevient disponible"
+                }
+            },
+            "stats": {
+                "title": "Capteurs de statistiques",
+                "data": {
+                    "enable_stats_io": "Activer les capteurs de statistiques I/O",
+                    "enable_stats_chunk": "Activer les capteurs de statistiques de chunks",
+                    "stats_chunk_interval": "Intervalle de rafraîchissement des stats chunks",
+                    "enable_stats_size": "Activer les capteurs de taille",
+                    "stats_size_interval": "Intervalle de rafraîchissement des stats de taille"
+                },
+                "data_description": {
+                    "enable_stats_io": "Expose les compteurs d'écriture, la taille du tampon et la durée d'écriture comme capteurs",
+                    "enable_stats_chunk": "Expose le nombre de chunks par table (total / compressés / non compressés) comme capteurs",
+                    "stats_chunk_interval": "Fréquence (en minutes) de rafraîchissement des stats de chunks depuis la base",
+                    "enable_stats_size": "Expose les tailles par table et les ratios de compression comme capteurs",
+                    "stats_size_interval": "Fréquence (en minutes) de rafraîchissement des stats de taille depuis la base"
+                }
+            },
+            "metadata": {
+                "title": "Tables de métadonnées",
+                "data": {
+                    "enable_table_areas": "Synchroniser la table des zones",
+                    "enable_table_devices": "Synchroniser la table des appareils",
+                    "enable_table_entities": "Synchroniser la table des entités",
+                    "enable_table_integrations": "Synchroniser la table des intégrations",
+                    "enable_table_users": "Synchroniser la table des utilisateurs"
+                },
+                "data_description": {
+                    "enable_table_areas": "Maintenir un miroir des zones Home Assistant dans TimescaleDB",
+                    "enable_table_devices": "Maintenir un miroir des appareils Home Assistant dans TimescaleDB",
+                    "enable_table_entities": "Maintenir un miroir du registre d'entités dans TimescaleDB",
+                    "enable_table_integrations": "Maintenir un miroir des entrées de config (intégrations) dans TimescaleDB",
+                    "enable_table_users": "Maintenir un miroir des utilisateurs Home Assistant dans TimescaleDB"
+                }
+            },
+            "advanced": {
+                "title": "Avancé (TimescaleDB & SSL)",
+                "data": {
+                    "chunk_time_interval": "Intervalle de temps des chunks",
+                    "compress_after": "Compresser après",
+                    "db_ssl": "Activer SSL",
+                    "ssl_root_cert": "Chemin du certificat racine SSL",
+                    "ssl_cert_file": "Chemin du certificat client SSL",
+                    "ssl_key_file": "Chemin de la clé privée client SSL"
+                },
+                "data_description": {
+                    "chunk_time_interval": "Intervalle de chunks TimescaleDB (ex. '7 days'). Affecte les nouveaux chunks uniquement.",
+                    "compress_after": "Compresser les chunks plus anciens que cet intervalle (ex. '7 days'). Nécessite la compression TimescaleDB.",
+                    "db_ssl": "Exiger une connexion SSL/TLS vers PostgreSQL",
+                    "ssl_root_cert": "Chemin vers le fichier CA (ex. /ssl/ca.crt)",
+                    "ssl_cert_file": "Chemin vers le certificat client pour mTLS",
+                    "ssl_key_file": "Chemin vers la clé privée client pour mTLS"
                 }
             }
         },
