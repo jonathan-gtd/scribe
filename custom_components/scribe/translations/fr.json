@@ -2,28 +2,22 @@
     "config": {
         "step": {
             "user": {
-                "title": "Configurer Scribe",
-                "description": "Scribe stocke l'historique de votre Home Assistant dans TimescaleDB.\n\nPour plus d'informations, voir la [Documentation TimescaleDB](https://docs.timescale.com/).",
+                "title": "Connexion à TimescaleDB",
+                "description": "Entrez l'URL de connexion PostgreSQL de votre instance TimescaleDB.\n\nFormat : `postgresql://utilisateur:motdepasse@hôte:5432/base`\n\nLes options avancées (SSL, filtres, intervalles de chunks) sont disponibles après la configuration via **Configurer**.",
                 "data": {
-                    "db_host": "Hôte de la base de données",
-                    "db_port": "Port de la base de données",
-                    "db_user": "Utilisateur de la base de données",
-                    "db_password": "Mot de passe de la base de données",
-                    "db_name": "Nom de la base de données",
-                    "record_states": "Enregistrer les états (Historique des capteurs)",
-                    "record_events": "Enregistrer les événements (Déclencheurs d'automatisation, etc.)",
-                    "enable_statistics": "Activer les statistiques"
+                    "db_url": "URL de la base de données"
+                },
+                "data_description": {
+                    "db_url": "URL PostgreSQL complète, ex. postgresql://scribe:secret@192.168.1.10:5432/scribe"
                 }
             }
         },
         "error": {
-            "cannot_connect": "Échec de la connexion à la base de données. Vérifiez votre URL.",
-            "must_record_something": "Vous devez sélectionner au moins une option d'enregistrement (États ou Événements)."
+            "cannot_connect": "Impossible de se connecter à la base de données. Vérifiez l'URL et que PostgreSQL est accessible."
         },
         "abort": {
-            "already_configured": "Scribe est déjà configuré.",
-            "single_instance_allowed": "Une seule instance de Scribe est autorisée. Veuillez d'abord supprimer l'instance existante si vous souhaitez reconfigurer.",
-            "ui_configuration_disabled": "La configuration via l'UI est désactivée pour plus de stabilité. Veuillez configurer Scribe via configuration.yaml."
+            "already_configured": "Scribe est déjà configuré. Utilisez **Configurer** pour modifier les paramètres.",
+            "single_instance_allowed": "Une seule instance de Scribe est autorisée."
         }
     },
     "options": {
@@ -31,19 +25,39 @@
             "init": {
                 "title": "Options Scribe",
                 "data": {
-                    "chunk_time_interval": "Intervalle de découpage",
-                    "compress_after": "Compresser après",
-                    "batch_size": "Taille du lot (Événements)",
-                    "flush_interval": "Intervalle d'envoi (Secondes)",
-                    "record_states": "Enregistrer les états",
+                    "record_states": "Enregistrer les changements d'état",
                     "record_events": "Enregistrer les événements",
-                    "enable_statistics": "Activer les statistiques",
+                    "batch_size": "Taille du lot",
+                    "flush_interval": "Intervalle d'envoi (secondes)",
+                    "max_queue_size": "Taille max de la file d'attente",
+                    "buffer_on_failure": "Mise en tampon en cas d'échec",
                     "include_domains": "Inclure les domaines",
-                    "include_entities": "Inclure les entités",
                     "exclude_domains": "Exclure les domaines",
-                    "exclude_entities": "Exclure les entités"
+                    "include_entities": "Inclure les entités",
+                    "exclude_entities": "Exclure les entités",
+                    "include_entity_globs": "Inclure les entités par motif",
+                    "exclude_entity_globs": "Exclure les entités par motif",
+                    "exclude_attributes": "Exclure les attributs"
+                },
+                "data_description": {
+                    "record_states": "Écrire chaque changement d'état dans TimescaleDB",
+                    "record_events": "Écrire les événements Home Assistant (automations, scripts…) dans TimescaleDB",
+                    "batch_size": "Nombre de lignes accumulées avant un envoi forcé (défaut 500)",
+                    "flush_interval": "Nombre maximal de secondes entre deux envois automatiques (défaut 5)",
+                    "max_queue_size": "Nombre max d'écritures en attente avant suppression des plus anciennes (défaut 10000)",
+                    "buffer_on_failure": "Conserver les événements en mémoire et réessayer quand la base redevient disponible",
+                    "include_domains": "N'enregistrer que les entités de ces domaines (ex. sensor, light). Laisser vide pour tout inclure.",
+                    "exclude_domains": "Ne jamais enregistrer les entités de ces domaines",
+                    "include_entities": "N'enregistrer que ces entités spécifiques. Laisser vide pour tout inclure.",
+                    "exclude_entities": "Ne jamais enregistrer ces entités spécifiques",
+                    "include_entity_globs": "N'enregistrer que les entités correspondant à ces motifs (ex. sensor.temp_*)",
+                    "exclude_entity_globs": "Ne jamais enregistrer les entités correspondant à ces motifs",
+                    "exclude_attributes": "Supprimer ces clés d'attributs avant l'écriture (économise de l'espace)"
                 }
             }
+        },
+        "error": {
+            "must_record_something": "Au moins l'une des options 'Enregistrer les changements d'état' ou 'Enregistrer les événements' doit être activée."
         }
     }
 }

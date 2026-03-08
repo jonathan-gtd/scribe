@@ -26,8 +26,9 @@ async def writer(hass, mock_pool):
         ssl_root_cert="/tmp/root.crt",
         ssl_cert_file="/tmp/client.crt",
         ssl_key_file="/tmp/client.key",
-        engine=mock_pool
     )
+    writer._pool = mock_pool
+
     yield writer
     if writer._task:
         await writer.stop()

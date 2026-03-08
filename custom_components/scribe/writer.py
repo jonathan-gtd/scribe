@@ -54,20 +54,32 @@ def _create_ssl_context(ssl_root_cert=None, ssl_cert_file=None, ssl_key_file=Non
         _LOGGER.debug("Could not load system CA certificates: %s", e)
     
     # Load PostgreSQL client certificates
-    if ssl_cert_file and Path(ssl_cert_file).exists():
-        try:
-            _LOGGER.debug("Loading PostgreSQL client certificate from %s", ssl_cert_file)
-            ssl_context.load_cert_chain(ssl_cert_file, ssl_key_file)
-        except Exception as e:
-            _LOGGER.error("Could not load cert chain from %s: %s", ssl_cert_file, e)
-    
+    if ssl_cert_file:
+        if Path(ssl_cert_file).exists():
+            try:
+                _LOGGER.debug("Loading PostgreSQL client certificate from %s", ssl_cert_file)
+                ssl_context.load_cert_chain(ssl_cert_file, ssl_key_file)
+            except Exception as e:
+                _LOGGER.error("Could not load cert chain from %s: %s", ssl_cert_file, e)
+        else:
+            _LOGGER.warning(
+                "SSL cert file configured but not found: %s — connection will proceed without client certificate",
+                ssl_cert_file,
+            )
+
     # Load CA certificate for server verification
-    if ssl_root_cert and Path(ssl_root_cert).exists():
-        try:
-            _LOGGER.debug("Loading CA certificate from %s", ssl_root_cert)
-            ssl_context.load_verify_locations(ssl_root_cert)
-        except Exception as e:
-            _LOGGER.error("Could not load CA cert from %s: %s", ssl_root_cert, e)
+    if ssl_root_cert:
+        if Path(ssl_root_cert).exists():
+            try:
+                _LOGGER.debug("Loading CA certificate from %s", ssl_root_cert)
+                ssl_context.load_verify_locations(ssl_root_cert)
+            except Exception as e:
+                _LOGGER.error("Could not load CA cert from %s: %s", ssl_root_cert, e)
+        else:
+            _LOGGER.warning(
+                "SSL root cert configured but not found: %s — server certificate will not be verified",
+                ssl_root_cert,
+            )
     
     _LOGGER.debug("SSL context created successfully")
     return ssl_context
@@ -75,10 +87,26 @@ def _create_ssl_context(ssl_root_cert=None, ssl_cert_file=None, ssl_key_file=Non
 
 def _normalize_dsn(db_url: str) -> str:
     """Convert SQLAlchemy-style DSN to plain asyncpg DSN.
-    
+
     asyncpg uses postgresql:// (or postgres://), not postgresql+asyncpg://.
     """
     return db_url.replace("postgresql+asyncpg://", "postgresql://")
+
+
+def _validate_table_name(name: str) -> str:
+    """Validate that a table name contains only safe characters.
+
+    Table names are used in SQL f-strings and must be restricted to
+    alphanumeric characters and underscores to prevent SQL injection.
+
+    Raises ValueError if the name is invalid.
+    """
+    import re
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+        raise ValueError(
+            f"Invalid table name '{name}': only letters, digits, and underscores are allowed"
+        )
+    return name
 
 
 class ScribeWriter:
@@ -109,14 +137,11 @@ class ScribeWriter:
         ssl_root_cert: str = None,
         ssl_cert_file: str = None,
         ssl_key_file: str = None,
-        enable_areas: bool = True,
-        enable_devices: bool = True,
         enable_table_areas: bool = True,
         enable_table_devices: bool = True,
         enable_table_entities: bool = True,
         enable_table_integrations: bool = True,
         enable_table_users: bool = True,
-        engine: Any = None
     ):
         """Initialize the writer."""
         self.hass = hass
@@ -132,8 +157,8 @@ class ScribeWriter:
         self.flush_interval = flush_interval
         self.max_queue_size = max_queue_size
         self.buffer_on_failure = buffer_on_failure
-        self.table_name_states = table_name_states
-        self.table_name_events = table_name_events
+        self.table_name_states = _validate_table_name(table_name_states)
+        self.table_name_events = _validate_table_name(table_name_events)
         self.use_ssl = use_ssl
         self.ssl_root_cert = ssl_root_cert
         self.ssl_cert_file = ssl_cert_file
@@ -519,7 +544,7 @@ class ScribeWriter:
     async def _init_states_view(self, conn):
         """Create the backward-compatible states view, if the name isn't taken by a table."""
         try:
-            is_table = await conn.fetchval(f"SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = '{self.table_name_states}' AND table_type = 'BASE TABLE')")
+            is_table = await conn.fetchval("SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = $1 AND table_type = 'BASE TABLE')", self.table_name_states)
             if is_table:
                 _LOGGER.debug(f"'{self.table_name_states}' is currently a table. Skipping view creation until migration finishes.")
                 return

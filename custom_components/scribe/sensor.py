@@ -105,7 +105,7 @@ class ScribeSensor(SensorEntity):
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry.entry_id)},
             "name": "Scribe",
-            "manufacturer": "Jonathan Gatard",
+            "manufacturer": "Scribe",
         }
 
     @property
@@ -132,53 +132,30 @@ class ScribeCoordinatorSensor(CoordinatorEntity, SensorEntity):
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry.entry_id)},
             "name": "Scribe",
-            "manufacturer": "Jonathan Gatard",
+            "manufacturer": "Scribe",
         }
 
 class ScribeSizeSensor(ScribeCoordinatorSensor):
-    """Base class for sensors with adaptive size units."""
-    
+    """Base class for sensors reporting raw bytes.
+
+    native_unit_of_measurement is fixed to BYTES so that Home Assistant
+    always receives a stable unit and can apply its own adaptive display
+    (SensorDeviceClass.DATA_SIZE triggers auto-scaling in the UI).
+    Changing the native unit dynamically causes HA to mis-convert values
+    when its stored preference no longer matches the reported unit.
+    """
+
     _attr_device_class = SensorDeviceClass.DATA_SIZE
     _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = UnitOfInformation.BYTES
+    _attr_suggested_display_precision = 2
 
-    def _get_raw_value(self):
-        """Get raw bytes from coordinator."""
+    @property
+    def native_value(self):
         try:
             return self.coordinator.data.get(self._key, 0) or 0
         except Exception:
             return 0
-
-    @property
-    def native_value(self):
-        bytes_val = self._get_raw_value()
-        if bytes_val < 1048576: # < 1 MiB
-            return round(bytes_val / 1024, 1)
-        elif bytes_val < 1073741824: # < 1 GiB
-            return round(bytes_val / 1048576, 1)
-        else: # >= 1 GiB
-            return round(bytes_val / 1073741824, 2)
-
-    @property
-    def native_unit_of_measurement(self):
-        bytes_val = self._get_raw_value()
-        if bytes_val < 1048576:
-            return UnitOfInformation.KILOBYTES
-        elif bytes_val < 1073741824:
-            return UnitOfInformation.MEGABYTES
-        else:
-            return UnitOfInformation.GIGABYTES
-
-    @property
-    def suggested_display_precision(self):
-        bytes_val = self._get_raw_value()
-        if bytes_val < 1073741824:
-            return 1
-        return 2
-
-    @property
-    def suggested_unit_of_measurement(self):
-        """Suggest the unit of measurement for display."""
-        return self.native_unit_of_measurement
 
 # =============================================
 # STATES TABLE SENSORS

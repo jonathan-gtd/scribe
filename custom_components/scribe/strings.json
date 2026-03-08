@@ -2,25 +2,22 @@
     "config": {
         "step": {
             "user": {
-                "title": "Configure Scribe",
-                "description": "Scribe stores your Home Assistant history in TimescaleDB.\n\nFor more information, see the [TimescaleDB Documentation](https://docs.timescale.com/).",
+                "title": "Connect to TimescaleDB",
+                "description": "Enter the PostgreSQL connection URL for your TimescaleDB instance.\n\nFormat: `postgresql://user:password@host:5432/dbname`\n\nAdditional options (SSL, filtering, chunk intervals) are available after setup via **Configure**.",
                 "data": {
-                    "db_url": "Database URL (postgresql://user:pass@host/db)",
-                    "chunk_time_interval": "Chunk Time Interval (e.g., 30 days)",
-                    "compress_after": "Compress After (e.g., 7 days)",
-                    "record_states": "Record States (Sensor History)",
-                    "record_events": "Record Events (Automation Triggers, etc.)"
+                    "db_url": "Database URL"
+                },
+                "data_description": {
+                    "db_url": "Full PostgreSQL connection URL, e.g. postgresql://scribe:secret@192.168.1.10:5432/scribe"
                 }
             }
         },
         "error": {
-            "cannot_connect": "Failed to connect to the database. Check your URL.",
-            "must_record_something": "You must select at least one recording option (States or Events)."
+            "cannot_connect": "Could not connect to the database. Check the URL and make sure PostgreSQL is reachable."
         },
         "abort": {
-            "already_configured": "Scribe is already configured.",
-            "single_instance_allowed": "Only one instance of Scribe is allowed. Please remove the existing one first if you want to reconfigure.",
-            "ui_configuration_disabled": "UI configuration is currently disabled to ensure stability. Please configure Scribe via configuration.yaml."
+            "already_configured": "Scribe is already configured. Use **Configure** to change settings.",
+            "single_instance_allowed": "Only one Scribe instance is allowed."
         }
     },
     "options": {
@@ -28,18 +25,39 @@
             "init": {
                 "title": "Scribe Options",
                 "data": {
-                    "chunk_time_interval": "Chunk Time Interval",
-                    "compress_after": "Compress After",
-                    "batch_size": "Batch Size (Events)",
-                    "flush_interval": "Flush Interval (Seconds)",
-                    "record_states": "Record States",
-                    "record_events": "Record Events",
-                    "include_domains": "Include Domains",
-                    "include_entities": "Include Entities",
-                    "exclude_domains": "Exclude Domains",
-                    "exclude_entities": "Exclude Entities"
+                    "record_states": "Record state changes",
+                    "record_events": "Record events",
+                    "batch_size": "Batch size",
+                    "flush_interval": "Flush interval (seconds)",
+                    "max_queue_size": "Max queue size",
+                    "buffer_on_failure": "Buffer on database failure",
+                    "include_domains": "Include domains",
+                    "exclude_domains": "Exclude domains",
+                    "include_entities": "Include entities",
+                    "exclude_entities": "Exclude entities",
+                    "include_entity_globs": "Include entity globs",
+                    "exclude_entity_globs": "Exclude entity globs",
+                    "exclude_attributes": "Exclude attributes"
+                },
+                "data_description": {
+                    "record_states": "Write every state change to TimescaleDB",
+                    "record_events": "Write Home Assistant events (automations, scripts…) to TimescaleDB",
+                    "batch_size": "Number of rows accumulated before a flush is triggered (default 500)",
+                    "flush_interval": "Maximum seconds between automatic flushes (default 5)",
+                    "max_queue_size": "Maximum pending writes before oldest are dropped (default 10000)",
+                    "buffer_on_failure": "Keep events in memory and retry when the database becomes available again",
+                    "include_domains": "Only record entities from these domains (e.g. sensor, light). Leave empty to include all.",
+                    "exclude_domains": "Never record entities from these domains",
+                    "include_entities": "Only record these specific entities. Leave empty to include all.",
+                    "exclude_entities": "Never record these specific entities",
+                    "include_entity_globs": "Only record entities matching these patterns (e.g. sensor.temp_*)",
+                    "exclude_entity_globs": "Never record entities matching these patterns",
+                    "exclude_attributes": "Drop these attribute keys before writing (saves space)"
                 }
             }
+        },
+        "error": {
+            "must_record_something": "At least one of 'Record state changes' or 'Record events' must be enabled."
         }
     }
 }

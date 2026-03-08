@@ -155,7 +155,7 @@ async def _convert_to_hypertable(pool: asyncpg.Pool, chunk_time_interval: str = 
                         if_not_exists => TRUE
                     )
                 """)
-                _LOGGER.debug("✅ states_raw: Converted to hypertable ({chunk_time_interval} chunks)")
+                _LOGGER.debug(f"✅ states_raw: Converted to hypertable ({chunk_time_interval} chunks)")
 
                 # Add compression policy
                 _LOGGER.debug(f"🗜️ states_raw: Adding compression policy (compress after {compress_after})...")
@@ -177,6 +177,7 @@ async def _convert_to_hypertable(pool: asyncpg.Pool, chunk_time_interval: str = 
     except Exception as e:
         _LOGGER.warning(f"⚠️ states_raw: Could not convert to hypertable: {e}")
         _LOGGER.info("   (TimescaleDB extension may not be available)")
+        return False
 
 
 async def _migrate_events_pk(pool: asyncpg.Pool):
@@ -229,6 +230,7 @@ async def _migrate_events_pk(pool: asyncpg.Pool):
     except Exception as e:
         _LOGGER.error(f"❌ events migration failed: {e}")
         # We don't raise here to avoid blocking other migrations if this one fails
+        return False
 
 
 async def migrate_entities_table(conn):

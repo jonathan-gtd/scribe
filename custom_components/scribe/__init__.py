@@ -109,7 +109,6 @@ CONFIG_SCHEMA = vol.Schema(
                 vol.Optional(CONF_EXCLUDE_DOMAINS, default=[]): vol.All(cv.ensure_list, [cv.string]),
                 vol.Optional(CONF_EXCLUDE_ENTITIES, default=[]): vol.All(cv.ensure_list, [cv.entity_id]),
                 vol.Optional(CONF_EXCLUDE_ENTITY_GLOBS, default=[]): vol.All(cv.ensure_list, [cv.string]),
-                vol.Optional(CONF_EXCLUDE_ENTITIES, default=[]): vol.All(cv.ensure_list, [cv.entity_id]),
                 vol.Optional(CONF_EXCLUDE_ATTRIBUTES, default=[]): vol.All(cv.ensure_list, [cv.string]),
                 vol.Optional(CONF_ENABLE_AREAS, default=DEFAULT_ENABLE_AREAS): cv.boolean,
                 vol.Optional(CONF_ENABLE_DEVICES, default=DEFAULT_ENABLE_DEVICES): cv.boolean,

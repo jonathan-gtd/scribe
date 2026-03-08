@@ -2,23 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
-## [3.0.1-beta.3] - 2026-03-08
+## [3.1.0-beta.1] - 2026-03-08
+
+### Added
+- **UI Configuration**: The integration options can now be fully configured from the Home Assistant UI (Batch size, Flush interval, Filters, etc.).
+- **Filtering**: Added support for entity globs (`include_entity_globs` and `exclude_entity_globs`).
+- **Security**: Added strict validation for custom table names to prevent SQL injection.
 
 ### Fixed (Performance)
-- **`states` View**: Implemented a `MATERIALIZED` CTE for the entities lookup. This optimization forces the PostgreSQL planner to use a Nested Loop join even on systems with slow storage (HDDs) or high `random_page_cost`. This ensures that TimescaleDB can use segment-by pruning during query execution, significantly improving performance for view-based queries.
+- **`states` View**: Implemented a `MATERIALIZED` CTE for the entities lookup. This optimization forces the PostgreSQL planner to use a Nested Loop join regardless of storage costs, enabling **TimescaleDB Segment Pruning**.
+- **Sensors**: Restored stability of database size sensors by using Home Assistant's native DATA_SIZE scaling.
 
-## [3.0.1-beta.1] - 2026-03-07
-
-### Fixed
-- **Query Performance**: Implemented `CROSS JOIN LATERAL` in the `states` view to improve chunk pruning by the PostgreSQL planner.
-- **Schema**: Removed redundant index on `states_raw` to favor a meta-id first index.
+### Changed
+- **Codebase**: Major refactor for better stability and error handling.
+- **SSL/TLS**: Improved certificate loading logic with clearer warnings for missing files.
+- **Translations**: Expanded and improved French localizations.
 
 
 ## [3.0.0] - 2026-03-05
 
 ### Changed (Breaking Changes)
 - **Database Schema**: Major database schema migration. The integration now uses a new `states_raw` underlying table with optimized primary and foreign keys for hypertable chunks. Legacy data from `states_legacy` is migrated in the background to prevent Home Assistant startup timeouts. 
-- **Dependencies**: Added explicit requirement for `greenlet>=3.3.2` to support newer Python/Home Assistant versions during async DB operations.
+- **Dependencies**: Removed dependency on `greenlet` by switching from SQLAlchemy to `asyncpg` directly. This restores compatibility with Python 3.14 and Alpine Linux (Home Assistant OS).
 
 ## [2.12.7] - 2026-01-11
 

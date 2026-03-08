@@ -49,7 +49,7 @@ class ScribeConnectionBinarySensor(BinarySensorEntity):
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry.entry_id)},
             "name": "Scribe",
-            "manufacturer": "Jonathan Gatard",
+            "manufacturer": "Scribe",
         }
         self.entity_description = BinarySensorEntityDescription(
             key="connected",
