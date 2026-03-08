@@ -1,7 +1,7 @@
 > [!WARNING]
-> # ⚠️ v3.0.0 Database Schema Migration
+> # ⚠️ v3.x.x Database Schema Migration
 > 
-> **Version 3.0.0 introduces a major database schema optimization (`states_raw` table).**
+> **Version 3.x.x introduces a major database schema optimization (`states_raw` table).**
 > 
 > *The automated background migration ran perfectly on my own production setup without any issues.*
 > **However, it is strongly recommended to perform a database backup before updating.**
