@@ -373,6 +373,23 @@ You can configure SSL certificates for the database connection. This is useful i
 - Check update intervals aren't too long
 - View Home Assistant logs for coordinator errors
 
+### Performance Tuning (PostgreSQL)
+
+If the `states` view is slow (several seconds per query), it is likely due to the PostgreSQL query planner choosing a **Hash Join** instead of a **Nested Loop**, which prevents TimescaleDB from pruning chunks effectively.
+
+The most common cause is a high `random_page_cost` (the default is `4.0`, optimized for HDDs). If you are using modern storage (SSD, NVMe) or have a well-cached database, you should reduce this value:
+
+```sql
+-- Check current value
+SHOW random_page_cost;
+
+-- Set to a lower value (usually 1.1)
+ALTER SYSTEM SET random_page_cost = 1.1;
+SELECT pg_reload_conf();
+```
+
+Reducing this value encourages the planner to use index-based joins (Nested Loops), which are essential for Scribe's performance with large datasets.
+
 ### Still having issues?
 Please [open an issue](https://github.com/jonathan-gtd/scribe/issues) on GitHub with your logs and configuration. I would be happy to help!
 
