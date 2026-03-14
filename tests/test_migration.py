@@ -89,3 +89,63 @@ async def test_migrate_events_pk_adds_column(mock_pool, mock_db_connection):
     
     execute_calls = [str(c) for c in mock_db_connection.execute.mock_calls]
     assert any("ADD COLUMN id BIGSERIAL PRIMARY KEY" in s for s in execute_calls)
+
+@pytest.mark.asyncio
+async def test_migrate_states_raw_disables_and_reenables_compression(mock_pool, mock_db_connection):
+    """Test that compression is disabled before adding constraints and re-enabled after."""
+    mock_db_connection.fetchrow.side_effect = [
+        None,  # PK check
+        {"compression_enabled": True},  # compression check: enabled
+    ]
+    mock_db_connection.fetchval.return_value = 0  # no duplicates
+    mock_db_connection.execute.return_value = "OK"
+    
+    await migration._migrate_states_raw_constraints(mock_pool)
+    
+    execute_calls = [str(c) for c in mock_db_connection.execute.mock_calls]
+    
+    # Verify compression was disabled
+    assert any("timescaledb.compress = false" in s for s in execute_calls)
+    assert any("remove_compression_policy" in s for s in execute_calls)
+    
+    # Verify constraints were added
+    assert any("ADD PRIMARY KEY" in s for s in execute_calls)
+    assert any("ADD CONSTRAINT fk_states_raw_entity" in s for s in execute_calls)
+    
+    # Verify compression was re-enabled
+    assert any("timescaledb.compress," in s for s in execute_calls)
+    assert any("add_compression_policy" in s for s in execute_calls)
+
+@pytest.mark.asyncio
+async def test_migrate_states_raw_enables_compression_even_if_not_previously_on(mock_pool, mock_db_connection):
+    """Test that compression is always enabled after constraints, even if it wasn't on before."""
+    mock_db_connection.fetchrow.side_effect = [
+        None,  # PK check
+        {"compression_enabled": False},  # hypertable exists but compression was off
+    ]
+    mock_db_connection.fetchval.return_value = 0  # no duplicates
+    mock_db_connection.execute.return_value = "OK"
+    
+    await migration._migrate_states_raw_constraints(mock_pool)
+    
+    execute_calls = [str(c) for c in mock_db_connection.execute.mock_calls]
+    
+    # Verify compression was NOT disabled (it wasn't on)
+    assert not any("timescaledb.compress = false" in s for s in execute_calls)
+    
+    # But compression should still be enabled at the end
+    assert any("timescaledb.compress," in s for s in execute_calls)
+    assert any("add_compression_policy" in s for s in execute_calls)
+
+@pytest.mark.asyncio
+async def test_migrate_states_data_drops_legacy_cascade(mock_pool, mock_db_connection):
+    """Test that states_legacy is dropped with CASCADE."""
+    # 1. Check legacy exists -> True
+    # 2. MIN/MAX time query -> None (empty table)
+    mock_db_connection.fetchval.return_value = True  # legacy exists
+    mock_db_connection.fetchrow.return_value = (None, None)  # empty table
+    
+    await migration.migrate_states_data(mock_pool)
+    
+    execute_calls = [str(c) for c in mock_db_connection.execute.mock_calls]
+    assert any("DROP TABLE states_legacy CASCADE" in s for s in execute_calls)

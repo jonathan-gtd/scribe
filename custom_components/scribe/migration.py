@@ -64,6 +64,7 @@ async def _migrate_states_raw_constraints(pool: asyncpg.Pool, chunk_time_interva
     """
     Add PRIMARY KEY and FOREIGN KEY constraints to states_raw.
     Idempotent: if constraints already exist, migration is skipped.
+    Handles compressed hypertables by temporarily disabling compression.
     """
     try:
         async with pool.acquire() as conn:
@@ -78,6 +79,23 @@ async def _migrate_states_raw_constraints(pool: asyncpg.Pool, chunk_time_interva
                 if pk_exists:
                     _LOGGER.debug("✅ states_raw: PK already exists, skipping")
                     return False
+
+                # Check if this is a hypertable and disable compression if needed
+                is_hypertable = False
+                try:
+                    compression_row = await conn.fetchrow("""
+                        SELECT compression_enabled FROM timescaledb_information.hypertables
+                        WHERE hypertable_name = 'states_raw'
+                    """)
+                    if compression_row:
+                        is_hypertable = True
+                        if compression_row['compression_enabled']:
+                            _LOGGER.info("🗜️ states_raw: Temporarily disabling compression for constraint migration...")
+                            await conn.execute("SELECT remove_compression_policy('states_raw', if_exists => true)")
+                            await conn.execute("ALTER TABLE states_raw SET (timescaledb.compress = false)")
+                except Exception:
+                    # TimescaleDB not available or not a hypertable – proceed normally
+                    pass
 
                 _LOGGER.info("📊 states_raw: Checking for duplicate rows...")
 
@@ -127,6 +145,19 @@ async def _migrate_states_raw_constraints(pool: asyncpg.Pool, chunk_time_interva
                     REFERENCES entities(id)
                 """)
                 _LOGGER.debug("✅ states_raw: FOREIGN KEY added")
+
+                # Always enable compression on hypertables after constraints are added
+                if is_hypertable:
+                    _LOGGER.info("🗜️ states_raw: Enabling compression...")
+                    await conn.execute("""
+                        ALTER TABLE states_raw SET (
+                            timescaledb.compress,
+                            timescaledb.compress_segmentby = 'metadata_id'
+                        )
+                    """)
+                    await conn.execute(f"SELECT add_compression_policy('states_raw', INTERVAL '{compress_after}')")
+                    _LOGGER.debug(f"✅ states_raw: Compression re-enabled (after {compress_after})")
+
                 return True
 
     except Exception as e:
@@ -340,7 +371,7 @@ async def migrate_states_data(pool: asyncpg.Pool):
         async with pool.acquire() as conn:
             async with conn.transaction():
                 _LOGGER.info("Dropping legacy states table...")
-                await conn.execute("DROP TABLE states_legacy")
+                await conn.execute("DROP TABLE states_legacy CASCADE")
 
         _LOGGER.debug("✅ Data migration completed successfully!")
         return True
