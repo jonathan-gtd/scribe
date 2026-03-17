@@ -181,7 +181,8 @@ async def test_async_setup_entry_statistics(hass):
             entry.entry_id: {
                 "writer": writer, 
                 "chunk_coordinator": chunk_coordinator,
-                "size_coordinator": size_coordinator
+                "size_coordinator": size_coordinator,
+                "enable_stats_io": True,
             }
         }
     }
