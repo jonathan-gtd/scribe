@@ -22,7 +22,6 @@ from homeassistant.helpers.update_coordinator import (
 
 from .const import (
     DOMAIN, 
-    CONF_ENABLE_STATS_IO,
     DEFAULT_ENABLE_STATS_IO,
 )
 
