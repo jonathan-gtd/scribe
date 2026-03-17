@@ -153,56 +153,72 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     options = entry.options
 
-    # Advanced Config (YAML Only)
-    # Some settings are only available via YAML to keep the UI simple.
+    # Advanced Config (YAML Only / Priority Overrides)
+    # Some settings are available via YAML to allow power users to override UI settings.
     yaml_config = hass.data[DOMAIN].get("yaml_config", {})
-    chunk_interval = yaml_config.get(CONF_CHUNK_TIME_INTERVAL, DEFAULT_CHUNK_TIME_INTERVAL)
-    compress_after = yaml_config.get(CONF_COMPRESS_AFTER, DEFAULT_COMPRESS_AFTER)
     
-    # Get DB Config
-    # Supports both legacy single URL and new individual fields (legacy support removed for simplicity in internal logic)
+    # Helper to resolve config: YAML > Options > Config Entry > Default
+    def get_config(key, default):
+        # 1. Check YAML (Priority)
+        if key in yaml_config:
+            return yaml_config[key]
+        # 2. Check Entry Options (UI-level changes)
+        if key in options:
+            return options[key]
+        # 3. Check Entry Data (Initial setup)
+        if key in config:
+            return config[key]
+        # 4. Fallback
+        return default
+
+    # Get DB URL (special case, usually in config or reconstructed)
     if CONF_DB_URL in config:
         db_url = config[CONF_DB_URL]
+    elif CONF_DB_URL in yaml_config:
+        db_url = yaml_config[CONF_DB_URL]
     else:
-        # Fallback for old configs that might still have individual fields
-        # We construct the URL here
-        db_user = config.get("db_user")
-        db_pass = config.get("db_password")
-        db_host = config.get("db_host")
-        db_port = config.get("db_port")
-        db_name = config.get("db_name")
+        # Fallback for old configs
+        db_user = config.get("db_user") or yaml_config.get("db_user")
+        db_pass = config.get("db_password") or yaml_config.get("db_password")
+        db_host = config.get("db_host") or yaml_config.get("db_host")
+        db_port = config.get("db_port") or yaml_config.get("db_port")
+        db_name = config.get("db_name") or yaml_config.get("db_name")
         if db_user and db_host:
              db_url = f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
         else:
             _LOGGER.error("Invalid configuration: Missing DB URL or connection details")
             return False
 
-    # YAML Only Settings
-    # max_queue_size = yaml_config.get(CONF_MAX_QUEUE_SIZE, DEFAULT_MAX_QUEUE_SIZE)
-
-    # Helper to get config from Options > Config Entry > YAML
-    def get_config_list(key):
-        val = options.get(key)
-        if val is None:
-            val = config.get(key)
-        if val is None:
-            val = yaml_config.get(key, [])
-        return val
-
-    # Sets up the include/exclude logic for domains and entities
-    include_domains = get_config_list(CONF_INCLUDE_DOMAINS)
-    include_entities = get_config_list(CONF_INCLUDE_ENTITIES)
-    include_entity_globs = get_config_list(CONF_INCLUDE_ENTITY_GLOBS)
-    exclude_domains = get_config_list(CONF_EXCLUDE_DOMAINS)
-    exclude_entities = get_config_list(CONF_EXCLUDE_ENTITIES)
-    exclude_entity_globs = get_config_list(CONF_EXCLUDE_ENTITY_GLOBS)
+    # Resolve all parameters
+    chunk_interval = get_config(CONF_CHUNK_TIME_INTERVAL, DEFAULT_CHUNK_TIME_INTERVAL)
+    compress_after = get_config(CONF_COMPRESS_AFTER, DEFAULT_COMPRESS_AFTER)
+    record_states = get_config(CONF_RECORD_STATES, DEFAULT_RECORD_STATES)
+    record_events = get_config(CONF_RECORD_EVENTS, DEFAULT_RECORD_EVENTS)
+    batch_size = int(get_config(CONF_BATCH_SIZE, DEFAULT_BATCH_SIZE))
+    flush_interval = int(get_config(CONF_FLUSH_INTERVAL, DEFAULT_FLUSH_INTERVAL))
+    max_queue_size = int(get_config(CONF_MAX_QUEUE_SIZE, DEFAULT_MAX_QUEUE_SIZE))
+    buffer_on_failure = get_config(CONF_BUFFER_ON_FAILURE, DEFAULT_BUFFER_ON_FAILURE)
     
-    exclude_attributes = set(options.get(CONF_EXCLUDE_ATTRIBUTES, []))
+    # Statistics Flags (This was the issue being reported)
+    enable_stats_io = get_config(CONF_ENABLE_STATS_IO, DEFAULT_ENABLE_STATS_IO)
+    enable_stats_chunk = get_config(CONF_ENABLE_STATS_CHUNK, DEFAULT_ENABLE_STATS_CHUNK)
+    enable_stats_size = get_config(CONF_ENABLE_STATS_SIZE, DEFAULT_ENABLE_STATS_SIZE)
     
-    # Merge with YAML exclude attributes if present
-    if CONF_EXCLUDE_ATTRIBUTES in yaml_config:
-        exclude_attributes.update(yaml_config[CONF_EXCLUDE_ATTRIBUTES])
+    # Store flags in hass.data for platform setup (e.g. sensor.py)
+    hass.data[DOMAIN][entry.entry_id] = {
+        "enable_stats_io": enable_stats_io,
+    }
 
+    # Filtering Logic
+    include_domains = get_config(CONF_INCLUDE_DOMAINS, [])
+    include_entities = get_config(CONF_INCLUDE_ENTITIES, [])
+    include_entity_globs = get_config(CONF_INCLUDE_ENTITY_GLOBS, [])
+    exclude_domains = get_config(CONF_EXCLUDE_DOMAINS, [])
+    exclude_entities = get_config(CONF_EXCLUDE_ENTITIES, [])
+    exclude_entity_globs = get_config(CONF_EXCLUDE_ENTITY_GLOBS, [])
+    
+    exclude_attributes = set(get_config(CONF_EXCLUDE_ATTRIBUTES, []))
+    
     entity_filter = generate_filter(
         include_domains,
         include_entities,
@@ -211,23 +227,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         include_entity_globs,
         exclude_entity_globs,
     )
-
-    # Determine record_states and record_events for handle_event
-    # Prioritizes Options Flow > Config Entry > Default
-    record_states = options.get(CONF_RECORD_STATES, config.get(CONF_RECORD_STATES, DEFAULT_RECORD_STATES))
-    record_events = options.get(CONF_RECORD_EVENTS, config.get(CONF_RECORD_EVENTS, DEFAULT_RECORD_EVENTS))
     
-    # SSL configuration (from YAML only)
-    db_ssl = yaml_config.get(CONF_DB_SSL, DEFAULT_DB_SSL)
-    
-    # SSL Paths (from Config Entry or YAML)
-    ssl_root_cert = config.get(CONF_SSL_ROOT_CERT) or yaml_config.get(CONF_SSL_ROOT_CERT)
-    ssl_cert_file = config.get(CONF_SSL_CERT_FILE) or yaml_config.get(CONF_SSL_CERT_FILE)
-    ssl_key_file = config.get(CONF_SSL_KEY_FILE) or yaml_config.get(CONF_SSL_KEY_FILE)
+    # SSL configuration
+    db_ssl = get_config(CONF_DB_SSL, DEFAULT_DB_SSL)
+    ssl_root_cert = get_config(CONF_SSL_ROOT_CERT, None)
+    ssl_cert_file = get_config(CONF_SSL_CERT_FILE, None)
+    ssl_key_file = get_config(CONF_SSL_KEY_FILE, None)
 
     try:
         # Initialize Writer
-        # The ScribeWriter runs in a separate thread to handle DB I/O
         writer = ScribeWriter(
             hass=hass,
             db_url=db_url,
@@ -235,21 +243,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             compress_after=compress_after,
             record_states=record_states,
             record_events=record_events,
-            batch_size=int(options.get(CONF_BATCH_SIZE, config.get(CONF_BATCH_SIZE, DEFAULT_BATCH_SIZE))),
-            flush_interval=int(options.get(CONF_FLUSH_INTERVAL, config.get(CONF_FLUSH_INTERVAL, DEFAULT_FLUSH_INTERVAL))),
-            max_queue_size=int(options.get(CONF_MAX_QUEUE_SIZE, config.get(CONF_MAX_QUEUE_SIZE, DEFAULT_MAX_QUEUE_SIZE))),
-            buffer_on_failure=options.get(CONF_BUFFER_ON_FAILURE, config.get(CONF_BUFFER_ON_FAILURE, DEFAULT_BUFFER_ON_FAILURE)),
+            batch_size=batch_size,
+            flush_interval=flush_interval,
+            max_queue_size=max_queue_size,
+            buffer_on_failure=buffer_on_failure,
             table_name_states=DEFAULT_TABLE_NAME_STATES,
             table_name_events=DEFAULT_TABLE_NAME_EVENTS,
             use_ssl=db_ssl,
             ssl_root_cert=ssl_root_cert,
             ssl_cert_file=ssl_cert_file,
             ssl_key_file=ssl_key_file,
-            enable_table_areas=yaml_config.get(CONF_ENABLE_AREAS, DEFAULT_ENABLE_AREAS),
-            enable_table_devices=yaml_config.get(CONF_ENABLE_DEVICES, DEFAULT_ENABLE_DEVICES),
-            enable_table_entities=yaml_config.get(CONF_ENABLE_ENTITIES, DEFAULT_ENABLE_ENTITIES),
-            enable_table_integrations=yaml_config.get(CONF_ENABLE_INTEGRATIONS, DEFAULT_ENABLE_INTEGRATIONS),
-            enable_table_users=yaml_config.get(CONF_ENABLE_USERS, DEFAULT_ENABLE_USERS),
+            enable_table_areas=get_config(CONF_ENABLE_AREAS, DEFAULT_ENABLE_AREAS),
+            enable_table_devices=get_config(CONF_ENABLE_DEVICES, DEFAULT_ENABLE_DEVICES),
+            enable_table_entities=get_config(CONF_ENABLE_ENTITIES, DEFAULT_ENABLE_ENTITIES),
+            enable_table_integrations=get_config(CONF_ENABLE_INTEGRATIONS, DEFAULT_ENABLE_INTEGRATIONS),
+            enable_table_users=get_config(CONF_ENABLE_USERS, DEFAULT_ENABLE_USERS),
         )
         
         # Start the writer task (async)
@@ -389,13 +397,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         chunk_coordinator = None
         size_coordinator = None
         
-        # Check granular settings
-        enable_stats_chunk = options.get(CONF_ENABLE_STATS_CHUNK, config.get(CONF_ENABLE_STATS_CHUNK, DEFAULT_ENABLE_STATS_CHUNK))
-        enable_stats_size = options.get(CONF_ENABLE_STATS_SIZE, config.get(CONF_ENABLE_STATS_SIZE, DEFAULT_ENABLE_STATS_SIZE))
-        
+        # Check granular settings (resolved above)
         if enable_stats_chunk:
             try:
-                chunk_interval_min = options.get(CONF_STATS_CHUNK_INTERVAL, config.get(CONF_STATS_CHUNK_INTERVAL, DEFAULT_STATS_CHUNK_INTERVAL))
+                chunk_interval_min = int(get_config(CONF_STATS_CHUNK_INTERVAL, DEFAULT_STATS_CHUNK_INTERVAL))
                 chunk_coordinator = ScribeDataUpdateCoordinator(
                     hass, 
                     writer, 
@@ -407,7 +412,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         
         if enable_stats_size:
             try:
-                size_interval_min = options.get(CONF_STATS_SIZE_INTERVAL, config.get(CONF_STATS_SIZE_INTERVAL, DEFAULT_STATS_SIZE_INTERVAL))
+                size_interval_min = int(get_config(CONF_STATS_SIZE_INTERVAL, DEFAULT_STATS_SIZE_INTERVAL))
                 size_coordinator = ScribeDataUpdateCoordinator(
                     hass, 
                     writer, 
@@ -417,12 +422,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             except Exception as e:
                 _LOGGER.error(f"Failed to setup size coordinator: {e}", exc_info=True)
 
-        hass.data.setdefault(DOMAIN, {})
-        hass.data[DOMAIN][entry.entry_id] = {
+        # Finalize hass.data
+        hass.data[DOMAIN][entry.entry_id].update({
             "writer": writer,
             "chunk_coordinator": chunk_coordinator,
             "size_coordinator": size_coordinator,
-        }
+        })
 
         # Launch background metadata sync and coordinator refreshes
         hass.async_create_task(_async_late_setup())

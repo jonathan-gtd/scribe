@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.2.3] - 2026-03-17
+
+### Fixed
+- **YAML Configuration Priority**: All configuration options defined in `configuration.yaml` now correctly take priority over settings configured via the Home Assistant UI.
+- **Statistics Sensors**: Fixed an issue where `enable_stats_io`, `enable_stats_chunk`, and `enable_stats_size` were ignored when provided via YAML.
+
+## [3.2.2] - 2026-03-14
+
+### Fixed
+- **Migration on compressed hypertables**: The `states_raw` constraints migration now temporarily disables TimescaleDB compression to avoid errors during table alteration.
+- **`states_legacy` cleanup**: Added `CASCADE` to `DROP TABLE states_legacy` to handle dependent TimescaleDB internal views.
+
 ## [3.2.1] - 2026-03-08
 
 ### Added

@@ -44,7 +44,7 @@ async def async_setup_entry(
     entities = []
     
     # IO Statistics Sensors (always-on, real-time from writer)
-    enable_stats_io = entry.options.get(CONF_ENABLE_STATS_IO, entry.data.get(CONF_ENABLE_STATS_IO, DEFAULT_ENABLE_STATS_IO))
+    enable_stats_io = data.get("enable_stats_io", DEFAULT_ENABLE_STATS_IO)
     if enable_stats_io:
         entities.extend([
             ScribeStatesWrittenSensor(writer, entry),
