@@ -4,6 +4,7 @@
 > **Version 3.x.x introduces a major database schema optimization (`states_raw` table).**
 >
 > *This only applies if you are upgrading from a previous version of Scribe*
+> 
 > *The automated background migration ran perfectly on several production setup without any issues.*
 > **However, it is strongly recommended to perform a database backup before updating.**
 >
