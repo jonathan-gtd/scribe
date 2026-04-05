@@ -951,6 +951,9 @@ class ScribeWriter:
         """Flush the queue to the database."""
         try:
             self._flush_pending = False  # Reset flag immediately
+
+            if not self._pool:
+                return
             
             # Prune history first (maintain rolling window even if idle)
             now = time.time()
