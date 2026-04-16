@@ -211,6 +211,23 @@ class ScribeWriter:
             async with conn.transaction():
                 await conn.executemany(sql, args_list)
 
+    async def _copy_records(self, conn: asyncpg.Connection, table_name: str, columns: list[str], records: list[tuple[Any, ...]]):
+        """Write batched records via PostgreSQL COPY, falling back to executemany if unavailable."""
+        if not records:
+            return
+
+        if hasattr(conn, "copy_records_to_table"):
+            await conn.copy_records_to_table(
+                table_name=table_name,
+                records=records,
+                columns=columns,
+            )
+            return
+
+        placeholders = ", ".join(f"${idx}" for idx in range(1, len(columns) + 1))
+        fallback_sql = f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({placeholders})"
+        await conn.executemany(fallback_sql, records)
+
     async def _fetchval(self, sql: str, *args):
         """Fetch a single scalar value."""
         async with self._pool.acquire() as conn:
@@ -1025,14 +1042,24 @@ class ScribeWriter:
                 async with self._pool.acquire() as conn:
                     async with conn.transaction():
                         if states_data:
-                            await conn.executemany(
-                                "INSERT INTO states_raw (time, metadata_id, state, value, attributes) VALUES ($1, $2, $3, $4, $5::jsonb)",
-                                [(s['time'], s['metadata_id'], s.get('state'), s.get('value'), s.get('attributes')) for s in states_data]
+                            await self._copy_records(
+                                conn=conn,
+                                table_name="states_raw",
+                                columns=["time", "metadata_id", "state", "value", "attributes"],
+                                records=[
+                                    (s['time'], s['metadata_id'], s.get('state'), s.get('value'), s.get('attributes'))
+                                    for s in states_data
+                                ],
                             )
                         if events_data:
-                            await conn.executemany(
-                                f"INSERT INTO {self.table_name_events} (time, event_type, event_data, origin, context_id, context_user_id, context_parent_id) VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7)",
-                                [(e['time'], e['event_type'], e.get('event_data'), e.get('origin'), e.get('context_id'), e.get('context_user_id'), e.get('context_parent_id')) for e in events_data]
+                            await self._copy_records(
+                                conn=conn,
+                                table_name=self.table_name_events,
+                                columns=["time", "event_type", "event_data", "origin", "context_id", "context_user_id", "context_parent_id"],
+                                records=[
+                                    (e['time'], e['event_type'], e.get('event_data'), e.get('origin'), e.get('context_id'), e.get('context_user_id'), e.get('context_parent_id'))
+                                    for e in events_data
+                                ],
                             )
                 
                 duration = time.time() - start_time

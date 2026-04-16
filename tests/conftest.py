@@ -18,6 +18,7 @@ def mock_db_connection():
     mock_conn = AsyncMock()
     mock_conn.execute = AsyncMock()
     mock_conn.executemany = AsyncMock()
+    mock_conn.copy_records_to_table = AsyncMock()
     mock_conn.fetchval = AsyncMock()
     mock_conn.fetchrow = AsyncMock()
     mock_conn.fetch = AsyncMock()
