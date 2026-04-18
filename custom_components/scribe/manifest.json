@@ -14,5 +14,5 @@
     "requirements": [
         "asyncpg>=0.28.0"
     ],
-    "version": "3.3.0"
+    "version": "3.3.1"
 }

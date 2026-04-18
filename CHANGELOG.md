@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.3.1] - 2026-04-18
+
+### Fixed
+- **Connection Failure Loops**: Fixed an architecture bug where the connection pool failing to initialize at startup would cause an infinite retry loop of empty async tasks, severely degrading Home Assistant CPU performance and flooding error logs. Scribe now correctly aborts queued operations cleanly when database connection fails at launch.
+
 ## [3.3.0] - 2026-04-18
 
 ### Fixed
