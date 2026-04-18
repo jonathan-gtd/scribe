@@ -185,6 +185,7 @@ async def test_writer_max_queue_size(writer):
     writer.max_queue_size = 2
     writer._queue = deque(maxlen=writer.max_queue_size) # Re-init deque with new maxlen
     writer.batch_size = 100 # Prevent auto-flush
+    writer._running = True
     
     # Pre-populate map
     writer._entity_id_map["sensor.test"] = 1
@@ -392,6 +393,7 @@ async def test_writer_buffer_full_drop_oldest(writer, mock_pool, mock_db_connect
     writer._queue = deque(maxlen=writer.max_queue_size) # Re-init deque
     writer.batch_size = 10 # Prevent auto-flush
     writer._pool = mock_pool
+    writer._running = True
     
     # Pre-populate map
     writer._entity_id_map["sensor.test"] = 1
