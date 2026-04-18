@@ -7,6 +7,18 @@ import asyncpg
 _LOGGER = logging.getLogger(__name__)
 
 
+async def _check_timescaledb(pool: asyncpg.Pool) -> bool:
+    """Check if TimescaleDB extension is installed in the database."""
+    try:
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT 1 FROM pg_extension WHERE extname = 'timescaledb'"
+            )
+            return row is not None
+    except Exception:
+        return False
+
+
 async def migrate_database(
     hass,
     pool: asyncpg.Pool,
@@ -34,11 +46,18 @@ async def migrate_database(
     if not skip_delay:
         _LOGGER.info("🔧 Starting background database migration...")
 
+    # Detect TimescaleDB once for all migration steps
+    has_timescaledb = await _check_timescaledb(pool)
+    if has_timescaledb:
+        _LOGGER.info("📦 TimescaleDB extension detected")
+    else:
+        _LOGGER.info("ℹ️ TimescaleDB extension not installed — skipping hypertable features")
+
     performed_any = False
     try:
         if record_states and enable_table_entities:
             # 1. Add constraints FIRST (PK/FK on empty table = instant)
-            if await _migrate_states_raw_constraints(pool, chunk_time_interval, compress_after):
+            if await _migrate_states_raw_constraints(pool, has_timescaledb, chunk_time_interval, compress_after):
                 performed_any = True
 
             # 2. Migrate legacy data (chunks, non-blocking)
@@ -46,10 +65,11 @@ async def migrate_database(
                 performed_any = True
 
             # 3. Convert to hypertable AFTER data (avoid blocking bootstrap)
-            if await _convert_to_hypertable(pool, chunk_time_interval, compress_after):
-                performed_any = True
+            if has_timescaledb:
+                if await _convert_to_hypertable(pool, chunk_time_interval, compress_after):
+                    performed_any = True
 
-        if await _migrate_events_pk(pool):
+        if await _migrate_events_pk(pool, has_timescaledb):
             performed_any = True
 
         if performed_any:
@@ -60,7 +80,7 @@ async def migrate_database(
         _LOGGER.error("   Scribe will continue to work, but some features may be limited.")
 
 
-async def _migrate_states_raw_constraints(pool: asyncpg.Pool, chunk_time_interval: str = "7 days", compress_after: str = "7 days"):
+async def _migrate_states_raw_constraints(pool: asyncpg.Pool, has_timescaledb: bool, chunk_time_interval: str = "7 days", compress_after: str = "7 days"):
     """
     Add PRIMARY KEY and FOREIGN KEY constraints to states_raw.
     Idempotent: if constraints already exist, migration is skipped.
@@ -82,7 +102,7 @@ async def _migrate_states_raw_constraints(pool: asyncpg.Pool, chunk_time_interva
 
                 # Check if this is a hypertable and disable compression if needed
                 is_hypertable = False
-                try:
+                if has_timescaledb:
                     compression_row = await conn.fetchrow("""
                         SELECT compression_enabled FROM timescaledb_information.hypertables
                         WHERE hypertable_name = 'states_raw'
@@ -93,9 +113,6 @@ async def _migrate_states_raw_constraints(pool: asyncpg.Pool, chunk_time_interva
                             _LOGGER.info("🗜️ states_raw: Temporarily disabling compression for constraint migration...")
                             await conn.execute("SELECT remove_compression_policy('states_raw', if_exists => true)")
                             await conn.execute("ALTER TABLE states_raw SET (timescaledb.compress = false)")
-                except Exception:
-                    # TimescaleDB not available or not a hypertable – proceed normally
-                    pass
 
                 _LOGGER.info("📊 states_raw: Checking for duplicate rows...")
 
@@ -211,7 +228,7 @@ async def _convert_to_hypertable(pool: asyncpg.Pool, chunk_time_interval: str = 
         return False
 
 
-async def _migrate_events_pk(pool: asyncpg.Pool):
+async def _migrate_events_pk(pool: asyncpg.Pool, has_timescaledb: bool):
     """
     Add ID column (PRIMARY KEY) to events table.
     Idempotent: checks if column exists.
@@ -229,13 +246,14 @@ async def _migrate_events_pk(pool: asyncpg.Pool):
                 return False
 
             # Check if it's a TimescaleDB hypertable (skip if yes)
-            is_hypertable = await conn.fetchrow("""
-                SELECT 1 FROM timescaledb_information.hypertables 
-                WHERE hypertable_name = 'events'
-            """)
-            if is_hypertable:
-                _LOGGER.debug("ℹ️ events: Skipping PK migration (TimescaleDB hypertable)")
-                return False
+            if has_timescaledb:
+                is_hypertable = await conn.fetchrow("""
+                    SELECT 1 FROM timescaledb_information.hypertables 
+                    WHERE hypertable_name = 'events'
+                """)
+                if is_hypertable:
+                    _LOGGER.debug("ℹ️ events: Skipping PK migration (TimescaleDB hypertable)")
+                    return False
 
             # Check if 'id' column already exists
             id_exists = await conn.fetchrow("""

@@ -13,6 +13,7 @@ async def test_migrate_database_logic(hass, mock_pool, mock_db_connection):
          patch("custom_components.scribe.migration.migrate_states_data", new_callable=AsyncMock) as mock_data, \
          patch("custom_components.scribe.migration._convert_to_hypertable", new_callable=AsyncMock) as mock_hyper, \
          patch("custom_components.scribe.migration._migrate_events_pk", new_callable=AsyncMock) as mock_events, \
+         patch("custom_components.scribe.migration._check_timescaledb", new_callable=AsyncMock, return_value=True) as mock_tsdb, \
          patch("asyncio.sleep", new_callable=AsyncMock): # Skip sleep
     
         await migration.migrate_database(hass, mock_pool, True, True)
@@ -20,7 +21,7 @@ async def test_migrate_database_logic(hass, mock_pool, mock_db_connection):
         mock_constraints.assert_called_once()
         mock_data.assert_called_once_with(mock_pool)
         mock_hyper.assert_called_once()
-        mock_events.assert_called_once_with(mock_pool)
+        mock_events.assert_called_once()
 
 @pytest.mark.asyncio
 async def test_migrate_states_raw_already_done(mock_pool, mock_db_connection):
@@ -28,7 +29,7 @@ async def test_migrate_states_raw_already_done(mock_pool, mock_db_connection):
     # Mock PK check returning a row (exists)
     mock_db_connection.fetchrow.return_value = {"exists": 1}
     
-    await migration._migrate_states_raw_constraints(mock_pool)
+    await migration._migrate_states_raw_constraints(mock_pool, False)
     
     # verify check was made
     call_args = mock_db_connection.fetchrow.call_args[0][0]
@@ -48,7 +49,7 @@ async def test_migrate_states_raw_with_duplicates(mock_pool, mock_db_connection)
     mock_db_connection.fetchval.return_value = 5
     mock_db_connection.execute.return_value = "DELETE 5"
     
-    await migration._migrate_states_raw_constraints(mock_pool)
+    await migration._migrate_states_raw_constraints(mock_pool, False)
     
     # Verify SQL calls
     assert mock_db_connection.fetchrow.called
@@ -71,7 +72,7 @@ async def test_migrate_events_pk_already_done(mock_pool, mock_db_connection):
     # 3. Check column id exists -> True
     mock_db_connection.fetchrow.side_effect = [{"exists": 1}, None, {"exists": 1}]
     
-    await migration._migrate_events_pk(mock_pool)
+    await migration._migrate_events_pk(mock_pool, True)
     
     # verify no alter table
     execute_calls = [str(c) for c in mock_db_connection.execute.mock_calls]
@@ -85,7 +86,7 @@ async def test_migrate_events_pk_adds_column(mock_pool, mock_db_connection):
     # 3. Check column id exists -> False
     mock_db_connection.fetchrow.side_effect = [{"exists": 1}, None, None]
     
-    await migration._migrate_events_pk(mock_pool)
+    await migration._migrate_events_pk(mock_pool, True)
     
     execute_calls = [str(c) for c in mock_db_connection.execute.mock_calls]
     assert any("ADD COLUMN id BIGSERIAL PRIMARY KEY" in s for s in execute_calls)
@@ -100,7 +101,7 @@ async def test_migrate_states_raw_disables_and_reenables_compression(mock_pool, 
     mock_db_connection.fetchval.return_value = 0  # no duplicates
     mock_db_connection.execute.return_value = "OK"
     
-    await migration._migrate_states_raw_constraints(mock_pool)
+    await migration._migrate_states_raw_constraints(mock_pool, True)
     
     execute_calls = [str(c) for c in mock_db_connection.execute.mock_calls]
     
@@ -126,7 +127,7 @@ async def test_migrate_states_raw_enables_compression_even_if_not_previously_on(
     mock_db_connection.fetchval.return_value = 0  # no duplicates
     mock_db_connection.execute.return_value = "OK"
     
-    await migration._migrate_states_raw_constraints(mock_pool)
+    await migration._migrate_states_raw_constraints(mock_pool, True)
     
     execute_calls = [str(c) for c in mock_db_connection.execute.mock_calls]
     
