@@ -280,6 +280,7 @@ class ScribeWriter:
                     _LOGGER.debug("asyncpg pool created successfully")
                 except Exception as e:
                     _LOGGER.error(f"Failed to create pool: {e}", exc_info=True)
+                    self._running = False
                     return
 
             # Perform initialization
@@ -428,6 +429,9 @@ class ScribeWriter:
         We use deque with maxlen, so old items are automatically dropped if full.
         """
         try:
+            if not self._running:
+                return
+                
             self._queue.append(data)
             
             # Trigger flush if batch size reached (but only if no flush is already pending)
