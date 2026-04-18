@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.3.0] - 2026-04-18
+
+### Fixed
+- **Migration on fresh installs without TimescaleDB**: Fixed `InFailedSQLTransactionError` crash during migration. Querying `timescaledb_information.hypertables` inside a transaction would poison the entire PostgreSQL transaction when TimescaleDB was not installed.
+
+### Changed
+- **TimescaleDB detection**: TimescaleDB availability is now detected once at startup via `pg_extension` (always safe on any PostgreSQL instance) and passed as a flag to all migration functions. This replaces fragile per-query try/except blocks.
+- **Hypertable conversion**: `_convert_to_hypertable` is now skipped entirely when TimescaleDB is not installed, avoiding unnecessary error logging.
+
 ## [3.2.4] - 2026-03-17
 
 ### Removed

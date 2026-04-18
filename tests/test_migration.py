@@ -13,7 +13,7 @@ async def test_migrate_database_logic(hass, mock_pool, mock_db_connection):
          patch("custom_components.scribe.migration.migrate_states_data", new_callable=AsyncMock) as mock_data, \
          patch("custom_components.scribe.migration._convert_to_hypertable", new_callable=AsyncMock) as mock_hyper, \
          patch("custom_components.scribe.migration._migrate_events_pk", new_callable=AsyncMock) as mock_events, \
-         patch("custom_components.scribe.migration._check_timescaledb", new_callable=AsyncMock, return_value=True) as mock_tsdb, \
+         patch("custom_components.scribe.migration._check_timescaledb", new_callable=AsyncMock, return_value=True), \
          patch("asyncio.sleep", new_callable=AsyncMock): # Skip sleep
     
         await migration.migrate_database(hass, mock_pool, True, True)
