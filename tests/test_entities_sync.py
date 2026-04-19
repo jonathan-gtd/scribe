@@ -86,7 +86,7 @@ async def test_entities_sync(hass: HomeAssistant, mock_writer, mock_entity_regis
         assert ent1["unique_id"] == "unique_id_1"
         assert ent1["platform"] == "hue"
         assert ent1["name"] == "Living Room Light"
-        assert ent1["capabilities"] == '{"brightness": true}'
+        assert ent1["capabilities"] == {"brightness": True}
 
         # Verify second entity (fallback to original_name)
         ent2 = next(e for e in call_args if e["entity_id"] == "sensor.temperature")
