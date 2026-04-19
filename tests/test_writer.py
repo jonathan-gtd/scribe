@@ -121,13 +121,41 @@ async def test_writer_enqueue_flush(writer, mock_db_connection):
     await asyncio.sleep(0.1)
     
     # If auto-flush worked, queue should be empty
-    # Verify DB calls
-    # We expect INSERT statements (asyncpg uses executemany for inserts)
-    assert mock_db_connection.executemany.call_count >= 2
+    # Verify DB calls now use COPY batches.
+    assert mock_db_connection.copy_records_to_table.call_count >= 2
     
     # Verify stats
     assert writer._states_written == 1
     assert writer._events_written == 1
+
+@pytest.mark.asyncio
+async def test_writer_flush_uses_copy_for_states_and_events(writer, mock_db_connection):
+    """Test that flush writes state/event batches via COPY."""
+    mock_db_connection.fetchval.return_value = 0
+
+    await writer.start()
+    await asyncio.sleep(0.1)
+
+    writer._entity_id_map["sensor.test"] = 1
+    now = datetime(2023, 10, 27, 10, 0, 0, tzinfo=timezone.utc)
+
+    writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": now, "state": "on", "value": 1.0, "attributes": {"foo": "bar"}})
+    writer.enqueue({"type": "event", "time": now, "event_type": "test", "event_data": {"bar": 1}, "origin": "LOCAL"})
+
+    await writer._flush()
+
+    assert mock_db_connection.copy_records_to_table.call_count == 2
+    state_call = mock_db_connection.copy_records_to_table.call_args_list[0]
+    event_call = mock_db_connection.copy_records_to_table.call_args_list[1]
+
+    assert state_call.kwargs["table_name"] == "states_raw"
+    assert state_call.kwargs["columns"] == ["time", "metadata_id", "state", "value", "attributes"]
+    assert state_call.kwargs["records"][0][1] == 1
+
+    assert event_call.kwargs["table_name"] == writer.table_name_events
+    assert event_call.kwargs["columns"] == ["time", "event_type", "event_data", "origin", "context_id", "context_user_id", "context_parent_id"]
+    assert event_call.kwargs["records"][0][1] == "test"
+
 
 @pytest.mark.asyncio
 async def test_writer_no_buffer_on_failure(writer, mock_pool, mock_db_connection):
@@ -137,7 +165,7 @@ async def test_writer_no_buffer_on_failure(writer, mock_pool, mock_db_connection
     await writer.start()
     
     # Mock connection failure during flush
-    mock_db_connection.executemany.side_effect = Exception("Connection failed")
+    mock_db_connection.copy_records_to_table.side_effect = Exception("Connection failed")
     mock_db_connection.fetchval.side_effect = Exception("Connection failed")
     mock_db_connection.fetchrow.side_effect = Exception("Connection failed")
     
@@ -162,7 +190,7 @@ async def test_writer_buffer_on_failure(writer, mock_pool, mock_db_connection):
     await writer.start()
     
     # Mock connection failure during flush
-    mock_db_connection.executemany.side_effect = Exception("Connection failed")
+    mock_db_connection.copy_records_to_table.side_effect = Exception("Connection failed")
     mock_db_connection.fetchval.side_effect = Exception("Connection failed")
     mock_db_connection.fetchrow.side_effect = Exception("Connection failed")
     
@@ -414,8 +442,8 @@ async def test_writer_buffer_full_drop_oldest(writer, mock_pool, mock_db_connect
         
     acquire_ctx.__aenter__ = AsyncMock(side_effect=mock_enter)
     
-    # Mock executemany() to raise exception
-    mock_db_connection.executemany.side_effect = Exception("Flush Error")
+    # Mock COPY to raise exception
+    mock_db_connection.copy_records_to_table.side_effect = Exception("Flush Error")
     
     # Trigger flush manually
     await writer._flush()
@@ -494,13 +522,10 @@ async def test_writer_sanitizes_null_bytes(writer, mock_db_connection):
     # Trigger flush manually
     await writer._flush()
     
-    # Verify executemany call
-    assert mock_db_connection.executemany.called
-    # Get the latest call (it might have been called multiple times, e.g. for events if any)
-    # But here we only have one state
-    call_args = mock_db_connection.executemany.call_args_list[0]
-    # call_args[0] is (sql, args_list)
-    args_list = call_args[0][1]
+    # Verify COPY call
+    assert mock_db_connection.copy_records_to_table.called
+    call_args = mock_db_connection.copy_records_to_table.call_args_list[0]
+    args_list = call_args.kwargs["records"]
     
     # Verify the first item in the batch
     # Tuple: (time, metadata_id, state, value, attributes)
@@ -543,9 +568,9 @@ async def test_writer_sanitizes_infinity(writer, mock_db_connection):
     
     await writer._flush()
     
-    assert mock_db_connection.executemany.called
-    call_args = mock_db_connection.executemany.call_args_list[0]
-    args_list = call_args[0][1]
+    assert mock_db_connection.copy_records_to_table.called
+    call_args = mock_db_connection.copy_records_to_table.call_args_list[0]
+    args_list = call_args.kwargs["records"]
     # Tuple: (time, metadata_id, state, value, attributes)
     item_value = args_list[0][3]
     item_attributes_str = args_list[0][4]
