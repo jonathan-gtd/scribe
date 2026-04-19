@@ -285,11 +285,20 @@ class ScribeWriter:
                             key_file
                         )
 
+                    async def _init_connection(conn):
+                        await conn.set_type_codec(
+                            'jsonb',
+                            encoder=lambda x: json.dumps(x, cls=JSONEncoder),
+                            decoder=json.loads,
+                            schema='pg_catalog'
+                        )
+
                     self._pool = await asyncpg.create_pool(
                         dsn=self.db_url,
                         min_size=1,
                         max_size=10,
                         ssl=ssl_arg,
+                        init=_init_connection
                     )
                     # Expose pool as _engine so migration.py can use it
                     self._engine = self._pool
@@ -648,14 +657,14 @@ class ScribeWriter:
                     u.get("is_owner"),
                     u.get("is_active"),
                     u.get("system_generated"),
-                    json.dumps(u["group_ids"]) if u.get("group_ids") else None,
+                    u.get("group_ids"),
                 )
                 for u in users
             ]
 
             await self._execute_many("""
                 INSERT INTO users (user_id, name, is_owner, is_active, system_generated, group_ids)
-                VALUES ($1, $2, $3, $4, $5, $6::jsonb)
+                VALUES ($1, $2, $3, $4, $5, $6)
                 ON CONFLICT (user_id) DO UPDATE SET
                     name = EXCLUDED.name,
                     is_owner = EXCLUDED.is_owner,
@@ -726,14 +735,14 @@ class ScribeWriter:
                     e.get("name"),
                     e.get("device_id"),
                     e.get("area_id"),
-                    json.dumps(e["capabilities"]) if e.get("capabilities") else None,
+                    e.get("capabilities"),
                 )
                 for e in entities
             ]
 
             await self._execute_many("""
                 INSERT INTO entities (entity_id, unique_id, platform, domain, name, device_id, area_id, capabilities)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 ON CONFLICT (entity_id) DO UPDATE SET
                     unique_id = EXCLUDED.unique_id,
                     platform = EXCLUDED.platform,
@@ -1002,16 +1011,12 @@ class ScribeWriter:
                                 if x.get(field) is not None:
                                     x[field] = str(x[field]).replace('\0', '')
 
-                            if isinstance(x.get('attributes'), dict):
-                                x['attributes'] = json.dumps(x['attributes'], default=str)
                             states_res.append(x)
                         elif x['type'] == 'event':
                             for field in ['event_type', 'origin', 'context_id', 'context_user_id', 'context_parent_id']:
                                 if x.get(field) is not None:
                                     x[field] = str(x[field]).replace('\0', '')
 
-                            if isinstance(x.get('event_data'), dict):
-                                x['event_data'] = json.dumps(x['event_data'], cls=JSONEncoder)
                             events_res.append(x)
                     return states_res, events_res
 

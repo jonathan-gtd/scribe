@@ -573,15 +573,12 @@ async def test_writer_sanitizes_infinity(writer, mock_db_connection):
     args_list = call_args.kwargs["records"]
     # Tuple: (time, metadata_id, state, value, attributes)
     item_value = args_list[0][3]
-    item_attributes_str = args_list[0][4]
+    item_attributes = args_list[0][4]
     
     # Value (float) should be None if it was infinity/nan
     assert item_value is None
     
-    # Check attributes - they are dumped to a string
-    # We can parse it back to check
-    import json
-    attributes = json.loads(item_attributes_str)
+    attributes = item_attributes
     
     assert attributes["pos_inf"] is None
     assert attributes["neg_inf"] is None

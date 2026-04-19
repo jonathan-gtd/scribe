@@ -281,7 +281,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             "is_owner": user.is_owner,
                             "is_active": user.is_active,
                             "system_generated": user.system_generated,
-                            "group_ids": json.dumps([g.id for g in user.groups], default=str)
+                            "group_ids": [g.id for g in user.groups] if user.groups else []
                         })
                     
                     if users:
@@ -307,7 +307,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             "name": entity.name or entity.original_name,
                             "device_id": entity.device_id,
                             "area_id": entity.area_id,
-                            "capabilities": json.dumps(entity.capabilities, default=str) if entity.capabilities else None
+                            "capabilities": entity.capabilities if entity.capabilities else None
                         })
                     
                     if entities:
@@ -551,7 +551,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                                 "name": entity.name or entity.original_name,
                                 "device_id": entity.device_id,
                                 "area_id": entity.area_id,
-                                "capabilities": json.dumps(entity.capabilities, default=str) if entity.capabilities else None
+                                "capabilities": entity.capabilities if entity.capabilities else None
                             }]
                             await writer.write_entities(data)
                     except Exception as e:
@@ -639,7 +639,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             "is_owner": user.is_owner,
                             "is_active": user.is_active,
                             "system_generated": user.system_generated,
-                            "group_ids": json.dumps([g.id for g in user.groups], default=str)
+                            "group_ids": [g.id for g in user.groups] if user.groups else []
                         }]
                         await writer.write_users(data)
                 except Exception as e:
