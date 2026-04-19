@@ -111,11 +111,11 @@ async def test_writer_enqueue_flush(writer, mock_db_connection):
     writer._entity_id_map["sensor.test"] = 1
     
     # Enqueue items
-    writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": datetime.now(), "state": "on", "value": 1.0, "attributes": "{}"})
+    writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": datetime.now(), "state": "on", "value": 1.0, "attributes": {}})
     assert len(writer._queue) == 1
     
     # Enqueue second item - this should trigger auto-flush task
-    writer.enqueue({"type": "event", "time": datetime.now(), "event_type": "test", "event_data": "{}"})
+    writer.enqueue({"type": "event", "time": datetime.now(), "event_type": "test", "event_data": {}})
     
     # Allow the loop to run the flush task
     await asyncio.sleep(0.1)
@@ -173,7 +173,7 @@ async def test_writer_no_buffer_on_failure(writer, mock_pool, mock_db_connection
     writer._entity_id_map["sensor.test"] = 1
     
     # Enqueue item
-    writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": datetime.now(), "state": "on", "value": 1.0, "attributes": "{}"})
+    writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": datetime.now(), "state": "on", "value": 1.0, "attributes": {}})
     
     # Flush
     await writer._flush()
@@ -198,7 +198,7 @@ async def test_writer_buffer_on_failure(writer, mock_pool, mock_db_connection):
     writer._entity_id_map["sensor.test"] = 1
     
     # Enqueue item
-    writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": datetime.now(), "state": "on", "value": 1.0, "attributes": "{}"})
+    writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": datetime.now(), "state": "on", "value": 1.0, "attributes": {}})
     
     # Flush
     await writer._flush()
@@ -219,12 +219,12 @@ async def test_writer_max_queue_size(writer):
     writer._entity_id_map["sensor.test"] = 1
     
     # Fill queue
-    writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": datetime.now(), "state": "on", "value": 1.0, "attributes": "{}"})
-    writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": datetime.now(), "state": "on", "value": 2.0, "attributes": "{}"})
+    writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": datetime.now(), "state": "on", "value": 1.0, "attributes": {}})
+    writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": datetime.now(), "state": "on", "value": 2.0, "attributes": {}})
     assert len(writer._queue) == 2
     
     # Add one more, should be dropped
-    writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": datetime.now(), "state": "on", "value": 3.0, "attributes": "{}"})
+    writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": datetime.now(), "state": "on", "value": 3.0, "attributes": {}})
     assert len(writer._queue) == 2
     # dropped_events is not incremented by deque automatically, only if we manually check
     # But enqueue checks len vs max_queue_size?
@@ -427,8 +427,8 @@ async def test_writer_buffer_full_drop_oldest(writer, mock_pool, mock_db_connect
     writer._entity_id_map["sensor.test"] = 1
     
     # Fill queue
-    writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": datetime.now(), "state": "on", "value": 1.0, "attributes": "{}"})
-    writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": datetime.now(), "state": "on", "value": 2.0, "attributes": "{}"})
+    writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": datetime.now(), "state": "on", "value": 1.0, "attributes": {}})
+    writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": datetime.now(), "state": "on", "value": 2.0, "attributes": {}})
     
     # Mock acquire() to return a context manager that adds an item
     # Use the existing acquire_ctx from mock_pool if possible, or create new
@@ -437,7 +437,7 @@ async def test_writer_buffer_full_drop_oldest(writer, mock_pool, mock_db_connect
     
     async def mock_enter(*args, **kwargs):
         # Simulate concurrent add
-        writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": datetime.now(), "state": "on", "value": 3.0, "attributes": "{}"})
+        writer.enqueue({"type": "state", "entity_id": "sensor.test", "time": datetime.now(), "state": "on", "value": 3.0, "attributes": {}})
         return mock_db_connection
         
     acquire_ctx.__aenter__ = AsyncMock(side_effect=mock_enter)
@@ -514,7 +514,7 @@ async def test_writer_sanitizes_null_bytes(writer, mock_db_connection):
         "entity_id": "sensor.dirty",
         "state": "bad\u0000value",
         "value": 1.0,
-        "attributes": '{"key": "nu\u0000ll"}',
+        "attributes": {"key": "nu\u0000ll"},
         "type": "state"
     }
     writer.enqueue(dirty_state)
