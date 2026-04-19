@@ -5,7 +5,6 @@ writes them to a TimescaleDB (PostgreSQL) database. It uses a dedicated writer t
 to ensure that database operations do not block the main Home Assistant event loop.
 """
 import logging
-import json
 
 import voluptuous as vol
 
