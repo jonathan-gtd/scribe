@@ -48,4 +48,11 @@ class ScribeDataUpdateCoordinator(DataUpdateCoordinator):
             # Writer is now async, so we await it directly
             return await self.writer.get_db_stats(stats_type=self.stats_type)
         except Exception as err:
-            raise UpdateFailed(f"Error communicating with database: {err}")
+            _LOGGER.error(
+                "[coordinator._async_update_data:%s] Failed to fetch DB stats: %s (%s)",
+                self.stats_type, err, type(err).__name__, exc_info=True,
+            )
+            raise UpdateFailed(
+                f"[coordinator:{self.stats_type}] Error communicating with database: "
+                f"{err} ({type(err).__name__})"
+            )

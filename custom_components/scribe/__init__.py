@@ -129,7 +129,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     hass.data.setdefault(DOMAIN, {})
     
     if DOMAIN in config:
-        _LOGGER.info("Scribe configuration found in YAML. Verifying setup...")
+        _LOGGER.info("[__init__.async_setup] Scribe configuration found in YAML. Verifying setup...")
         hass.data[DOMAIN]["yaml_config"] = config[DOMAIN]
         
         hass.async_create_task(
@@ -146,7 +146,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     This is the main setup function called when the integration is loaded.
     It initializes the writer, connects to the database, and sets up event listeners.
     """
-    _LOGGER.debug(f"Setting up Scribe entry: {entry.entry_id}")
+    _LOGGER.debug("[__init__.async_setup_entry] Setting up Scribe entry: %s", entry.entry_id)
     config = entry.data
     hass.data.setdefault(DOMAIN, {})
 
@@ -185,7 +185,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if db_user and db_host:
              db_url = f"postgresql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
         else:
-            _LOGGER.error("Invalid configuration: Missing DB URL or connection details")
+            _LOGGER.error(
+                "[__init__.async_setup_entry] Invalid configuration: missing DB URL or connection details (db_user=%s, db_host=%s) — set '%s' in the config entry or YAML.",
+                db_user, db_host, CONF_DB_URL,
+            )
             return False
 
     # Resolve all parameters
@@ -265,13 +268,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # Sync Metadata and Refresh Coordinators in background to prevent bootstrap timeout
         async def _async_late_setup():
             """Perform metadata sync and coordinator refresh in background."""
-            _LOGGER.debug("Starting background Scribe setup tasks...")
+            _LOGGER.debug("[__init__._async_late_setup] Starting background Scribe setup tasks...")
 
             # Sync Users
             if writer.enable_table_users:
                 try:
                     users_list = await hass.auth.async_get_users()
-                    _LOGGER.debug(f"Syncing users. Total users in hass.auth: {len(users_list)}")
+                    _LOGGER.debug("[__init__._async_late_setup:users] Total users in hass.auth: %d", len(users_list))
                     users = []
                     for user in users_list:
                         users.append({
@@ -282,15 +285,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             "system_generated": user.system_generated,
                             "group_ids": [g.id for g in user.groups] if user.groups else []
                         })
-                    
+
                     if users:
-                        _LOGGER.debug(f"Calling writer.write_users with {len(users)} users")
+                        _LOGGER.debug("[__init__._async_late_setup:users] Calling writer.write_users with %d users", len(users))
                         await writer.write_users(users)
                     else:
-                        _LOGGER.warning("No users found to sync!")
-                        
+                        _LOGGER.warning("[__init__._async_late_setup:users] No users found to sync (hass.auth returned 0 users)")
+
                 except Exception as e:
-                    _LOGGER.error(f"Error syncing users: {e}", exc_info=True)
+                    _LOGGER.error(
+                        "[__init__._async_late_setup:users] Error syncing users: %s (%s)",
+                        e, type(e).__name__, exc_info=True,
+                    )
 
             # Sync Entities
             if writer.enable_table_entities:
@@ -308,12 +314,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             "area_id": entity.area_id,
                             "capabilities": entity.capabilities if entity.capabilities else None
                         })
-                    
+
                     if entities:
-                        _LOGGER.debug(f"Syncing {len(entities)} entities to database")
+                        _LOGGER.debug("[__init__._async_late_setup:entities] Syncing %d entities to database", len(entities))
                         await writer.write_entities(entities)
                 except Exception as e:
-                    _LOGGER.error(f"Error syncing entities: {e}", exc_info=True)
+                    _LOGGER.error(
+                        "[__init__._async_late_setup:entities] Error syncing entities: %s (%s)",
+                        e, type(e).__name__, exc_info=True,
+                    )
 
             # Sync Areas
             if writer.enable_table_areas:
@@ -327,10 +336,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             "picture": area.picture
                         })
                     if areas:
-                        _LOGGER.debug(f"Syncing {len(areas)} areas to database")
+                        _LOGGER.debug("[__init__._async_late_setup:areas] Syncing %d areas to database", len(areas))
                         await writer.write_areas(areas)
                 except Exception as e:
-                    _LOGGER.error(f"Error syncing areas: {e}", exc_info=True)
+                    _LOGGER.error(
+                        "[__init__._async_late_setup:areas] Error syncing areas: %s (%s)",
+                        e, type(e).__name__, exc_info=True,
+                    )
 
             # Sync Devices
             if writer.enable_table_devices:
@@ -352,10 +364,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             "primary_config_entry": primary_entry
                         })
                     if devices:
-                        _LOGGER.debug(f"Syncing {len(devices)} devices to database")
+                        _LOGGER.debug("[__init__._async_late_setup:devices] Syncing %d devices to database", len(devices))
                         await writer.write_devices(devices)
                 except Exception as e:
-                    _LOGGER.error(f"Error syncing devices: {e}", exc_info=True)
+                    _LOGGER.error(
+                        "[__init__._async_late_setup:devices] Error syncing devices: %s (%s)",
+                        e, type(e).__name__, exc_info=True,
+                    )
 
             # Sync Integrations (Config Entries)
             if writer.enable_table_integrations:
@@ -370,56 +385,73 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             "source": config_entry.source
                         })
                     if integrations:
-                        _LOGGER.debug(f"Syncing {len(integrations)} integrations to database")
+                        _LOGGER.debug("[__init__._async_late_setup:integrations] Syncing %d integrations to database", len(integrations))
                         await writer.write_integrations(integrations)
                 except Exception as e:
-                    _LOGGER.error(f"Error syncing integrations: {e}", exc_info=True)
+                    _LOGGER.error(
+                        "[__init__._async_late_setup:integrations] Error syncing integrations: %s (%s)",
+                        e, type(e).__name__, exc_info=True,
+                    )
 
             # Refresh coordinators
             if chunk_coordinator:
                 try:
                     await chunk_coordinator.async_refresh()
                 except Exception as e:
-                    _LOGGER.error(f"Failed to refresh chunk coordinator: {e}")
-            
+                    _LOGGER.error(
+                        "[__init__._async_late_setup] Failed to refresh chunk coordinator: %s (%s)",
+                        e, type(e).__name__, exc_info=True,
+                    )
+
             if size_coordinator:
                 try:
                     await size_coordinator.async_refresh()
                 except Exception as e:
-                    _LOGGER.error(f"Failed to refresh size coordinator: {e}")
+                    _LOGGER.error(
+                        "[__init__._async_late_setup] Failed to refresh size coordinator: %s (%s)",
+                        e, type(e).__name__, exc_info=True,
+                    )
 
-            _LOGGER.debug("Background Scribe setup tasks completed")
+            _LOGGER.debug("[__init__._async_late_setup] Background Scribe setup tasks completed")
 
         # Setup Data Update Coordinators for statistics (Synchronous creation)
         from .coordinator import ScribeDataUpdateCoordinator
-        
+
         chunk_coordinator = None
         size_coordinator = None
-        
+
         # Check granular settings (resolved above)
         if enable_stats_chunk:
             try:
                 chunk_interval_min = int(get_config(CONF_STATS_CHUNK_INTERVAL, DEFAULT_STATS_CHUNK_INTERVAL))
                 chunk_coordinator = ScribeDataUpdateCoordinator(
-                    hass, 
-                    writer, 
+                    hass,
+                    writer,
                     update_interval_minutes=chunk_interval_min,
                     stats_type="chunk"
                 )
             except Exception as e:
-                _LOGGER.error(f"Failed to setup chunk coordinator: {e}", exc_info=True)
-        
+                _LOGGER.error(
+                    "[__init__.async_setup_entry] Failed to setup chunk coordinator (interval=%s): %s (%s)",
+                    get_config(CONF_STATS_CHUNK_INTERVAL, DEFAULT_STATS_CHUNK_INTERVAL),
+                    e, type(e).__name__, exc_info=True,
+                )
+
         if enable_stats_size:
             try:
                 size_interval_min = int(get_config(CONF_STATS_SIZE_INTERVAL, DEFAULT_STATS_SIZE_INTERVAL))
                 size_coordinator = ScribeDataUpdateCoordinator(
-                    hass, 
-                    writer, 
+                    hass,
+                    writer,
                     update_interval_minutes=size_interval_min,
                     stats_type="size"
                 )
             except Exception as e:
-                _LOGGER.error(f"Failed to setup size coordinator: {e}", exc_info=True)
+                _LOGGER.error(
+                    "[__init__.async_setup_entry] Failed to setup size coordinator (interval=%s): %s (%s)",
+                    get_config(CONF_STATS_SIZE_INTERVAL, DEFAULT_STATS_SIZE_INTERVAL),
+                    e, type(e).__name__, exc_info=True,
+                )
 
         # Finalize hass.data
         hass.data[DOMAIN][entry.entry_id].update({
@@ -450,7 +482,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             # Apply Include/Exclude Filter
             if not entity_filter(entity_id):
-                _LOGGER.debug(f"Entity {entity_id} filtered out")
+                _LOGGER.debug("[__init__.handle_event] Entity %s filtered out", entity_id)
                 return
 
             try:
@@ -473,10 +505,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     "attributes": filtered_attrs,
                 })
             except Exception as e:
-                _LOGGER.error(f"Error enqueueing state for {entity_id}: {e}")
+                _LOGGER.error(
+                    "[__init__.handle_event] Error enqueuing state for %s (state=%r): %s (%s)",
+                    entity_id, new_state.state if new_state else None, e, type(e).__name__, exc_info=True,
+                )
 
         # Register the event listener for state changes
-        _LOGGER.debug(f"Registering event listener (record_states={record_states}, record_events={record_events})")
+        _LOGGER.debug(
+            "[__init__.async_setup_entry] Registering event listener (record_states=%s, record_events=%s)",
+            record_states, record_events,
+        )
         
         if record_states:
             entry.async_on_unload(
@@ -496,8 +534,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
                 _other_event_count["total"] += 1
                 if _other_event_count["total"] <= 5:
-                    _LOGGER.debug(f"handle_other_events called: {event.event_type}")
-                
+                    _LOGGER.debug("[__init__.handle_other_events] First events seen: %s", event.event_type)
+
                 try:
                     data = {
                         "type": "event",
@@ -511,11 +549,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     }
                     writer.enqueue(data)
                 except Exception as e:
-                    _LOGGER.error(f"Scribe: Error processing event {event.event_type}: {e}", exc_info=True)
-            
+                    _LOGGER.error(
+                        "[__init__.handle_other_events] Error processing event %s: %s (%s)",
+                        event.event_type, e, type(e).__name__, exc_info=True,
+                    )
+
             # Use MATCH_ALL to listen to all events
             from homeassistant.const import MATCH_ALL
-            _LOGGER.debug("Registering listener for ALL events (MATCH_ALL)")
+            _LOGGER.debug("[__init__.async_setup_entry] Registering listener for ALL events (MATCH_ALL)")
             entry.async_on_unload(
                 hass.bus.async_listen(MATCH_ALL, handle_other_events)
             )
@@ -533,11 +574,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 if action == "update":
                     old_entity_id = event.data.get("old_entity_id")
                     if old_entity_id and old_entity_id != entity_id:
-                        _LOGGER.debug(f"Entity renamed: {old_entity_id} -> {entity_id}")
+                        _LOGGER.debug("[__init__.handle_entity_registry_update] Entity renamed: %s -> %s", old_entity_id, entity_id)
                         await writer.rename_entity(old_entity_id, entity_id)
 
                 if action in ["create", "update"]:
-                    _LOGGER.debug(f"Entity registry update: {action} {entity_id}")
+                    _LOGGER.debug("[__init__.handle_entity_registry_update] Registry update: %s %s", action, entity_id)
                     try:
                         registry = er.async_get(hass)
                         entity = registry.async_get(entity_id)
@@ -554,7 +595,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             }]
                             await writer.write_entities(data)
                     except Exception as e:
-                        _LOGGER.error(f"Error syncing entity {entity_id}: {e}")
+                        _LOGGER.error(
+                            "[__init__.handle_entity_registry_update] Error syncing entity %s (action=%s): %s (%s)",
+                            entity_id, action, e, type(e).__name__, exc_info=True,
+                        )
 
             entry.async_on_unload(
                 hass.bus.async_listen("entity_registry_updated", handle_entity_registry_update)
@@ -568,14 +612,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 device_id = event.data.get("device_id")
                 
                 if action in ["create", "update"]:
-                    _LOGGER.debug(f"Device registry update: {action} {device_id}")
+                    _LOGGER.debug("[__init__.handle_device_registry_update] Registry update: %s %s", action, device_id)
                     try:
                         device_reg = dr.async_get(hass)
                         device = device_reg.async_get(device_id)
                         if device:
                             # Get primary config entry
                             primary_entry = next(iter(device.config_entries), None) if device.config_entries else None
-                            
+
                             data = [{
                                 "device_id": device.id,
                                 "name": device.name,
@@ -588,7 +632,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             }]
                             await writer.write_devices(data)
                     except Exception as e:
-                        _LOGGER.error(f"Error syncing device {device_id}: {e}")
+                        _LOGGER.error(
+                            "[__init__.handle_device_registry_update] Error syncing device %s (action=%s): %s (%s)",
+                            device_id, action, e, type(e).__name__, exc_info=True,
+                        )
 
             entry.async_on_unload(
                 hass.bus.async_listen("device_registry_updated", handle_device_registry_update)
@@ -602,7 +649,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 area_id = event.data.get("area_id")
                 
                 if action in ["create", "update"]:
-                    _LOGGER.debug(f"Area registry update: {action} {area_id}")
+                    _LOGGER.debug("[__init__.handle_area_registry_update] Registry update: %s %s", action, area_id)
                     try:
                         area_reg = ar.async_get(hass)
                         area = area_reg.async_get_area(area_id)
@@ -614,7 +661,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                             }]
                             await writer.write_areas(data)
                     except Exception as e:
-                        _LOGGER.error(f"Error syncing area {area_id}: {e}")
+                        _LOGGER.error(
+                            "[__init__.handle_area_registry_update] Error syncing area %s (action=%s): %s (%s)",
+                            area_id, action, e, type(e).__name__, exc_info=True,
+                        )
 
             entry.async_on_unload(
                 hass.bus.async_listen("area_registry_updated", handle_area_registry_update)
@@ -628,7 +678,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 user_id = event.data.get("user_id")
                 action = event.event_type # user_added, user_updated, user_removed
                 
-                _LOGGER.debug(f"User registry update: {action} {user_id}")
+                _LOGGER.debug("[__init__.handle_user_update] Registry update: %s %s", action, user_id)
                 try:
                     user = await hass.auth.async_get_user(user_id)
                     if user:
@@ -642,7 +692,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         }]
                         await writer.write_users(data)
                 except Exception as e:
-                    _LOGGER.error(f"Error syncing user {user_id}: {e}")
+                    _LOGGER.error(
+                        "[__init__.handle_user_update] Error syncing user %s (action=%s): %s (%s)",
+                        user_id, action, e, type(e).__name__, exc_info=True,
+                    )
 
             entry.async_on_unload(
                 hass.bus.async_listen("user_added", handle_user_update)
@@ -664,10 +717,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         
         async def handle_flush(call):
             """Handle flush service call.
-            
+
             Allows users to manually trigger a database flush via automation or UI.
             """
-            _LOGGER.info("Manual flush triggered via service call")
+            _LOGGER.info("[__init__.handle_flush] Manual flush triggered via service call")
             await writer._flush()
             
         hass.services.async_register(DOMAIN, "flush", handle_flush)
@@ -683,9 +736,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 return {"result": result}
             except ValueError as e:
                 # Specific validation error (e.g. non-SELECT query)
+                _LOGGER.warning("[__init__.handle_query] Rejected query (validation): %s", e)
                 raise HomeAssistantError(str(e))
             except Exception as e:
-                raise HomeAssistantError(f"Query failed: {e}")
+                sqlstate = getattr(e, 'sqlstate', None)
+                _LOGGER.error(
+                    "[__init__.handle_query] Query failed (sqlstate=%s, type=%s): %s",
+                    sqlstate, type(e).__name__, e, exc_info=True,
+                )
+                raise HomeAssistantError(f"Query failed: {e} ({type(e).__name__})")
 
         hass.services.async_register(
             DOMAIN, 
@@ -701,7 +760,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         return True
 
     except Exception as e:
-        _LOGGER.error(f"Failed to setup Scribe integration: {e}", exc_info=True)
+        _LOGGER.error(
+            "[__init__.async_setup_entry] Failed to setup Scribe integration: %s (%s)",
+            e, type(e).__name__, exc_info=True,
+        )
         return False
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -720,10 +782,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """
     unload_ok = await hass.config_entries.async_unload_platforms(entry, ["sensor", "binary_sensor"])
     if unload_ok:
-        _LOGGER.debug("Unloading Scribe entry")
+        _LOGGER.debug("[__init__.async_unload_entry] Unloading Scribe entry %s", entry.entry_id)
         data = hass.data[DOMAIN].pop(entry.entry_id)
         writer = data["writer"]
         # Ensure writer flushes remaining data before stopping
         await writer.stop()
-        _LOGGER.debug("Scribe entry unloaded successfully")
+        _LOGGER.debug("[__init__.async_unload_entry] Scribe entry %s unloaded successfully", entry.entry_id)
     return unload_ok

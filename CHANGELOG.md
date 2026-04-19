@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.4.1] - 2026-04-19
+
+### Changed
+- **Logging**: Overhauled all warning/error log messages across `migration.py`, `writer.py`, `coordinator.py`, and `__init__.py` to prefix each message with `[module.function]` context, include the exception type, attach a full traceback via `exc_info=True`, and surface the operation parameters (table names, step name, SQLSTATE, batch sizes, etc.). Diagnosing migration and write failures from the Home Assistant logs is now significantly easier — errors pinpoint the exact call site and operation that failed.
+
 ## [3.4.0] - 2026-04-19
 
 ### Added
