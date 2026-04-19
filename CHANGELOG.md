@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.4.0] - 2026-04-19
+
+### Added
+- **Performance**: Integrated native PostgreSQL `COPY` operations for massive batch insertion performance improvements, significantly lowering CPU and Memory footprint on Home Assistant thanks to [@hermes-agent]'s PR #28.
+
+### Changed
+- **Architectural Refactoring**: Core database driver (`asyncpg`) was rebuilt to natively handle Home Assistant `jsonb` data via native codecs. This prevents JSON double-encoding errors and `DataError` crashes while removing heavy Python string serialization (`json.dumps()`) across the system.
+
 ## [3.3.1] - 2026-04-18
 
 ### Fixed
