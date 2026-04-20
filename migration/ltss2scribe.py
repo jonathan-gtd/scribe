@@ -64,6 +64,26 @@ def clean_null_bytes(value):
         return value.replace('\x00', '')
     return value
 
+metadata_id_cache = {}
+
+def ensure_metadata_id(pg_cur_scribe, entity_id):
+    """
+    Ensure an entities entry exists for the given entity_id.
+    """
+    if entity_id in metadata_id_cache:
+        return metadata_id_cache[entity_id]
+    # Use `ON CONFLICT DO UPDATE` to ensure that the query always returns an id.
+    pg_cur_scribe.execute("""
+        INSERT INTO entities
+            (entity_id) VALUES (%s)
+        ON CONFLICT (entity_id) DO UPDATE SET entity_id = %s RETURNING id
+        """, (entity_id, entity_id))
+    pg_cur_scribe.connection.commit()
+
+    metadata_id = pg_cur_scribe.fetchone()[0]
+    metadata_id_cache[entity_id] = metadata_id
+    return metadata_id
+
 def migrate():
     # 1. Connect to Scribe (Destination)
     try:
@@ -89,9 +109,9 @@ def migrate():
 
     # 3. Cleanup Destination
     if PURGE_DESTINATION:
-        logging.info(f"Cleaning existing data in Scribe for range {START_TIME} to {END_TIME}...")
+        logging.info(f"Cleaning existing data in Scribe (states_raw) for range {START_TIME} to {END_TIME}...")
         try:
-            scribe_cur.execute(f"DELETE FROM states WHERE time >= '{START_TIME}' AND time <= '{END_TIME}'")
+            scribe_cur.execute("DELETE FROM states_raw WHERE time >= %s AND time <= %s", (START_TIME, END_TIME))
             scribe_conn.commit()
             logging.info("Cleanup done.")
         except Exception as e:
@@ -130,6 +150,7 @@ def migrate():
                 for row in rows:
                     ts = row['time']
                     entity_id = clean_null_bytes(row['entity_id'])
+                    metadata_id = ensure_metadata_id(scribe_cur, entity_id)
                     state_raw = row['state']
                     attributes = row['attributes'] 
                     
@@ -146,14 +167,6 @@ def migrate():
                     
                     # Clean attributes
                     if isinstance(attributes, dict):
-                        # Serialize to JSON string for insertion into jsonb column (or text)
-                        # Scribe expects jsonb usually, psycopg2 handles dict to jsonb automatically if using Json adapter,
-                        # but in influx2scribe we used json.dumps. Let's see scribe schema.
-                        # Influx2Scribe used: json.dumps(attributes)
-                        # If psycopg2 is used with execute_batch and %s, passing a dict might try to cast to JSON if configured,
-                        # but safe bet is json.dumps if the column is JSONB.
-                        # Let's inspect what attributes comes out as. It's likely a dict from RealDictCursor + jsonb column.
-                        
                         # We need to sanitize null bytes in keys/values of attributes too
                         clean_attrs = {}
                         for k, v in attributes.items():
@@ -167,13 +180,14 @@ def migrate():
                     else:
                         pg_attributes = json.dumps({})
 
-                    batch.append((ts, entity_id, pg_state, pg_value, pg_attributes))
+                    batch.append((ts, metadata_id, pg_state, pg_value, pg_attributes))
 
                 # Insert into Scribe
                 if batch:
                     execute_batch(scribe_cur, """
-                        INSERT INTO states (time, entity_id, state, value, attributes)
+                        INSERT INTO states_raw (time, metadata_id, state, value, attributes)
                         VALUES (%s, %s, %s, %s, %s)
+                        ON CONFLICT (metadata_id, time) DO NOTHING
                     """, batch)
                     scribe_conn.commit()
                     count = len(batch)

@@ -68,6 +68,26 @@ def clean_null_bytes(value):
         return value.replace('\x00', '')
     return value
 
+metadata_id_cache = {}
+
+def ensure_metadata_id(pg_cur, entity_id):
+    """
+    Ensure an entities entry exists for the given entity_id.
+    """
+    if entity_id in metadata_id_cache:
+        return metadata_id_cache[entity_id]
+    # Use `ON CONFLICT DO UPDATE` to ensure that the query always returns an id.
+    pg_cur.execute("""
+        INSERT INTO entities
+            (entity_id) VALUES (%s)
+        ON CONFLICT (entity_id) DO UPDATE SET entity_id = %s RETURNING id
+        """, (entity_id, entity_id))
+    pg_cur.connection.commit()
+
+    metadata_id = pg_cur.fetchone()[0]
+    metadata_id_cache[entity_id] = metadata_id
+    return metadata_id
+
 def migrate():
     """
     Main migration logic.
@@ -90,9 +110,9 @@ def migrate():
 
     # 3. Cleanup Destination (Optional)
     if PURGE_DESTINATION:
-        logging.info(f"Cleaning existing data in Scribe for range {START_TIME} to {END_TIME}...")
+        logging.info(f"Cleaning existing data in Scribe (states_raw) for range {START_TIME} to {END_TIME}...")
         try:
-            pg_cur.execute(f"DELETE FROM states WHERE time >= '{START_TIME}' AND time <= '{END_TIME}'")
+            pg_cur.execute("DELETE FROM states_raw WHERE time >= %s AND time <= %s", (START_TIME, END_TIME))
             pg_conn.commit()
             logging.info("Cleanup done.")
         except Exception as e:
@@ -146,6 +166,7 @@ def migrate():
                         pg_entity_id = entity_id_raw
                     
                     pg_entity_id = clean_null_bytes(pg_entity_id)
+                    metadata_id = ensure_metadata_id(pg_cur, pg_entity_id)
 
                     val = record.values.get("value")
                     state_val = record.values.get("state")
@@ -184,14 +205,15 @@ def migrate():
                                     v_clean = v
                                 attributes[k_clean] = v_clean
                     
-                    row = (ts, pg_entity_id, pg_state, pg_value, json.dumps(attributes))
+                    row = (ts, metadata_id, pg_state, pg_value, json.dumps(attributes))
                     batch.append(row)
             
             # Insert Batch into Postgres
             if batch:
                 execute_batch(pg_cur, """
-                    INSERT INTO states (time, entity_id, state, value, attributes)
+                    INSERT INTO states_raw (time, metadata_id, state, value, attributes)
                     VALUES (%s, %s, %s, %s, %s)
+                    ON CONFLICT (metadata_id, time) DO NOTHING
                 """, batch)
                 pg_conn.commit()
                 chunk_inserted = len(batch)
