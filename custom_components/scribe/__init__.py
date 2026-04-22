@@ -74,7 +74,6 @@ from .const import (
     CONF_ENABLE_USERS,
     DEFAULT_ENABLE_USERS,
     CONF_INCLUDE_EVENTS,
-    DEFAULT_INCLUDE_EVENTS,
 )
 from .writer import ScribeWriter
 
@@ -223,7 +222,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     exclude_entity_globs = get_config(CONF_EXCLUDE_ENTITY_GLOBS, [])
     
     exclude_attributes = set(get_config(CONF_EXCLUDE_ATTRIBUTES, []))
-    include_events = set(get_config(CONF_INCLUDE_EVENTS, DEFAULT_INCLUDE_EVENTS))
+    include_events = set(get_config(CONF_INCLUDE_EVENTS, []))
     
     entity_filter = generate_filter(
         include_domains,

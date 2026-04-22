@@ -33,7 +33,8 @@
                     "exclude_entities": "Vylúčiť entity",
                     "include_entity_globs": "Zahrnúť vzory entít",
                     "exclude_entity_globs": "Vylúčiť vzory entít",
-                    "exclude_attributes": "Vylúčiť atribúty"
+                    "exclude_attributes": "Vylúčiť atribúty",
+                    "include_events": "Zahrnúť typy udalostí"
                 },
                 "data_description": {
                     "record_states": "Write every state change to TimescaleDB",
@@ -44,7 +45,8 @@
                     "exclude_entities": "Never record these specific entities",
                     "include_entity_globs": "Only record entities matching these patterns",
                     "exclude_entity_globs": "Never record entities matching these patterns",
-                    "exclude_attributes": "Drop these attribute keys before writing"
+                    "exclude_attributes": "Drop these attribute keys before writing",
+                    "include_events": "Only record these specific event types. Leave empty to record all events."
                 }
             },
             "performance": {
