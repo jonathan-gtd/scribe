@@ -371,3 +371,69 @@ async def test_reload_entry(hass, mock_config_entry):
         
         mock_unload.assert_called_once_with(hass, mock_config_entry)
         mock_setup.assert_called_once_with(hass, mock_config_entry)
+
+@pytest.mark.asyncio
+async def test_include_events_filter(hass, mock_config_entry):
+    """Test that include_events restricts event subscriptions to the specified types."""
+    from custom_components.scribe import async_setup_entry
+    from custom_components.scribe.const import CONF_RECORD_EVENTS, CONF_INCLUDE_EVENTS
+
+    mock_config_entry.options = {
+        CONF_RECORD_EVENTS: True,
+        CONF_INCLUDE_EVENTS: ["my_event_a", "my_event_b"],
+    }
+
+    with patch("custom_components.scribe.ScribeWriter") as mock_writer_cls:
+        mock_writer = mock_writer_cls.return_value
+        mock_writer.start = AsyncMock()
+        mock_writer.stop = AsyncMock()
+        mock_writer.enqueue = MagicMock()
+
+        await async_setup_entry(hass, mock_config_entry)
+
+        # Included event type should be recorded.
+        hass.bus.async_fire("my_event_a", {"key": "value"})
+        await hass.async_block_till_done()
+        mock_writer.enqueue.assert_called()
+        call_arg = mock_writer.enqueue.call_args[0][0]
+        assert call_arg["type"] == "event"
+        assert call_arg["event_type"] == "my_event_a"
+        mock_writer.enqueue.reset_mock()
+
+        # Another included event type should also be recorded.
+        hass.bus.async_fire("my_event_b", {})
+        await hass.async_block_till_done()
+        mock_writer.enqueue.assert_called()
+        mock_writer.enqueue.reset_mock()
+
+        # An event type NOT in include_events must NOT be recorded.
+        hass.bus.async_fire("other_event", {})
+        await hass.async_block_till_done()
+        mock_writer.enqueue.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_include_events_empty_uses_match_all(hass, mock_config_entry):
+    """Test that an empty include_events falls back to recording all events."""
+    from custom_components.scribe import async_setup_entry
+    from custom_components.scribe.const import CONF_RECORD_EVENTS, CONF_INCLUDE_EVENTS
+
+    mock_config_entry.options = {
+        CONF_RECORD_EVENTS: True,
+        CONF_INCLUDE_EVENTS: [],
+    }
+
+    with patch("custom_components.scribe.ScribeWriter") as mock_writer_cls:
+        mock_writer = mock_writer_cls.return_value
+        mock_writer.start = AsyncMock()
+        mock_writer.stop = AsyncMock()
+        mock_writer.enqueue = MagicMock()
+
+        await async_setup_entry(hass, mock_config_entry)
+
+        # Any event type should be recorded when include_events is empty.
+        hass.bus.async_fire("any_event_type", {"data": 1})
+        await hass.async_block_till_done()
+        mock_writer.enqueue.assert_called()
+        call_arg = mock_writer.enqueue.call_args[0][0]
+        assert call_arg["type"] == "event"
+        assert call_arg["event_type"] == "any_event_type"

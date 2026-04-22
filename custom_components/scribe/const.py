@@ -72,3 +72,6 @@ DEFAULT_ENABLE_INTEGRATIONS = True
 
 CONF_ENABLE_USERS = "enable_table_users"
 DEFAULT_ENABLE_USERS = True
+
+CONF_INCLUDE_EVENTS = "include_events"
+DEFAULT_INCLUDE_EVENTS: set[str] = set()

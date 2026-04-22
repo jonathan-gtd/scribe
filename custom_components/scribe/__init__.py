@@ -73,6 +73,8 @@ from .const import (
     DEFAULT_ENABLE_INTEGRATIONS,
     CONF_ENABLE_USERS,
     DEFAULT_ENABLE_USERS,
+    CONF_INCLUDE_EVENTS,
+    DEFAULT_INCLUDE_EVENTS,
 )
 from .writer import ScribeWriter
 
@@ -114,6 +116,7 @@ CONFIG_SCHEMA = vol.Schema(
                 vol.Optional(CONF_ENABLE_ENTITIES, default=DEFAULT_ENABLE_ENTITIES): cv.boolean,
                 vol.Optional(CONF_ENABLE_INTEGRATIONS, default=DEFAULT_ENABLE_INTEGRATIONS): cv.boolean,
                 vol.Optional(CONF_ENABLE_USERS, default=DEFAULT_ENABLE_USERS): cv.boolean,
+                vol.Optional(CONF_INCLUDE_EVENTS, default=[]): vol.All(cv.ensure_list, [cv.string]),
             }
         )
     },
@@ -220,6 +223,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     exclude_entity_globs = get_config(CONF_EXCLUDE_ENTITY_GLOBS, [])
     
     exclude_attributes = set(get_config(CONF_EXCLUDE_ATTRIBUTES, []))
+    include_events = set(get_config(CONF_INCLUDE_EVENTS, DEFAULT_INCLUDE_EVENTS))
     
     entity_filter = generate_filter(
         include_domains,
@@ -556,10 +560,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             # Use MATCH_ALL to listen to all events
             from homeassistant.const import MATCH_ALL
-            _LOGGER.debug("[__init__.async_setup_entry] Registering listener for ALL events (MATCH_ALL)")
-            entry.async_on_unload(
-                hass.bus.async_listen(MATCH_ALL, handle_other_events)
-            )
+            if include_events:
+                _LOGGER.debug(
+                    "[__init__.async_setup_entry] Registering listeners for specific events: %s",
+                    include_events,
+                )
+                for event_type in include_events:
+                    entry.async_on_unload(
+                        hass.bus.async_listen(event_type, handle_other_events)
+                    )
+            else:
+                _LOGGER.debug("[__init__.async_setup_entry] Registering listener for ALL events (MATCH_ALL)")
+                entry.async_on_unload(
+                    hass.bus.async_listen(MATCH_ALL, handle_other_events)
+                )
 
         # Real-time Metadata Sync Listeners
         
