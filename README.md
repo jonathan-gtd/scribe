@@ -129,6 +129,8 @@ scribe:
   exclude_entities: []
   exclude_entity_globs: []
   exclude_attributes: []
+  include_events: []
+  exclude_events: []
   # Optional: Disable specific metadata tables (default: true)
   enable_table_areas: true
   enable_table_devices: true
@@ -167,6 +169,8 @@ scribe:
 | `exclude_entities` | List of specific entities to exclude. |
 | `exclude_entity_globs` | List of entity patterns to exclude (e.g. `switch.kitchen_*`). |
 | `exclude_attributes` | List of attributes to exclude from the `attributes` column. |
+| `include_events` | List of event types to record. Leave empty to record all events. |
+| `exclude_events` | List of event types to never record (applied after `include_events`). |
 | `enable_table_areas` | Enable creation and sync of the `areas` table. |
 | `enable_table_devices` | Enable creation and sync of the `devices` table. |
 | `enable_table_entities` | Enable creation and sync of the `entities` table. |
