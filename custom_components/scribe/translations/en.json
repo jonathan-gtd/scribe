@@ -34,7 +34,8 @@
                     "include_entity_globs": "Include entity globs",
                     "exclude_entity_globs": "Exclude entity globs",
                     "exclude_attributes": "Exclude attributes",
-                    "include_events": "Include event types"
+                    "include_events": "Include event types",
+                    "exclude_events": "Exclude event types"
                 },
                 "data_description": {
                     "record_states": "Write every state change to TimescaleDB",
@@ -46,7 +47,8 @@
                     "include_entity_globs": "Only record entities matching these patterns (e.g. sensor.temp_*)",
                     "exclude_entity_globs": "Never record entities matching these patterns",
                     "exclude_attributes": "Drop these attribute keys before writing (saves space)",
-                    "include_events": "Only record these specific event types. Leave empty to record all events."
+                    "include_events": "Only record these specific event types. Leave empty to record all events.",
+                    "exclude_events": "Never record these event types (applied after include_events)."
                 }
             },
             "performance": {

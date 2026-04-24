@@ -437,3 +437,70 @@ async def test_include_events_empty_uses_match_all(hass, mock_config_entry):
         call_arg = mock_writer.enqueue.call_args[0][0]
         assert call_arg["type"] == "event"
         assert call_arg["event_type"] == "any_event_type"
+
+@pytest.mark.asyncio
+async def test_exclude_events_filter(hass, mock_config_entry):
+    """Test that exclude_events suppresses specific event types under MATCH_ALL."""
+    from custom_components.scribe import async_setup_entry
+    from custom_components.scribe.const import CONF_RECORD_EVENTS, CONF_EXCLUDE_EVENTS
+
+    mock_config_entry.options = {
+        CONF_RECORD_EVENTS: True,
+        CONF_EXCLUDE_EVENTS: ["noisy_event"],
+    }
+
+    with patch("custom_components.scribe.ScribeWriter") as mock_writer_cls:
+        mock_writer = mock_writer_cls.return_value
+        mock_writer.start = AsyncMock()
+        mock_writer.stop = AsyncMock()
+        mock_writer.enqueue = MagicMock()
+
+        await async_setup_entry(hass, mock_config_entry)
+        await hass.async_block_till_done()
+        mock_writer.enqueue.reset_mock()  # discard events fired during setup
+
+        # Excluded event type must NOT be recorded.
+        hass.bus.async_fire("noisy_event", {})
+        await hass.async_block_till_done()
+        mock_writer.enqueue.assert_not_called()
+
+        # Other events should still be recorded.
+        hass.bus.async_fire("quiet_event", {})
+        await hass.async_block_till_done()
+        mock_writer.enqueue.assert_called()
+        call_arg = mock_writer.enqueue.call_args[0][0]
+        assert call_arg["event_type"] == "quiet_event"
+
+@pytest.mark.asyncio
+async def test_exclude_events_wins_over_include_events(hass, mock_config_entry):
+    """Test that exclude_events takes precedence even when include_events lists the same type."""
+    from custom_components.scribe import async_setup_entry
+    from custom_components.scribe.const import (
+        CONF_RECORD_EVENTS,
+        CONF_INCLUDE_EVENTS,
+        CONF_EXCLUDE_EVENTS,
+    )
+
+    mock_config_entry.options = {
+        CONF_RECORD_EVENTS: True,
+        CONF_INCLUDE_EVENTS: ["keep_me", "drop_me"],
+        CONF_EXCLUDE_EVENTS: ["drop_me"],
+    }
+
+    with patch("custom_components.scribe.ScribeWriter") as mock_writer_cls:
+        mock_writer = mock_writer_cls.return_value
+        mock_writer.start = AsyncMock()
+        mock_writer.stop = AsyncMock()
+        mock_writer.enqueue = MagicMock()
+
+        await async_setup_entry(hass, mock_config_entry)
+        await hass.async_block_till_done()
+        mock_writer.enqueue.reset_mock()  # discard events fired during setup
+
+        hass.bus.async_fire("drop_me", {})
+        await hass.async_block_till_done()
+        mock_writer.enqueue.assert_not_called()
+
+        hass.bus.async_fire("keep_me", {})
+        await hass.async_block_till_done()
+        mock_writer.enqueue.assert_called()

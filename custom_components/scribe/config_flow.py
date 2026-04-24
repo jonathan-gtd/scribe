@@ -38,6 +38,7 @@ from .const import (
     CONF_EXCLUDE_DOMAINS, CONF_EXCLUDE_ENTITIES, CONF_EXCLUDE_ENTITY_GLOBS,
     CONF_EXCLUDE_ATTRIBUTES,
     CONF_INCLUDE_EVENTS,
+    CONF_EXCLUDE_EVENTS,
     CONF_ENABLE_STATS_IO, DEFAULT_ENABLE_STATS_IO,
     CONF_ENABLE_STATS_CHUNK, DEFAULT_ENABLE_STATS_CHUNK,
     CONF_ENABLE_STATS_SIZE, DEFAULT_ENABLE_STATS_SIZE,
@@ -101,6 +102,7 @@ def _coerce_options(data: dict) -> dict:
         CONF_INCLUDE_ENTITY_GLOBS, CONF_EXCLUDE_ENTITY_GLOBS,
         CONF_EXCLUDE_ATTRIBUTES,
         CONF_INCLUDE_EVENTS,
+        CONF_EXCLUDE_EVENTS,
     ):
         if key in result and not isinstance(result[key], list):
             result[key] = [result[key]] if result[key] else []
@@ -212,6 +214,8 @@ class ScribeOptionsFlowHandler(config_entries.OptionsFlow):
             vol.Optional(CONF_EXCLUDE_ATTRIBUTES, default=g(CONF_EXCLUDE_ATTRIBUTES, [])):
                 _multi_text_selector(),
             vol.Optional(CONF_INCLUDE_EVENTS, default=g(CONF_INCLUDE_EVENTS, [])):
+                _multi_text_selector(),
+            vol.Optional(CONF_EXCLUDE_EVENTS, default=g(CONF_EXCLUDE_EVENTS, [])):
                 _multi_text_selector(),
         })
 

@@ -37,6 +37,7 @@ from .const import (
     CONF_EXCLUDE_ENTITY_GLOBS,
     CONF_EXCLUDE_ATTRIBUTES,
     CONF_INCLUDE_EVENTS,
+    CONF_EXCLUDE_EVENTS,
     CONF_RECORD_STATES,
     CONF_RECORD_EVENTS,
     CONF_BATCH_SIZE,
@@ -111,6 +112,7 @@ CONFIG_SCHEMA = vol.Schema(
                 vol.Optional(CONF_EXCLUDE_ENTITY_GLOBS, default=[]): vol.All(cv.ensure_list, [cv.string]),
                 vol.Optional(CONF_EXCLUDE_ATTRIBUTES, default=[]): vol.All(cv.ensure_list, [cv.string]),
                 vol.Optional(CONF_INCLUDE_EVENTS, default=[]): vol.All(cv.ensure_list, [cv.string]),
+                vol.Optional(CONF_EXCLUDE_EVENTS, default=[]): vol.All(cv.ensure_list, [cv.string]),
                 vol.Optional(CONF_ENABLE_AREAS, default=DEFAULT_ENABLE_AREAS): cv.boolean,
                 vol.Optional(CONF_ENABLE_DEVICES, default=DEFAULT_ENABLE_DEVICES): cv.boolean,
                 vol.Optional(CONF_ENABLE_ENTITIES, default=DEFAULT_ENABLE_ENTITIES): cv.boolean,
@@ -223,6 +225,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     exclude_attributes = set(get_config(CONF_EXCLUDE_ATTRIBUTES, []))
     include_events = set(get_config(CONF_INCLUDE_EVENTS, []))
+    exclude_events = set(get_config(CONF_EXCLUDE_EVENTS, []))
     
     entity_filter = generate_filter(
         include_domains,
@@ -534,6 +537,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 """Handle non-state-change events."""
                 if event.event_type == EVENT_STATE_CHANGED:
                     return  # Already handled above
+
+                if event.event_type in exclude_events:
+                    return
 
                 _other_event_count["total"] += 1
                 if _other_event_count["total"] <= 5:
