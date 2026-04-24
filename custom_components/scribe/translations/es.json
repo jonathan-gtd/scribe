@@ -33,7 +33,8 @@
                     "exclude_entities": "Excluir entidades",
                     "include_entity_globs": "Incluir patrones de entidades",
                     "exclude_entity_globs": "Excluir patrones de entidades",
-                    "exclude_attributes": "Excluir atributos"
+                    "exclude_attributes": "Excluir atributos",
+                    "include_events": "Incluir tipos de eventos"
                 },
                 "data_description": {
                     "record_states": "Write every state change to TimescaleDB",
@@ -44,7 +45,8 @@
                     "exclude_entities": "Never record these specific entities",
                     "include_entity_globs": "Only record entities matching these patterns",
                     "exclude_entity_globs": "Never record entities matching these patterns",
-                    "exclude_attributes": "Drop these attribute keys before writing"
+                    "exclude_attributes": "Drop these attribute keys before writing",
+                    "include_events": "Only record these specific event types. Leave empty to record all events."
                 }
             },
             "performance": {

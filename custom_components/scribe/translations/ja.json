@@ -33,7 +33,8 @@
                     "exclude_entities": "エンティティを除外",
                     "include_entity_globs": "ターゲットを含める（ワイルドカード可）",
                     "exclude_entity_globs": "ターゲットを除外（ワイルドカード可）",
-                    "exclude_attributes": "属性を除外"
+                    "exclude_attributes": "属性を除外",
+                    "include_events": "イベントタイプを含める"
                 },
                 "data_description": {
                     "record_states": "Write every state change to TimescaleDB",
@@ -44,7 +45,8 @@
                     "exclude_entities": "Never record these specific entities",
                     "include_entity_globs": "Only record entities matching these patterns",
                     "exclude_entity_globs": "Never record entities matching these patterns",
-                    "exclude_attributes": "Drop these attribute keys before writing"
+                    "exclude_attributes": "Drop these attribute keys before writing",
+                    "include_events": "Only record these specific event types. Leave empty to record all events."
                 }
             },
             "performance": {

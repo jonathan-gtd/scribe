@@ -33,7 +33,8 @@
                     "exclude_entities": "Exclure les entités",
                     "include_entity_globs": "Inclure les entités par motif",
                     "exclude_entity_globs": "Exclure les entités par motif",
-                    "exclude_attributes": "Exclure les attributs"
+                    "exclude_attributes": "Exclure les attributs",
+                    "include_events": "Inclure les types d'événements"
                 },
                 "data_description": {
                     "record_states": "Écrire chaque changement d'état dans TimescaleDB",
@@ -44,7 +45,8 @@
                     "exclude_entities": "Ne jamais enregistrer ces entités spécifiques",
                     "include_entity_globs": "N'enregistrer que les entités correspondant à ces motifs (ex. sensor.temp_*)",
                     "exclude_entity_globs": "Ne jamais enregistrer les entités correspondant à ces motifs",
-                    "exclude_attributes": "Supprimer ces clés d'attributs avant l'écriture (économise de l'espace)"
+                    "exclude_attributes": "Supprimer ces clés d'attributs avant l'écriture (économise de l'espace)",
+                    "include_events": "N'enregistrer que ces types d'événements spécifiques. Laisser vide pour tout enregistrer."
                 }
             },
             "performance": {
