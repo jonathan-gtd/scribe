@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.5.0] - 2026-04-24
+
+### Added
+- **Event filtering**: Two new configuration options, `include_events` and `exclude_events`, let you restrict which Home Assistant event types Scribe records. When `include_events` is set, Scribe subscribes only to the listed event types (rather than the bus-wide `MATCH_ALL` listener), which can noticeably reduce CPU on busy instances. `exclude_events` suppresses specific types and takes precedence over `include_events` on overlap. Both are configurable via YAML and the UI options flow. The `include_events` option was contributed in #30; `exclude_events` completes the symmetry with the other include/exclude filter pairs.
+
 ## [3.4.1] - 2026-04-19
 
 ### Changed
