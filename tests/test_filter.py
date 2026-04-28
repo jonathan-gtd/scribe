@@ -119,3 +119,55 @@ async def test_include_entity_globs(hass: HomeAssistant, mock_writer):
     })
     await hass.async_block_till_done()
     assert mock_writer.enqueue.call_count == 0
+
+
+async def test_exclude_entity_globs_overrides_include_entity_globs(hass: HomeAssistant, mock_writer):
+    """Regression for jonathan-gtd/scribe#33.
+
+    Home Assistant's ``generate_filter`` lets ``include_entity_globs`` short-
+    circuit over ``exclude_entity_globs`` (case 4a). Scribe wraps the
+    upstream filter so an exclude-glob match is always a hard reject —
+    matching the user-visible expectation that excludes win over includes.
+    """
+    config = {
+        DOMAIN: {
+            CONF_DB_URL: "postgresql://user:pass@localhost/db",
+            CONF_INCLUDE_ENTITY_GLOBS: ["sensor.*_temperature"],
+            CONF_EXCLUDE_ENTITY_GLOBS: ["sensor.processor_*"],
+        }
+    }
+
+    with patch("custom_components.scribe.ScribeWriter", return_value=mock_writer):
+        assert await async_setup_component(hass, DOMAIN, config)
+        await hass.async_block_till_done()
+
+    # Matches include_entity_globs only — should be recorded.
+    hass.bus.async_fire(EVENT_STATE_CHANGED, {
+        "entity_id": "sensor.living_room_temperature",
+        "new_state": Mock(state="22", attributes={})
+    })
+    await hass.async_block_till_done()
+    assert mock_writer.enqueue.call_count == 1
+    mock_writer.enqueue.reset_mock()
+
+    # Matches BOTH include_entity_globs (sensor.*_temperature) AND
+    # exclude_entity_globs (sensor.processor_*). Pre-fix, the upstream
+    # filter recorded this entity because the include glob short-
+    # circuited. Post-fix, the exclude glob wins.
+    hass.bus.async_fire(EVENT_STATE_CHANGED, {
+        "entity_id": "sensor.processor_temperature",
+        "new_state": Mock(state="62", attributes={})
+    })
+    await hass.async_block_till_done()
+    assert mock_writer.enqueue.call_count == 0, (
+        "sensor.processor_temperature must be excluded — exclude_entity_globs "
+        "should override include_entity_globs"
+    )
+
+    # Matches exclude_entity_globs only — must remain excluded.
+    hass.bus.async_fire(EVENT_STATE_CHANGED, {
+        "entity_id": "sensor.processor_use",
+        "new_state": Mock(state="42", attributes={})
+    })
+    await hass.async_block_till_done()
+    assert mock_writer.enqueue.call_count == 0
