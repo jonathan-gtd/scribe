@@ -16,6 +16,9 @@ Scribe is a next-generation component that writes Home Assistant states and even
 **Why Scribe?**
 Scribe is built differently. Unlike other integrations that rely on synchronous drivers or the default recorder, Scribe uses **`asyncpg`**, a high-performance asynchronous PostgreSQL driver. This allows it to handle massive amounts of data without blocking Home Assistant's event loop. It's designed for stability, speed, and efficiency.
 
+**Data structure and query**
+
+An explanation of the data structure how to query can be found here: [Data structure](datastructre.md)
 
 ## Table of Contents
 
