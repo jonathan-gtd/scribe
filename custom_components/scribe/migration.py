@@ -27,7 +27,6 @@ async def migrate_database(
     hass,
     pool: asyncpg.Pool,
     record_states: bool,
-    enable_table_entities: bool,
     chunk_time_interval: str = "7 days",
     compress_after: str = "7 days"
 ):
@@ -63,7 +62,7 @@ async def migrate_database(
 
     performed_any = False
     try:
-        if record_states and enable_table_entities:
+        if record_states:
             # 1. Add constraints FIRST (PK/FK on empty table = instant)
             if await _migrate_states_raw_constraints(pool, has_timescaledb, chunk_time_interval, compress_after):
                 performed_any = True

@@ -137,7 +137,6 @@ scribe:
   # Optional: Disable specific metadata tables (default: true)
   enable_table_areas: true
   enable_table_devices: true
-  enable_table_entities: true
   enable_table_integrations: true
   enable_table_users: true
 ```
@@ -176,7 +175,6 @@ scribe:
 | `exclude_events` | List of event types to never record (applied after `include_events`). |
 | `enable_table_areas` | Enable creation and sync of the `areas` table. |
 | `enable_table_devices` | Enable creation and sync of the `devices` table. |
-| `enable_table_entities` | Enable creation and sync of the `entities` table. |
 | `enable_table_integrations` | Enable creation and sync of the `integrations` table. |
 | `enable_table_users` | Enable creation and sync of the `users` table. |
 </details>

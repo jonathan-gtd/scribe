@@ -88,14 +88,12 @@
                 "data": {
                     "enable_table_areas": "Sync areas table",
                     "enable_table_devices": "Sync devices table",
-                    "enable_table_entities": "Sync entities table",
                     "enable_table_integrations": "Sync integrations table",
                     "enable_table_users": "Sync users table"
                 },
                 "data_description": {
                     "enable_table_areas": "Keep a mirror of Home Assistant areas in TimescaleDB",
                     "enable_table_devices": "Keep a mirror of Home Assistant devices in TimescaleDB",
-                    "enable_table_entities": "Keep a mirror of the entity registry in TimescaleDB",
                     "enable_table_integrations": "Keep a mirror of config entries (integrations) in TimescaleDB",
                     "enable_table_users": "Keep a mirror of Home Assistant users in TimescaleDB"
                 }

@@ -9,6 +9,8 @@ from influxdb_client import InfluxDBClient
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
+from preflight import preflight_scribe_schema
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -102,6 +104,8 @@ def migrate():
     except Exception as e:
         logging.error(f"Failed to connect to Postgres: {e}")
         return
+
+    preflight_scribe_schema(pg_cur)
 
     # 2. Connect to InfluxDB
     client = InfluxDBClient(url=INFLUX_URL, token=INFLUX_TOKEN, org=INFLUX_ORG, timeout=300000)
