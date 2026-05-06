@@ -148,7 +148,6 @@ class ScribeWriter:
         ssl_key_file: str = None,
         enable_table_areas: bool = True,
         enable_table_devices: bool = True,
-        enable_table_entities: bool = True,
         enable_table_integrations: bool = True,
         enable_table_users: bool = True,
     ):
@@ -174,7 +173,6 @@ class ScribeWriter:
         self.ssl_key_file = ssl_key_file
         self.enable_table_areas = enable_table_areas
         self.enable_table_devices = enable_table_devices
-        self.enable_table_entities = enable_table_entities
         self.enable_table_integrations = enable_table_integrations
         self.enable_table_users = enable_table_users
         
@@ -450,7 +448,6 @@ class ScribeWriter:
                     self.hass,
                     self._pool,   # pass pool (migration.py uses it as 'engine')
                     self.record_states,
-                    self.enable_table_entities,
                     self.chunk_interval,
                     self.compress_after
                 )
@@ -537,9 +534,9 @@ class ScribeWriter:
             # 2. Create tables (own transaction)
             async with self._pool.acquire() as conn:
                 async with conn.transaction():
-                    # Initialize entities FIRST (states view depends on it)
-                    if self.enable_table_entities:
-                        await self._init_entities_table(conn)
+                    # Initialize entities FIRST (states view depends on it,
+                    # and runtime state writes always upsert into it)
+                    await self._init_entities_table(conn)
 
                     # Always init users table
                     if self.enable_table_users:
@@ -620,7 +617,8 @@ class ScribeWriter:
                 metadata_id INTEGER NOT NULL,
                 state TEXT,
                 value DOUBLE PRECISION,
-                attributes JSONB
+                attributes JSONB,
+                PRIMARY KEY (metadata_id, time)
             );
         """)
         await conn.execute("""
@@ -782,11 +780,16 @@ class ScribeWriter:
             )
 
     async def write_entities(self, entities: list[dict]):
-        """Write entities to the database (upsert)."""
+        """Sync entities: INSERT new rows, UPDATE only changed rows, skip identical ones.
+
+        Avoids `INSERT ... ON CONFLICT DO UPDATE`, which burns a SERIAL id on every
+        conflicting row even when no insert happens — causing the id sequence to
+        balloon on each full registry resync.
+        """
         if not self._pool or not entities:
             return
 
-        _LOGGER.debug("[writer.write_entities] Writing %d entities to database...", len(entities))
+        _LOGGER.debug("[writer.write_entities] Processing %d entities...", len(entities))
         try:
             text_fields = ["entity_id", "unique_id", "platform", "domain", "name", "device_id", "area_id"]
             for entity in entities:
@@ -796,8 +799,12 @@ class ScribeWriter:
                 if entity.get("capabilities"):
                     entity["capabilities"] = self._sanitize_obj(entity["capabilities"])
 
-            rows = [
-                (
+            entity_ids = [e["entity_id"] for e in entities if e.get("entity_id")]
+            if not entity_ids:
+                return
+
+            def _row_tuple(e: dict) -> tuple:
+                return (
                     e.get("entity_id"),
                     e.get("unique_id"),
                     e.get("platform"),
@@ -807,25 +814,90 @@ class ScribeWriter:
                     e.get("area_id"),
                     e.get("capabilities"),
                 )
-                for e in entities
-            ]
 
-            await self._execute_many("""
-                INSERT INTO entities (entity_id, unique_id, platform, domain, name, device_id, area_id, capabilities)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-                ON CONFLICT (entity_id) DO UPDATE SET
-                    unique_id = EXCLUDED.unique_id,
-                    platform = EXCLUDED.platform,
-                    domain = EXCLUDED.domain,
-                    name = EXCLUDED.name,
-                    device_id = EXCLUDED.device_id,
-                    area_id = EXCLUDED.area_id,
-                    capabilities = EXCLUDED.capabilities;
-            """, rows)
-            _LOGGER.debug("[writer.write_entities] Entities written successfully")
+            def _unchanged(row, e: dict) -> bool:
+                return (
+                    row["unique_id"] == e.get("unique_id")
+                    and row["platform"] == e.get("platform")
+                    and row["domain"] == e.get("domain")
+                    and row["name"] == e.get("name")
+                    and row["device_id"] == e.get("device_id")
+                    and row["area_id"] == e.get("area_id")
+                    and row["capabilities"] == e.get("capabilities")
+                )
+
+            to_insert: list[tuple] = []
+            to_update: list[tuple] = []
+
+            async with self._pool.acquire() as conn:
+                async with conn.transaction():
+                    existing_rows = await conn.fetch(
+                        """
+                        SELECT id, entity_id, unique_id, platform, domain, name,
+                               device_id, area_id, capabilities
+                        FROM entities WHERE entity_id = ANY($1)
+                        """,
+                        entity_ids,
+                    )
+                    existing = {r["entity_id"]: r for r in existing_rows}
+
+                    for e in entities:
+                        eid = e.get("entity_id")
+                        if not eid:
+                            continue
+                        row = existing.get(eid)
+                        if row is None:
+                            to_insert.append(_row_tuple(e))
+                        elif not _unchanged(row, e):
+                            to_update.append(_row_tuple(e))
+
+                    if to_insert:
+                        inserted_rows = await conn.fetch(
+                            """
+                            INSERT INTO entities (entity_id, unique_id, platform, domain, name, device_id, area_id, capabilities)
+                            SELECT * FROM unnest(
+                                $1::text[], $2::text[], $3::text[], $4::text[],
+                                $5::text[], $6::text[], $7::text[], $8::jsonb[]
+                            )
+                            RETURNING id, entity_id
+                            """,
+                            [t[0] for t in to_insert],
+                            [t[1] for t in to_insert],
+                            [t[2] for t in to_insert],
+                            [t[3] for t in to_insert],
+                            [t[4] for t in to_insert],
+                            [t[5] for t in to_insert],
+                            [t[6] for t in to_insert],
+                            [t[7] for t in to_insert],
+                        )
+                        for r in inserted_rows:
+                            self._entity_id_map[r["entity_id"]] = r["id"]
+                            self._metadata_id_map[r["id"]] = r["entity_id"]
+
+                    if to_update:
+                        await conn.executemany(
+                            """
+                            UPDATE entities SET
+                                unique_id = $2,
+                                platform = $3,
+                                domain = $4,
+                                name = $5,
+                                device_id = $6,
+                                area_id = $7,
+                                capabilities = $8
+                            WHERE entity_id = $1
+                            """,
+                            to_update,
+                        )
+
+            _LOGGER.debug(
+                "[writer.write_entities] Done: %d inserted, %d updated, %d unchanged (of %d total)",
+                len(to_insert), len(to_update),
+                len(entities) - len(to_insert) - len(to_update), len(entities),
+            )
         except Exception as e:
             _LOGGER.error(
-                "[writer.write_entities] Error writing %d entities (sample=%s): %s (%s)",
+                "[writer.write_entities] Error syncing %d entities (sample=%s): %s (%s)",
                 len(entities), [e.get('entity_id') for e in entities[:3]], e, type(e).__name__, exc_info=True,
             )
 

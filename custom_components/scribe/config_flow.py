@@ -46,7 +46,6 @@ from .const import (
     CONF_STATS_SIZE_INTERVAL, DEFAULT_STATS_SIZE_INTERVAL,
     CONF_ENABLE_AREAS, DEFAULT_ENABLE_AREAS,
     CONF_ENABLE_DEVICES, DEFAULT_ENABLE_DEVICES,
-    CONF_ENABLE_ENTITIES, DEFAULT_ENABLE_ENTITIES,
     CONF_ENABLE_INTEGRATIONS, DEFAULT_ENABLE_INTEGRATIONS,
     CONF_ENABLE_USERS, DEFAULT_ENABLE_USERS,
 )
@@ -313,8 +312,6 @@ class ScribeOptionsFlowHandler(config_entries.OptionsFlow):
             vol.Optional(CONF_ENABLE_AREAS, default=g(CONF_ENABLE_AREAS, DEFAULT_ENABLE_AREAS)):
                 selector.BooleanSelector(),
             vol.Optional(CONF_ENABLE_DEVICES, default=g(CONF_ENABLE_DEVICES, DEFAULT_ENABLE_DEVICES)):
-                selector.BooleanSelector(),
-            vol.Optional(CONF_ENABLE_ENTITIES, default=g(CONF_ENABLE_ENTITIES, DEFAULT_ENABLE_ENTITIES)):
                 selector.BooleanSelector(),
             vol.Optional(CONF_ENABLE_INTEGRATIONS, default=g(CONF_ENABLE_INTEGRATIONS, DEFAULT_ENABLE_INTEGRATIONS)):
                 selector.BooleanSelector(),

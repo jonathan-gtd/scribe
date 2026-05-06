@@ -30,7 +30,6 @@ def mock_writer():
     
     # Attributes
     mock_instance.enable_table_users = True
-    mock_instance.enable_table_entities = True
     mock_instance.enable_table_devices = True
     mock_instance.enable_table_areas = True
     mock_instance.enable_table_integrations = True

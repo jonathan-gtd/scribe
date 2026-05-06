@@ -88,14 +88,12 @@
                 "data": {
                     "enable_table_areas": "Synchroniser la table des zones",
                     "enable_table_devices": "Synchroniser la table des appareils",
-                    "enable_table_entities": "Synchroniser la table des entités",
                     "enable_table_integrations": "Synchroniser la table des intégrations",
                     "enable_table_users": "Synchroniser la table des utilisateurs"
                 },
                 "data_description": {
                     "enable_table_areas": "Maintenir un miroir des zones Home Assistant dans TimescaleDB",
                     "enable_table_devices": "Maintenir un miroir des appareils Home Assistant dans TimescaleDB",
-                    "enable_table_entities": "Maintenir un miroir du registre d'entités dans TimescaleDB",
                     "enable_table_integrations": "Maintenir un miroir des entrées de config (intégrations) dans TimescaleDB",
                     "enable_table_users": "Maintenir un miroir des utilisateurs Home Assistant dans TimescaleDB"
                 }

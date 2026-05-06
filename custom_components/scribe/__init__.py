@@ -69,8 +69,6 @@ from .const import (
     DEFAULT_ENABLE_AREAS,
     CONF_ENABLE_DEVICES,
     DEFAULT_ENABLE_DEVICES,
-    CONF_ENABLE_ENTITIES,
-    DEFAULT_ENABLE_ENTITIES,
     CONF_ENABLE_INTEGRATIONS,
     DEFAULT_ENABLE_INTEGRATIONS,
     CONF_ENABLE_USERS,
@@ -115,7 +113,6 @@ CONFIG_SCHEMA = vol.Schema(
                 vol.Optional(CONF_EXCLUDE_EVENTS, default=[]): vol.All(cv.ensure_list, [cv.string]),
                 vol.Optional(CONF_ENABLE_AREAS, default=DEFAULT_ENABLE_AREAS): cv.boolean,
                 vol.Optional(CONF_ENABLE_DEVICES, default=DEFAULT_ENABLE_DEVICES): cv.boolean,
-                vol.Optional(CONF_ENABLE_ENTITIES, default=DEFAULT_ENABLE_ENTITIES): cv.boolean,
                 vol.Optional(CONF_ENABLE_INTEGRATIONS, default=DEFAULT_ENABLE_INTEGRATIONS): cv.boolean,
                 vol.Optional(CONF_ENABLE_USERS, default=DEFAULT_ENABLE_USERS): cv.boolean,
             }
@@ -319,7 +316,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             ssl_key_file=ssl_key_file,
             enable_table_areas=get_config(CONF_ENABLE_AREAS, DEFAULT_ENABLE_AREAS),
             enable_table_devices=get_config(CONF_ENABLE_DEVICES, DEFAULT_ENABLE_DEVICES),
-            enable_table_entities=get_config(CONF_ENABLE_ENTITIES, DEFAULT_ENABLE_ENTITIES),
             enable_table_integrations=get_config(CONF_ENABLE_INTEGRATIONS, DEFAULT_ENABLE_INTEGRATIONS),
             enable_table_users=get_config(CONF_ENABLE_USERS, DEFAULT_ENABLE_USERS),
         )
@@ -361,30 +357,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     )
 
             # Sync Entities
-            if writer.enable_table_entities:
-                try:
-                    registry = er.async_get(hass)
-                    entities = []
-                    for entity in registry.entities.values():
-                        entities.append({
-                            "entity_id": entity.entity_id,
-                            "unique_id": entity.unique_id,
-                            "platform": entity.platform,
-                            "domain": entity.domain,
-                            "name": entity.name or entity.original_name,
-                            "device_id": entity.device_id,
-                            "area_id": entity.area_id,
-                            "capabilities": entity.capabilities if entity.capabilities else None
-                        })
+            try:
+                registry = er.async_get(hass)
+                entities = []
+                for entity in registry.entities.values():
+                    entities.append({
+                        "entity_id": entity.entity_id,
+                        "unique_id": entity.unique_id,
+                        "platform": entity.platform,
+                        "domain": entity.domain,
+                        "name": entity.name or entity.original_name,
+                        "device_id": entity.device_id,
+                        "area_id": entity.area_id,
+                        "capabilities": entity.capabilities if entity.capabilities else None
+                    })
 
-                    if entities:
-                        _LOGGER.debug("[__init__._async_late_setup:entities] Syncing %d entities to database", len(entities))
-                        await writer.write_entities(entities)
-                except Exception as e:
-                    _LOGGER.error(
-                        "[__init__._async_late_setup:entities] Error syncing entities: %s (%s)",
-                        e, type(e).__name__, exc_info=True,
-                    )
+                if entities:
+                    _LOGGER.debug("[__init__._async_late_setup:entities] Syncing %d entities to database", len(entities))
+                    await writer.write_entities(entities)
+            except Exception as e:
+                _LOGGER.error(
+                    "[__init__._async_late_setup:entities] Error syncing entities: %s (%s)",
+                    e, type(e).__name__, exc_info=True,
+                )
 
             # Sync Areas
             if writer.enable_table_areas:
@@ -639,45 +634,44 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # Real-time Metadata Sync Listeners
         
         # Entity Registry Updates
-        if writer.enable_table_entities:
-            async def handle_entity_registry_update(event: Event):
-                """Handle entity registry update."""
-                action = event.data.get("action")
-                entity_id = event.data.get("entity_id")
-                
-                # Handle Rename
-                if action == "update":
-                    old_entity_id = event.data.get("old_entity_id")
-                    if old_entity_id and old_entity_id != entity_id:
-                        _LOGGER.debug("[__init__.handle_entity_registry_update] Entity renamed: %s -> %s", old_entity_id, entity_id)
-                        await writer.rename_entity(old_entity_id, entity_id)
+        async def handle_entity_registry_update(event: Event):
+            """Handle entity registry update."""
+            action = event.data.get("action")
+            entity_id = event.data.get("entity_id")
 
-                if action in ["create", "update"]:
-                    _LOGGER.debug("[__init__.handle_entity_registry_update] Registry update: %s %s", action, entity_id)
-                    try:
-                        registry = er.async_get(hass)
-                        entity = registry.async_get(entity_id)
-                        if entity:
-                            data = [{
-                                "entity_id": entity.entity_id,
-                                "unique_id": entity.unique_id,
-                                "platform": entity.platform,
-                                "domain": entity.domain,
-                                "name": entity.name or entity.original_name,
-                                "device_id": entity.device_id,
-                                "area_id": entity.area_id,
-                                "capabilities": entity.capabilities if entity.capabilities else None
-                            }]
-                            await writer.write_entities(data)
-                    except Exception as e:
-                        _LOGGER.error(
-                            "[__init__.handle_entity_registry_update] Error syncing entity %s (action=%s): %s (%s)",
-                            entity_id, action, e, type(e).__name__, exc_info=True,
-                        )
+            # Handle Rename
+            if action == "update":
+                old_entity_id = event.data.get("old_entity_id")
+                if old_entity_id and old_entity_id != entity_id:
+                    _LOGGER.debug("[__init__.handle_entity_registry_update] Entity renamed: %s -> %s", old_entity_id, entity_id)
+                    await writer.rename_entity(old_entity_id, entity_id)
 
-            entry.async_on_unload(
-                hass.bus.async_listen("entity_registry_updated", handle_entity_registry_update)
-            )
+            if action in ["create", "update"]:
+                _LOGGER.debug("[__init__.handle_entity_registry_update] Registry update: %s %s", action, entity_id)
+                try:
+                    registry = er.async_get(hass)
+                    entity = registry.async_get(entity_id)
+                    if entity:
+                        data = [{
+                            "entity_id": entity.entity_id,
+                            "unique_id": entity.unique_id,
+                            "platform": entity.platform,
+                            "domain": entity.domain,
+                            "name": entity.name or entity.original_name,
+                            "device_id": entity.device_id,
+                            "area_id": entity.area_id,
+                            "capabilities": entity.capabilities if entity.capabilities else None
+                        }]
+                        await writer.write_entities(data)
+                except Exception as e:
+                    _LOGGER.error(
+                        "[__init__.handle_entity_registry_update] Error syncing entity %s (action=%s): %s (%s)",
+                        entity_id, action, e, type(e).__name__, exc_info=True,
+                    )
+
+        entry.async_on_unload(
+            hass.bus.async_listen("entity_registry_updated", handle_entity_registry_update)
+        )
 
         # Device Registry Updates
         if writer.enable_table_devices:

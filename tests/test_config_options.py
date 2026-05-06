@@ -3,11 +3,10 @@ import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 from homeassistant.config_entries import ConfigEntry
 from custom_components.scribe.const import (
-    DOMAIN, 
+    DOMAIN,
     CONF_DB_URL,
     CONF_ENABLE_AREAS,
     CONF_ENABLE_DEVICES,
-    CONF_ENABLE_ENTITIES,
     CONF_ENABLE_INTEGRATIONS,
     CONF_ENABLE_USERS,
 )
@@ -45,7 +44,6 @@ async def test_default_config_enables_all(hass, mock_config_entry):
         
         # Mock flags on the writer instance (simulating what __init__ does)
         mock_writer.enable_table_users = True
-        mock_writer.enable_table_entities = True
         mock_writer.enable_table_areas = True
         mock_writer.enable_table_devices = True
         mock_writer.enable_table_integrations = True
@@ -65,7 +63,6 @@ async def test_default_config_enables_all(hass, mock_config_entry):
         # For others, we can check if the registry getters were called, but simpler to check if writer was initialized with correct flags
         _, kwargs = mock_writer_cls.call_args
         assert kwargs["enable_table_users"] is True
-        assert kwargs["enable_table_entities"] is True
         assert kwargs["enable_table_areas"] is True
         assert kwargs["enable_table_devices"] is True
         assert kwargs["enable_table_integrations"] is True
@@ -106,7 +103,6 @@ async def test_disable_all_metadata(hass, mock_config_entry):
     hass.data[DOMAIN] = {
         "yaml_config": {
             CONF_ENABLE_USERS: False,
-            CONF_ENABLE_ENTITIES: False,
             CONF_ENABLE_AREAS: False,
             CONF_ENABLE_DEVICES: False,
             CONF_ENABLE_INTEGRATIONS: False,
@@ -125,7 +121,6 @@ async def test_disable_all_metadata(hass, mock_config_entry):
         
         # Mock flags on the writer instance
         mock_writer.enable_table_users = False
-        mock_writer.enable_table_entities = False
         mock_writer.enable_table_areas = False
         mock_writer.enable_table_devices = False
         mock_writer.enable_table_integrations = False
@@ -135,13 +130,11 @@ async def test_disable_all_metadata(hass, mock_config_entry):
         # Verify ScribeWriter init
         _, kwargs = mock_writer_cls.call_args
         assert kwargs["enable_table_users"] is False
-        assert kwargs["enable_table_entities"] is False
         assert kwargs["enable_table_areas"] is False
         assert kwargs["enable_table_devices"] is False
         assert kwargs["enable_table_integrations"] is False
-        
-        # Verify no registry calls
+
+        # Verify no registry calls (entities still syncs since the table is mandatory)
         mock_get_users.assert_not_called()
-        mock_er.assert_not_called()
         mock_ar.assert_not_called()
         mock_dr.assert_not_called()
