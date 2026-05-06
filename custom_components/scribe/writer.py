@@ -16,6 +16,7 @@ from typing import Any, Dict
 from collections import deque
 import json
 import math
+import uuid
 
 import asyncpg
 
@@ -295,7 +296,7 @@ class ScribeWriter:
                     async def _init_connection(conn):
                         await conn.set_type_codec(
                             'jsonb',
-                            encoder=lambda x: b'\x01' + json.dumps(x, cls=JSONEncoder).encode('utf-8'),
+                            encoder=lambda x: b'\x01' + json.dumps(x, cls=JSONEncoder, default=lambda o: str(o) if isinstance(o, uuid.UUID) else JSONEncoder().default(o)).encode('utf-8'),
                             decoder=lambda x: json.loads(x[1:].decode('utf-8')),
                             schema='pg_catalog',
                             format='binary'
