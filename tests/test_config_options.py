@@ -111,7 +111,7 @@ async def test_disable_all_metadata(hass, mock_config_entry):
     
     with patch("custom_components.scribe.ScribeWriter") as mock_writer_cls, \
          patch("homeassistant.auth.AuthManager.async_get_users", new_callable=AsyncMock) as mock_get_users, \
-         patch("homeassistant.helpers.entity_registry.async_get") as mock_er, \
+         patch("homeassistant.helpers.entity_registry.async_get"), \
          patch("homeassistant.helpers.area_registry.async_get") as mock_ar, \
          patch("homeassistant.helpers.device_registry.async_get") as mock_dr:
         
