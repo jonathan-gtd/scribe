@@ -18,6 +18,8 @@ from psycopg2.extras import execute_values
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 
+from preflight import preflight_scribe_schema
+
 MINIMUM_RECORDER_SCHEMA_VERSION = 53
 """
 Minimum version of the recorder DB schema
@@ -116,6 +118,8 @@ def migrate():
         logging.info("Connected to Scribe (PostgreSQL).")
     except Exception as e:
         sys.exit(f"Failed to connect to Scribe Postgres: {e}")
+
+    preflight_scribe_schema(pg_cur_scribe)
 
     # 2. Connect to Postgres (Recorder)
     try:

@@ -8,6 +8,8 @@ from psycopg2.extras import execute_batch, RealDictCursor
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
+from preflight import preflight_scribe_schema
+
 # Load environment variables
 load_dotenv()
 
@@ -95,6 +97,8 @@ def migrate():
     except Exception as e:
         logging.error(f"Failed to connect to Scribe: {e}")
         return
+
+    preflight_scribe_schema(scribe_cur)
 
     # 2. Connect to LTSS (Source)
     try:
