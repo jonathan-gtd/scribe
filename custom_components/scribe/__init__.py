@@ -124,6 +124,46 @@ CONFIG_SCHEMA = vol.Schema(
     extra=vol.ALLOW_EXTRA,
 )
 
+def _build_exclude_priority_filter(
+    base_filter,
+    exclude_entities,
+    exclude_entity_globs,
+):
+    """Wrap ``base_filter`` so an exclude-glob match always rejects.
+
+    Home Assistant's ``generate_filter`` (case 4a) short-circuits on
+    ``include_entity_globs`` — when an entity matches an include glob the
+    exclude globs are never checked. Scribe users expect the opposite:
+    ``exclude_entity_globs`` should be a hard reject regardless of what
+    the include configuration looks like.
+
+    The wrapper checks ``exclude_entities`` and ``exclude_entity_globs``
+    first; if either matches, the entity is rejected. Otherwise the call
+    falls through to the upstream filter, preserving all other
+    Home-Assistant filter semantics (domain include/exclude, the
+    no-filter pass-through, etc.).
+    """
+    import fnmatch
+
+    exclude_entities_set = set(exclude_entities or [])
+    glob_patterns = list(exclude_entity_globs or [])
+
+    if not exclude_entities_set and not glob_patterns:
+        return base_filter
+
+    def _excluded(entity_id: str) -> bool:
+        if entity_id in exclude_entities_set:
+            return True
+        return any(fnmatch.fnmatchcase(entity_id, pat) for pat in glob_patterns)
+
+    def _filter(entity_id: str) -> bool:
+        if _excluded(entity_id):
+            return False
+        return base_filter(entity_id)
+
+    return _filter
+
+
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Set up the Scribe component from YAML.
     
@@ -233,6 +273,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         exclude_domains,
         exclude_entities,
         include_entity_globs,
+        exclude_entity_globs,
+    )
+
+    # Home Assistant's `generate_filter` (case 4a) lets `include_entity_globs`
+    # short-circuit *over* `exclude_entity_globs`: when an entity matches an
+    # include glob, the exclude globs are never checked. Scribe users expect
+    # the opposite — `exclude_entity_globs` should override
+    # `include_entity_globs`, mirroring how `exclude_entities` already takes
+    # precedence over `include_entity_globs`.
+    #
+    # Wrap the filter so an exclude-glob match (or an exclude-entity match)
+    # is always a hard reject, then defer to the upstream filter for
+    # everything else. See https://github.com/jonathan-gtd/scribe/issues/33.
+    entity_filter = _build_exclude_priority_filter(
+        entity_filter,
+        exclude_entities,
         exclude_entity_globs,
     )
     
