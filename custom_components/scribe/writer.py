@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict
 from collections import deque
+import dataclasses
 import json
 import math
 import uuid
@@ -1111,9 +1112,13 @@ class ScribeWriter:
             if depth > 100:
                 return str(obj)
 
+            if obj is None or isinstance(obj, (bool, int)):
+                return obj
+
             if isinstance(obj, float):
                 if math.isinf(obj) or math.isnan(obj):
                     return None
+                return obj
 
             if isinstance(obj, str):
                 if "\0" in obj:
@@ -1126,13 +1131,21 @@ class ScribeWriter:
                 return [self._sanitize_obj(v, depth + 1) for v in obj]
             if isinstance(obj, tuple):
                 return tuple(self._sanitize_obj(v, depth + 1) for v in obj)
-            return obj
+
+            # Non-JSON-native types: convert to something the upstream
+            # JSONEncoder can handle. Dataclasses → dict (preserves field
+            # names), everything else (UUIDs, integration-specific objects
+            # like TargetChannelInfo, …) → str. Without this, json.dumps
+            # crashes on the whole batch — see issue #35.
+            if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+                return self._sanitize_obj(dataclasses.asdict(obj), depth + 1)
+            return str(obj)
         except Exception as e:
             _LOGGER.error(
                 "[writer._sanitize_obj] Error sanitizing object (type=%s, depth=%d): %s (%s)",
                 type(obj).__name__, depth, e, type(e).__name__, exc_info=True,
             )
-            return obj
+            return str(obj)
 
     # ------------------------------------------------------------------
     # Flush / write batch
