@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.6.0] - 2026-05-07
+
+### Fixed
+- **Flush crash on non-JSON-native attributes (#35)**: a single `TargetChannelInfo` (or any custom integration object) inside `attributes` made `json.dumps` raise inside the asyncpg jsonb codec, killing the whole flush batch with `Object of type X is not JSON serializable (TypeError)`. `_sanitize_obj` now converts non-JSON-native values before they reach the codec — dataclasses to dict (preserves field names), everything else (UUID, integration-specific objects, …) to string. Reported by @jaal2001, with an initial UUID-specific patch by @azebro (#37) kept as defense-in-depth.
+- **`exclude_entity_globs` now overrides `include_entity_globs` (#33)**: Home Assistant's `generate_filter` lets `include_entity_globs` short-circuit over `exclude_entity_globs` (case 4a). Scribe now wraps the upstream filter so an exclude-glob match is always a hard reject. Contributed in #34 by @SAY-5.
+- **Migration scripts no longer crash without the `states_raw` PK (#31)**: `influx2scribe`, `ltss2scribe` and `recorder2scribe` now run a schema preflight before any chunk. If the destination is missing the `entities` UNIQUE constraint or the `states_raw` PK on `(metadata_id, time)`, the script fails fast with guidance to start Scribe for ≥15 minutes so the background migration can complete. Reported by @frankvandenhurk.
+
+### Changed
+- **`entities` table is now always created**: removed the `enable_table_entities` configuration option. The table was already de-facto mandatory — every state insert upserts into it via `_ensure_metadata_ids` and the `states` view joins on it — so disabling it silently broke `record_states=True`. Existing YAML configs carrying the option are ignored (the schema accepts unknown keys).
+- **PRIMARY KEY on `states_raw` at table creation**: the PK on `(metadata_id, time)` is now part of `CREATE TABLE` instead of being added by the post-bootstrap migration. New installs have the constraint from the first row, so `ON CONFLICT (metadata_id, time)` in migration scripts works immediately without waiting for the 60s + background-migration window.
+
+### Added
+- **Documentation**: `datastructre.md` — a guide on Scribe's database structure with query examples. Contributed in #36 by @jaal2001.
+
 ## [3.5.0] - 2026-04-24
 
 ### Added
