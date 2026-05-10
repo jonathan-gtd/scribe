@@ -862,6 +862,7 @@ class ScribeWriter:
                                 $1::text[], $2::text[], $3::text[], $4::text[],
                                 $5::text[], $6::text[], $7::text[], $8::jsonb[]
                             )
+                            ON CONFLICT (entity_id) DO NOTHING
                             RETURNING id, entity_id
                             """,
                             [t[0] for t in to_insert],
