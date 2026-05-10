@@ -18,6 +18,7 @@ import dataclasses
 import json
 import math
 import uuid
+from datetime import date, datetime as dt_datetime
 
 import asyncpg
 
@@ -861,6 +862,7 @@ class ScribeWriter:
                                 $1::text[], $2::text[], $3::text[], $4::text[],
                                 $5::text[], $6::text[], $7::text[], $8::jsonb[]
                             )
+                            ON CONFLICT (entity_id) DO NOTHING
                             RETURNING id, entity_id
                             """,
                             [t[0] for t in to_insert],
@@ -1113,6 +1115,9 @@ class ScribeWriter:
                 return str(obj)
 
             if obj is None or isinstance(obj, (bool, int)):
+                return obj
+                
+            if isinstance(obj, (dt_datetime, date)):
                 return obj
 
             if isinstance(obj, float):
