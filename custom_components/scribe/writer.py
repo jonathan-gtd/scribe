@@ -18,6 +18,7 @@ import dataclasses
 import json
 import math
 import uuid
+from datetime import date, datetime as dt_datetime
 
 import asyncpg
 
@@ -1113,6 +1114,9 @@ class ScribeWriter:
                 return str(obj)
 
             if obj is None or isinstance(obj, (bool, int)):
+                return obj
+                
+            if isinstance(obj, (dt_datetime, date)):
                 return obj
 
             if isinstance(obj, float):
