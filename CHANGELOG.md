@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.6.1] - 2026-05-13
+
+### Fixed
+- **Flush crash on datetime attributes (regression from 3.6.0)**: the `_sanitize_obj` recursion introduced in 3.6.0 walked every value of a batch item, including the `time` field. `datetime`/`date` instances did not match any of the early type guards and fell through to the `str(obj)` fallback, after which `asyncpg`'s `timestamptz_encode` rejected the ISO string with `TypeError: expected a datetime.date or datetime.datetime instance, got 'str'`. `_sanitize_obj` now returns `datetime`/`date` values unchanged. Reported and fixed in #40 by @jaal2001.
+- **`UniqueViolationError` on concurrent entity inserts**: `write_entities` used a `SELECT`-then-`INSERT` pattern (to avoid `SERIAL` sequence bloat from `ON CONFLICT DO UPDATE`), but two concurrent registry-sync triggers could both observe the same entity as absent and race on the `INSERT`. Reproducible with intermittently-online devices like Chromecast switches that fire multiple registry syncs when they reappear. Added `ON CONFLICT (entity_id) DO NOTHING` as a safety net — unlike `DO UPDATE`, it doesn't advance the sequence on conflict. Fixed in #40 by @jaal2001.
+
 ## [3.6.0] - 2026-05-07
 
 ### Fixed
