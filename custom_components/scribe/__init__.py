@@ -115,7 +115,8 @@ CONFIG_SCHEMA = vol.Schema(
                 vol.Optional(CONF_ENABLE_DEVICES, default=DEFAULT_ENABLE_DEVICES): cv.boolean,
                 vol.Optional(CONF_ENABLE_INTEGRATIONS, default=DEFAULT_ENABLE_INTEGRATIONS): cv.boolean,
                 vol.Optional(CONF_ENABLE_USERS, default=DEFAULT_ENABLE_USERS): cv.boolean,
-            }
+            },
+            extra=vol.ALLOW_EXTRA,
         )
     },
     extra=vol.ALLOW_EXTRA,

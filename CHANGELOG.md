@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.6.2] - 2026-05-13
+
+### Fixed
+- **Invalid-config error on removed `enable_table_entities` option (regression from 3.6.0)**: 3.6.0 removed the option from the schema and the CHANGELOG promised unknown keys would be ignored, but `extra=vol.ALLOW_EXTRA` was only set on the outer (top-level) schema, not on the inner `scribe:` block. Existing YAML configs carrying the option now fail validation with `'enable_table_entities' is an invalid option for 'scribe'`. The inner schema now also allows extras, matching the documented behavior.
+
 ## [3.6.1] - 2026-05-13
 
 ### Fixed
