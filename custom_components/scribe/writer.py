@@ -683,6 +683,10 @@ class ScribeWriter:
         in an executor rather than on the event loop.
         """
         if not self.use_ssl:
+            # Turning TLS off reloads the entry without restarting Home
+            # Assistant: an issue about certificates no longer in use would
+            # otherwise stay up until the next restart.
+            self._clear_issue(ISSUE_SSL_DEGRADED)
             return False
 
         def resolve_path(path_str):
