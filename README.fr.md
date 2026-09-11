@@ -9,7 +9,7 @@ Scribe est conçu différemment. Contrairement aux intégrations qui reposent su
 
 **Structure des données et requêtes**
 
-Une explication de la structure des données et de la façon de l'interroger se trouve ici : [Structure des données](datastructre.md)
+Une explication de la structure des données et de la façon de l'interroger se trouve ici : [Structure des données](docs/data-structure.md)
 
 ## Table des matières
 

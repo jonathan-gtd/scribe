@@ -9,7 +9,7 @@ Scribe está construido de otra manera. A diferencia de las integraciones que de
 
 **Estructura de datos y consultas**
 
-Aquí encontrarás una explicación de la estructura de datos y de cómo consultarla: [Estructura de datos](datastructre.md)
+Aquí encontrarás una explicación de la estructura de datos y de cómo consultarla: [Estructura de datos](docs/data-structure.md)
 
 ## Índice
 

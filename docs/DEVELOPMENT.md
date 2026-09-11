@@ -1,7 +1,7 @@
 # Developing Scribe
 
 Everything needed to work on Scribe's code: how it is built, the rules the code relies on, how to test it, how changes get merged, and how a release is cut.
-For how to *use* Scribe, see the [README](README.md). For the database layout from a user's point of view, see [datastructre.md](datastructre.md).
+For how to *use* Scribe, see the [README](../README.md). For the database layout from a user's point of view, see [data-structure.md](data-structure.md).
 
 - [1. Quick start](#1-quick-start)
 - [2. Repository layout](#2-repository-layout)
@@ -65,7 +65,8 @@ HACS installs **only `custom_components/scribe/`**. Everything else in the repos
 | `hacs.json` | HACS metadata, including the **minimum Home Assistant version**. |
 | `README.md`, `README.fr.md`, `README.es.md`, `README.de.md` | User documentation, in four languages, kept in sync by tests. |
 | `CHANGELOG.md` | One entry per user-visible change. See [section 8](#8-changelog). |
-| `datastructre.md` | User guide to the tables and to querying them. |
+| `docs/DEVELOPMENT.md` | This guide. |
+| `docs/data-structure.md` | User guide to the tables and to querying them. |
 | `lovelace_*.yaml` | Example dashboard and card. |
 
 Ignored by git and safe to delete: `venv/`, `.pytest_cache/`, `.ruff_cache/`, `__pycache__/`, `.coverage`, `coverage.xml`, `tuto/` (local copy of Home Assistant's developer docs), `migration/.env`.
