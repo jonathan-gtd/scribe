@@ -30,7 +30,8 @@ uv venv --python 3.14 venv
 uv pip install --python venv/bin/python -r requirements_test.txt pytest-cov
 
 docker run -d --name scribe-test-db -e POSTGRES_PASSWORD=scribe \
-    -e POSTGRES_DB=scribe -p 55432:5432 timescale/timescaledb:latest-pg17
+    -e POSTGRES_DB=scribe -p 55432:5432 timescale/timescaledb:latest-pg17 \
+    -c timescaledb.max_background_workers=0
 
 venv/bin/ruff check . && venv/bin/ruff format --check .
 venv/bin/python -m pytest tests
@@ -251,6 +252,7 @@ venv/bin/ruff check . && venv/bin/ruff format --check . \
     - Query through `writer._pool`, not a new pool: only the writer's pool has the `jsonb` codec, and without it dict attributes fail.
     - `pg_class.relkind` comes back from asyncpg as **bytes**, so `== "r"` never matches. Cast it to text in SQL.
     - The statistics coordinators are off by default. A test that needs them must enable them.
+    - **The test server runs with TimescaleDB's background jobs switched off** (`timescaledb.max_background_workers=0`, in the `docker run` of [section 1](#1-quick-start) and in every CI job). Otherwise the scheduler runs retention and compression jobs on the tables the tests create, and cancelling one because a test dropped its table has crashed the whole server: a segfault in `policy_retention` on `timescaledb:latest-pg17`. The policies still exist and can be checked. A test that needs a job to run calls it itself (`CALL run_job(...)`, `compress_chunk(...)`). For a container created without the flag: `docker exec scribe-test-db psql -U postgres -c "ALTER SYSTEM SET timescaledb.max_background_workers = 0"`, then `docker restart scribe-test-db`.
 
 ### 6.3 What CI checks
 

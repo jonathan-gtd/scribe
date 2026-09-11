@@ -7,7 +7,12 @@ as opposed to the mocked suites, which assert on the SQL that was issued.
 Start the database they expect with:
 
     docker run -d --name scribe-test-db -e POSTGRES_PASSWORD=scribe \
-        -e POSTGRES_DB=scribe -p 55432:5432 timescale/timescaledb:latest-pg17
+        -e POSTGRES_DB=scribe -p 55432:5432 timescale/timescaledb:latest-pg17 \
+        -c timescaledb.max_background_workers=0
+
+Background jobs are off so the scheduler cannot run a policy on a table a test
+is dropping: cancelling one has crashed the whole server (see
+docs/DEVELOPMENT.md, section 6.2). Tests that need a job run it themselves.
 
 Every test here skips itself when no database answers, so the suite still runs
 anywhere. CI provides a service container and fails if they skip.
