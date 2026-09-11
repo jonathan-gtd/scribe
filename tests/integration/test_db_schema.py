@@ -216,12 +216,11 @@ async def test_a_legacy_table_in_public_does_not_block_another_schema(
         await writer.stop()
 
 
-async def _drop_test_role(conn):
-    """Remove the role and the privilege entries that depend on it.
+FORBIDDEN = "scribe_forbidden"
 
-    A GRANT (or an explicit REVOKE) on the database is a dependency in its own
-    right: `DROP ROLE` fails with DependentObjectsStillExist until it is gone.
-    """
+
+async def _drop_test_role(conn):
+    """Remove the role and whatever it owns or was granted."""
     if await conn.fetchval("SELECT 1 FROM pg_roles WHERE rolname = $1", ROLE):
         await conn.execute(f"DROP OWNED BY {ROLE}")
         await conn.execute(f"DROP ROLE {ROLE}")
@@ -229,24 +228,31 @@ async def _drop_test_role(conn):
 
 @pytest.mark.asyncio
 async def test_a_schema_that_cannot_be_reached_records_nothing(hass, clean_db):
-    """A role with no rights must not silently fill `public` instead."""
+    """A role with no rights on the schema must not silently fill `public`.
+
+    The condition is built only from objects this test creates — a schema the
+    role has no USAGE on, and the role itself. An earlier version revoked and
+    re-granted CREATE on the whole database, by a hardcoded name: it ignored
+    SCRIBE_TEST_DSN, and its teardown granted CREATE to PUBLIC, a privilege
+    PostgreSQL does not give by default, so every later test ran against a more
+    permissive database than the one it started with.
+    """
     conn = await asyncpg.connect(DSN)
     try:
         await _drop_test_role(conn)
-        await conn.execute(
-            "CREATE ROLE scribe_no_create LOGIN PASSWORD 'nope' NOCREATEDB"
-        )
-        await conn.execute(
-            "REVOKE CREATE ON DATABASE scribe FROM scribe_no_create, PUBLIC"
-        )
-        await conn.execute("GRANT CONNECT ON DATABASE scribe TO scribe_no_create")
+        await conn.execute(f'DROP SCHEMA IF EXISTS "{FORBIDDEN}" CASCADE')
+        await conn.execute(f"CREATE ROLE {ROLE} LOGIN PASSWORD 'nope'")
+        # Owned by the superuser; the role is given nothing on it. PostgreSQL
+        # skips a search_path entry the session has no USAGE on, exactly as it
+        # skips one that does not exist — which is the trap being tested.
+        await conn.execute(f'CREATE SCHEMA "{FORBIDDEN}"')
     finally:
         await conn.close()
 
-    dsn = DSN.split("://")[0] + "://scribe_no_create:nope@" + DSN.split("@")[1]
+    dsn = DSN.split("://")[0] + f"://{ROLE}:nope@" + DSN.split("@")[1]
     writer = ScribeWriter(
         hass,
-        WriterConfig(db_url=dsn, db_schema="forbidden_schema", flush_interval=3600),
+        WriterConfig(db_url=dsn, db_schema=FORBIDDEN, flush_interval=3600),
     )
     try:
         await writer.start()
@@ -260,7 +266,30 @@ async def test_a_schema_that_cannot_be_reached_records_nothing(hass, clean_db):
         await writer.stop()
         conn = await asyncpg.connect(DSN)
         try:
+            await conn.execute(f'DROP SCHEMA IF EXISTS "{FORBIDDEN}" CASCADE')
             await _drop_test_role(conn)
-            await conn.execute("GRANT CREATE ON DATABASE scribe TO PUBLIC")
         finally:
             await conn.close()
+
+
+@pytest.mark.asyncio
+async def test_the_test_database_keeps_postgresql_default_privileges(clean_db):
+    """No test may leave the database more permissive than it found it.
+
+    PUBLIC gets CONNECT and TEMPORARY on a database by default, never CREATE.
+    A test that grants it — as the one above used to on teardown — changes what
+    every later test in the run is checking against, and on a long-lived local
+    server it never goes back.
+    """
+    conn = await asyncpg.connect(DSN)
+    try:
+        public_may_create = await conn.fetchval(
+            "SELECT has_database_privilege('public', current_database(), 'CREATE')"
+        )
+    finally:
+        await conn.close()
+
+    assert not public_may_create, (
+        "PUBLIC holds CREATE on the test database; run "
+        "REVOKE CREATE ON DATABASE <name> FROM PUBLIC"
+    )
