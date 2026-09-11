@@ -40,6 +40,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Keep TimescaleDB's background jobs out of the tests
+        # The scheduler runs retention and compression jobs on the tables the
+        # tests create, and cancelling one because a test dropped its table
+        # has crashed the whole server (a segfault in policy_retention on
+        # timescaledb:latest-pg17). Tests that need a job run it themselves.
+        run: |
+          docker exec ${{ job.services.timescaledb.id }} \
+            psql -U postgres -c "ALTER SYSTEM SET timescaledb.max_background_workers = 0"
+          docker restart ${{ job.services.timescaledb.id }}
+          until docker exec ${{ job.services.timescaledb.id }} pg_isready -U postgres -q; do sleep 1; done
+
       - name: Set up Python
         uses: actions/setup-python@v7
         with:

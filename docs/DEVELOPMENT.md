@@ -30,7 +30,8 @@ uv venv --python 3.14 venv
 uv pip install --python venv/bin/python -r requirements_test.txt pytest-cov
 
 docker run -d --name scribe-test-db -e POSTGRES_PASSWORD=scribe \
-    -e POSTGRES_DB=scribe -p 55432:5432 timescale/timescaledb:latest-pg17
+    -e POSTGRES_DB=scribe -p 55432:5432 timescale/timescaledb:latest-pg17 \
+    -c timescaledb.max_background_workers=0
 
 venv/bin/ruff check . && venv/bin/ruff format --check .
 venv/bin/python -m pytest tests
@@ -59,6 +60,7 @@ HACS installs **only `custom_components/scribe/`**. Everything else in the repos
 | `custom_components/scribe/services.yaml`, `icons.json`, `manifest.json` | Service descriptions, icons, integration manifest (holds the **version**). |
 | `tests/` | Unit tests, run against mocks. `tests/conftest.py` mocks `asyncpg.create_pool` for every test. |
 | `tests/integration/` | End-to-end tests against a real TimescaleDB. See [section 6](#6-tests). |
+| `tests/upgrade/` | Upgrade tests: a database filled by an older release, opened by the current code. See [6.6](#66-upgrade-tests). |
 | `migration/` | Stand-alone scripts that import history from InfluxDB, LTSS or the HA recorder. Not part of the integration. |
 | `scripts/` | Local helper shell scripts. See [section 15](#15-migration-scripts-and-helper-scripts). |
 | `.github/workflows/` | CI. See [section 6](#6-tests) and [section 9](#9-releasing). |
@@ -226,8 +228,9 @@ Breaking one of these has caused a real bug before. Each is explained in a comme
 |---|---|
 | `venv/bin/python -m pytest tests --ignore=tests/integration` | Unit tests only. No database needed. |
 | `venv/bin/python -m pytest tests/integration` | Integration tests. Need the TimescaleDB container ([section 1](#1-quick-start)). |
-| `venv/bin/python -m pytest tests` | Everything. Integration tests skip themselves if no database answers. |
+| `venv/bin/python -m pytest tests` | Everything. Integration and upgrade tests skip themselves if no database answers. |
 | `venv/bin/python -m pytest tests/test_collect_devices.py -k child` | One file, filtered by test name. |
+| `venv/bin/python -m pytest tests/upgrade` | Upgrade tests from older releases, one per release ([6.6](#66-upgrade-tests)). Need the TimescaleDB container. |
 | `venv/bin/ruff check . && venv/bin/ruff format --check .` | Lint and formatting, as in CI. `venv/bin/ruff format .` fixes the formatting. |
 
 **To reproduce CI exactly:**
@@ -249,12 +252,13 @@ venv/bin/ruff check . && venv/bin/ruff format --check . \
     - Query through `writer._pool`, not a new pool: only the writer's pool has the `jsonb` codec, and without it dict attributes fail.
     - `pg_class.relkind` comes back from asyncpg as **bytes**, so `== "r"` never matches. Cast it to text in SQL.
     - The statistics coordinators are off by default. A test that needs them must enable them.
+    - **The test server runs with TimescaleDB's background jobs switched off** (`timescaledb.max_background_workers=0`, in the `docker run` of [section 1](#1-quick-start) and in every CI job). Otherwise the scheduler runs retention and compression jobs on the tables the tests create, and cancelling one because a test dropped its table has crashed the whole server: a segfault in `policy_retention` on `timescaledb:latest-pg17`. The policies still exist and can be checked. A test that needs a job to run calls it itself (`CALL run_job(...)`, `compress_chunk(...)`). For a container created without the flag: `docker exec scribe-test-db psql -U postgres -c "ALTER SYSTEM SET timescaledb.max_background_workers = 0"`, then `docker restart scribe-test-db`.
 
 ### 6.3 What CI checks
 
 | Workflow | When | What |
 |---|---|---|
-| `tests.yaml` | push to `master`, every pull request, and before each release | `ruff check`, `ruff format --check`, the whole suite against a TimescaleDB service container, **coverage ≥ 83 %**, and a second run of `tests/integration` that **fails if any integration test was skipped**. |
+| `tests.yaml` | push to `master`, every pull request, and before each release | `ruff check`, `ruff format --check`, the whole suite against a TimescaleDB service container, **coverage ≥ 83 %**, and a second run of `tests/integration` that **fails if any integration test was skipped**. A second job, `Upgrade from older releases`, runs `tests/upgrade` ([6.6](#66-upgrade-tests)) and fails if any of them was skipped; the first job leaves that folder out. |
 | `validate.yaml` | push to `master`, pull requests, daily | HACS validation and hassfest (Home Assistant's manifest and translation checks). |
 | `codeql.yaml` | push to `master`, pull requests, weekly | GitHub CodeQL security analysis. Results go to the Security tab. It does not block a merge. |
 | `upstream-watch.yaml` | Mondays, or by hand | The suite against the **latest Home Assistant pre-release**, ignoring the pin. It only runs on a schedule, so a failure sends an email and never blocks anything. |
@@ -292,6 +296,34 @@ venv/bin/python -m pytest tests --ignore=tests/integration -q \
 ```
 
 Run it with the environment from 6.4 to check an upcoming Home Assistant version. To keep a deprecation from coming back, write a test that uses the real helper (not a mock) and asserts `"deprecated" not in caplog.text`, like `tests/test_collect_devices.py`.
+
+### 6.6 Upgrade tests
+
+Every other test starts from an empty database. Existing users do not: they update with a database written by an older release. `tests/upgrade/` tests that path, with **one test per release**:
+
+```
+venv/bin/python -m pytest tests/upgrade             # every release
+venv/bin/python -m pytest tests/upgrade -k v3.8.0   # one release
+```
+
+For each release, the `older_database` fixture (`tests/upgrade/conftest.py`):
+
+1. creates a fresh database on the test server, with TimescaleDB enabled, as on a real installation;
+2. checks out the release's tag in a temporary git worktree, and runs `tests/upgrade/seed.py` there **in a separate process**, so that **the release's own code** fills the database through its normal setup: a config entry, state changes, an event, the `flush` service. It has to be another process: two versions of `custom_components.scribe` cannot be imported by the same interpreter;
+3. hands the database to `test_an_older_database_keeps_working` (`tests/upgrade/test_upgrade.py`), which runs with the **current code** and checks that Scribe:
+   - starts without being blocked and without raising an error-level Repairs issue;
+   - finds the old history through the `states` view;
+   - keeps writing to the entities the old release registered;
+   - carries the whole history through a rename;
+   - has its hypertables and compression policies;
+   - survives a restart;
+4. removes the worktree and the database afterwards.
+
+- **Releases tested**: the last patch of every stable minor since 3.2, read from the git tags by `releases()` in `conftest.py`. A new release is included automatically once it is tagged.
+- **Needs** the test TimescaleDB from [section 1](#1-quick-start), with a role that can create databases (the default `postgres` can), **and the git tags**. Without a database the tests are skipped; in a shallow clone (no tags) there is nothing to test and they are skipped too. The CI job fetches the whole history and fails on any skip.
+- `seed.py` is not named `test_*`, so pytest never collects it directly.
+- **Databases created by 3.1 to 3.5 have no primary key on `states_raw`**, and no release ever added it. On them, the test skips the check that relies on it (duplicate rows ignored with `ON CONFLICT`).
+- The old code runs on the pinned Home Assistant. If a future Home Assistant can no longer run an old release, its test fails with "`vX` could not fill the database with its own code". That is the old release failing, not a regression: raise `OLDEST` in `tests/upgrade/conftest.py` to stop testing it.
 
 ---
 
@@ -347,15 +379,20 @@ git switch master && git pull --ff-only
   - GitHub Actions and `ruff`: merge once CI is green. A new `ruff` can report new findings. Fix them in the same pull request or in a separate one.
   - `pytest-homeassistant-custom-component`: **check which Home Assistant it pins first** ([section 5](#5-development-environment)). If it pins a beta, close the pull request with a comment saying so. When a release that pins a stable version exists, bump to it on a branch of your own.
 
-### 7.5 Protecting `master` (recommended)
+### 7.5 `master` is protected
 
-In GitHub → Settings → Branches, add a rule for `master`:
+`master` has a branch protection rule (GitHub → Settings → Branches), which applies to administrators too:
 
-- **Require a pull request before merging**, with 0 required approvals: a single maintainer cannot approve their own pull request.
-- **Require status checks to pass**: `Run Unit Tests`, `HACS`, `Hassfest`. CodeQL stays advisory.
-- **Block force pushes and deletions.**
+- **A pull request is required to change it**, with 0 required approvals: a single maintainer cannot approve their own pull request. A direct `git push` to `master` is refused.
+- **These checks must pass before merging**: `Run Unit Tests`, `Upgrade from older releases`, `HACS`, `Hassfest`. CodeQL stays advisory.
+- **Force pushes and deleting the branch are refused.**
+- Branches do not have to be up to date with `master` before merging.
 
-Without this rule, the workflow above is only a convention: a direct `git push` to `master` still works.
+Tags are not affected: a release is still published by pushing a tag ([section 9](#9-releasing)).
+
+A check listed as required must exist in every pull request's workflows, or that pull request waits for it forever. When adding or renaming a CI job that should be required, merge it first, then add it to the rule.
+
+**In an emergency** (CI broken by something outside the repository, and a fix must land): lift the rule temporarily in Settings → Branches, or with `gh api -X DELETE repos/jonathan-gtd/scribe/branches/master/protection`, and put it back afterwards with the settings above.
 
 ### 7.6 Fixing a released version
 
@@ -412,7 +449,7 @@ Then bring the fix into `master` through a normal pull request (`git cherry-pick
    ```
 
 7. Follow the **Release** workflow in the Actions tab (or `gh run watch`). It:
-   1. runs the whole `tests.yaml` suite on the tagged commit;
+   1. runs the whole `tests.yaml` workflow on the tagged commit: the test suite and the upgrade tests;
    2. fails if the tag is not `v` + the version in `manifest.json`;
    3. zips `custom_components/scribe` into `scribe.zip`;
    4. creates the GitHub release with generated notes and the zip, marked as a pre-release if the tag ends in `aN`/`bN`/`rcN`.
