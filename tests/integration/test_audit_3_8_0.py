@@ -40,10 +40,9 @@ async def test_query_service_is_stopped_by_the_server(hass, scribe_entry, monkey
     # A server-side cancellation, not asyncio giving up: anything else means
     # nothing bounds the query on the database side.
     # wait_for only guards the test against hanging forever; the assertion is
-    # about what the *database* does, so only the await sits inside raises().
-    query = asyncio.wait_for(writer.query("SELECT pg_sleep(30)"), timeout=15)
+    # about what the *database* does.
     with pytest.raises(asyncpg.PostgresError) as excinfo:
-        await query
+        await asyncio.wait_for(writer.query("SELECT pg_sleep(30)"), timeout=15)
 
     assert "statement timeout" in str(excinfo.value).lower()
     assert (

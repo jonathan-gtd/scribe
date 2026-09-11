@@ -338,7 +338,7 @@ async def test_everything_fired_during_shutdown_is_written(hass, scribe_entry):
 
     from .conftest import DSN
 
-    entry, writer = await scribe_entry()
+    await scribe_entry()
 
     hass.bus.async_fire(EVENT_HOMEASSISTANT_STOP)
     await hass.async_block_till_done()
