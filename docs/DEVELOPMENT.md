@@ -443,7 +443,7 @@ Scribe reports conditions it cannot fix itself in Settings → System → Repair
 | `legacy_schema` | `legacy_schema` | error | a pre-3.0 database is detected | the next successful `init_db` |
 | `view_failed` | `view_failed` | error | the `states` view cannot be created | the view is created |
 | `no_timescaledb` | `no_timescaledb` | warning | the extension is missing and cannot be enabled | the extension is found |
-| `ssl_degraded` | `ssl_degraded` | warning | a configured certificate could not be loaded | the TLS context builds without problems |
+| `ssl_degraded` | `ssl_degraded` | warning | a configured certificate could not be loaded | the TLS context builds without problems, or TLS is turned off |
 | `no_hypertable_<table>` | `no_hypertable` | warning | TimescaleDB is installed but the table is not a hypertable | the table is a hypertable, or TimescaleDB is absent |
 | `no_compression_<table>` | `no_compression` | warning | the hypertable has no compression policy | a compression policy exists |
 | `retention_failed_<table>` | `retention_failed` | error | the retention interval is invalid, or the policy could not be applied | the policy is applied, or retention is emptied |

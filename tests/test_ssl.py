@@ -189,3 +189,21 @@ async def test_a_healthy_tls_setup_retires_the_issue(hass, certs):
         await writer._build_ssl_context()
 
     clear.assert_called_once_with(ISSUE_SSL_DEGRADED)
+
+
+@pytest.mark.asyncio
+async def test_turning_tls_off_retires_the_issue(hass):
+    """Turning TLS off in the options reloads the entry without restarting.
+
+    A degraded-TLS issue raised by the previous configuration describes a
+    certificate that is no longer in use, and it stayed up until the next
+    Home Assistant restart.
+    """
+    from unittest.mock import patch
+
+    writer = _writer(hass, use_ssl=False)
+
+    with patch.object(writer, "_clear_issue") as clear:
+        assert await writer._build_ssl_context() is False
+
+    clear.assert_called_once_with(ISSUE_SSL_DEGRADED)

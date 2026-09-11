@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **Turning TLS off left the "TLS is not fully in force" repair up**: the issue describes a certificate that could not be loaded, and disabling TLS in the options makes it moot — but the entry reloads without restarting Home Assistant, and nothing retired the issue until the next restart. It now clears as soon as Scribe starts without TLS.
+
 ## [4.1.0] - 2026-09-11
 
 ### Fixed
