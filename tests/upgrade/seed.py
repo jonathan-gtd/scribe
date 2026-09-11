@@ -13,8 +13,8 @@ import os
 from unittest.mock import patch
 
 import asyncpg
-import custom_components.scribe.writer  # noqa: F401  (the release under test)
 import pytest
+from custom_components.scribe import writer as scribe_writer
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -35,9 +35,7 @@ def _real_pool():
         kwargs.setdefault("max_inactive_connection_lifetime", 0)
         return real(*args, **kwargs)
 
-    with patch(
-        "custom_components.scribe.writer.asyncpg.create_pool", side_effect=factory
-    ):
+    with patch.object(scribe_writer.asyncpg, "create_pool", side_effect=factory):
         yield
 
 
