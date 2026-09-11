@@ -441,15 +441,17 @@ Scribe reports conditions it cannot fix itself in Settings → System → Repair
 | `schema_failed` | `schema_failed` | error | `init_db` raised, usually missing privileges | the next successful `init_db` |
 | `schema_unavailable` | `schema_unavailable` | error | `db_schema` is not the schema actually in use | the schema check passes |
 | `legacy_schema` | `legacy_schema` | error | a pre-3.0 database is detected | the next successful `init_db` |
-| `view_failed` | `view_failed` | error | the `states` view cannot be created | the view is created |
+| `view_failed` | `view_failed` | error | the `states` view cannot be created | the view is created, or states are no longer recorded |
 | `no_timescaledb` | `no_timescaledb` | warning | the extension is missing and cannot be enabled | the extension is found |
 | `ssl_degraded` | `ssl_degraded` | warning | a configured certificate could not be loaded | the TLS context builds without problems, or TLS is turned off |
-| `no_hypertable_<table>` | `no_hypertable` | warning | TimescaleDB is installed but the table is not a hypertable | the table is a hypertable, or TimescaleDB is absent |
-| `no_compression_<table>` | `no_compression` | warning | the hypertable has no compression policy | a compression policy exists |
-| `retention_failed_<table>` | `retention_failed` | error | the retention interval is invalid, or the policy could not be applied | the policy is applied, or retention is emptied |
+| `no_hypertable_<table>` | `no_hypertable` | warning | TimescaleDB is installed but the table is not a hypertable | the table is a hypertable, or TimescaleDB is absent, or the table is no longer recorded |
+| `no_compression_<table>` | `no_compression` | warning | the hypertable has no compression policy | a compression policy exists, or the table is no longer recorded |
+| `retention_failed_<table>` | `retention_failed` | error | the retention interval is invalid, or the policy could not be applied | the policy is applied, or retention is emptied, or the table is no longer recorded |
 | `rename_collision_<entity_id>` | `rename_refused_live`, `rename_refused_unprovable` (warning), `rename_failed` (error) | see key | a rename is refused or fails | a later rename to the same `entity_id` succeeds |
 
 The checks done by `init_db` (schema, pre-3.0 database, view, TimescaleDB, hypertables, compression, retention) only run at startup, so **the issues they raise are re-checked at the next start**: a Home Assistant restart or any change in the options flow. The flush and connection issues clear themselves while Scribe is running.
+
+**A reload must leave the panel as a restart would.** Every issue is non-persistent, so a restart turns them all inactive and setup raises again whatever is still true. A reload does not: an issue stays up until something clears it. So a check that a new configuration *skips* must clear what it said last time — a table no longer recorded retires its hypertable, compression and retention issues, and turning states off retires `view_failed`. Removing Scribe retires every issue (`async_remove_entry`), since the writer that would have cleared them is gone.
 
 **Adding an issue:**
 

@@ -303,3 +303,102 @@ async def test_dropping_data_stops_being_reported_once_writing_recovers(hass, cl
         assert get_issue(hass, ISSUE_DATA_DROPPED) is None
     finally:
         await w.stop()
+
+
+# ---------------------------------------------------------------------------
+# A reload must leave the panel as a restart would
+# ---------------------------------------------------------------------------
+#
+# Every Scribe issue is non-persistent: a restart turns them all inactive and
+# setup raises again whatever is still true. A reload — which is what saving
+# the options form does — has to end in the same place. The storage checks
+# skip a table that is no longer recorded, so without an explicit clear an
+# issue about that table outlived the setting that made it relevant.
+
+
+def _scribe_issues(hass):
+    return {
+        issue_id for (domain, issue_id) in ir.async_get(hass).issues if domain == DOMAIN
+    }
+
+
+async def _set_options(hass, entry, **changes):
+    """What saving the options form does: update, and let Scribe reload itself."""
+    hass.config_entries.async_update_entry(entry, options={**entry.options, **changes})
+    await hass.async_block_till_done()
+
+
+@pytest.mark.asyncio
+async def test_turning_events_off_retires_what_was_said_about_them(hass, scribe_entry):
+    from custom_components.scribe.const import CONF_RECORD_EVENTS, CONF_RETENTION_EVENTS
+
+    # A value only YAML can carry: the form refuses it.
+    entry, _ = await scribe_entry(**{CONF_RETENTION_EVENTS: "forever"})
+    assert get_issue(hass, "retention_failed_events") is not None
+
+    await _set_options(hass, entry, **{CONF_RECORD_EVENTS: False})
+
+    assert get_issue(hass, "retention_failed_events") is None
+
+
+@pytest.mark.asyncio
+async def test_turning_states_off_retires_the_table_and_view_issues(hass, scribe_entry):
+    from custom_components.scribe.const import CONF_RECORD_STATES, CONF_RETENTION_STATES
+    from custom_components.scribe.writer import ISSUE_VIEW_FAILED
+
+    entry, writer = await scribe_entry(**{CONF_RETENTION_STATES: "forever"})
+    # The view cannot be made to fail without breaking the database under
+    # every other test; what matters here is what clears it.
+    writer._report_issue(
+        ISSUE_VIEW_FAILED, "view_failed", {"view": "states", "error": "x"}
+    )
+    assert get_issue(hass, "retention_failed_states_raw") is not None
+
+    await _set_options(hass, entry, **{CONF_RECORD_STATES: False})
+
+    assert get_issue(hass, "retention_failed_states_raw") is None
+    assert get_issue(hass, ISSUE_VIEW_FAILED) is None
+
+
+@pytest.mark.asyncio
+async def test_turning_one_table_off_leaves_the_other_tables_issues(hass, scribe_entry):
+    """Retiring is per table: states still recorded keep their own report."""
+    from custom_components.scribe.const import (
+        CONF_RECORD_EVENTS,
+        CONF_RETENTION_EVENTS,
+        CONF_RETENTION_STATES,
+    )
+
+    entry, _ = await scribe_entry(
+        **{CONF_RETENTION_STATES: "forever", CONF_RETENTION_EVENTS: "forever"}
+    )
+
+    await _set_options(hass, entry, **{CONF_RECORD_EVENTS: False})
+
+    assert get_issue(hass, "retention_failed_events") is None
+    assert get_issue(hass, "retention_failed_states_raw") is not None
+
+
+@pytest.mark.asyncio
+async def test_removing_scribe_retires_every_issue(hass, clean_db):
+    """The writer that would clear them is gone with the integration."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from custom_components.scribe.const import CONF_DB_URL, CONF_RETENTION_EVENTS
+
+    from .conftest import DSN
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_DB_URL: DSN},
+        options={CONF_RETENTION_EVENTS: "forever", "record_events": True},
+    )
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert _scribe_issues(hass), "nothing was raised, so nothing is being tested"
+
+    await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert _scribe_issues(hass) == set()
