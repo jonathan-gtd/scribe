@@ -13,9 +13,9 @@ jobs:
     name: Run Unit Tests
     runs-on: ubuntu-latest
 
-    # Real TimescaleDB for tests/test_rename_integration.py. Without it those
-    # tests skip themselves, and the rename paths are only covered by mocks —
-    # which is how a primary-key violation in the history merge reached a beta.
+    # Real TimescaleDB for tests/integration/. Without it those tests skip
+    # themselves, and the database paths are only covered by mocks — which is
+    # how a primary-key violation in the history merge reached a beta.
     services:
       timescaledb:
         image: timescale/timescaledb:latest-pg17
@@ -61,7 +61,8 @@ jobs:
         env:
           SCRIBE_TEST_DSN: postgresql://postgres:scribe@127.0.0.1:55432/scribe
         run: |
-          pytest tests \
+          # tests/upgrade has its own job below: it needs the release tags.
+          pytest tests --ignore=tests/upgrade \
             --cov=custom_components/scribe \
             --cov-report=term-missing \
             --cov-fail-under=83
@@ -85,5 +86,58 @@ jobs:
             | tee /tmp/integration.txt
           if grep -q "skipped" /tmp/integration.txt; then
             echo "::error::Integration tests skipped — the TimescaleDB service is unreachable."
+            exit 1
+          fi
+
+  upgrade:
+    name: Upgrade from older releases
+    runs-on: ubuntu-latest
+
+    # Every other test starts from an empty database. This one has each older
+    # release fill a database with its own code, then opens it with this
+    # checkout — the path every existing user takes on an update.
+    services:
+      timescaledb:
+        image: timescale/timescaledb:latest-pg17
+        env:
+          POSTGRES_PASSWORD: scribe
+          POSTGRES_DB: scribe
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # The older releases are checked out from their tags.
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          allow-prereleases: true
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install homeassistant
+          pip install -r requirements_test.txt
+
+      - name: Upgrade from each older release
+        # Skipped means no database or no tags reached the tests, which must
+        # not pass as green.
+        env:
+          SCRIBE_TEST_DSN: postgresql://postgres:scribe@127.0.0.1:55432/scribe
+        run: |
+          set -o pipefail  # a failing test must fail the step, not tee
+          pytest tests/upgrade -v -p no:cacheprovider | tee /tmp/upgrade.txt
+          if grep -q "skipped" /tmp/upgrade.txt; then
+            echo "::error::Upgrade tests skipped — no TimescaleDB or no release tags."
             exit 1
           fi
