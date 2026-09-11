@@ -8,7 +8,7 @@ to ensure that database operations do not block the main Home Assistant event lo
 import logging
 from dataclasses import dataclass
 from inspect import isawaitable
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 
 import voluptuous as vol
 
@@ -249,15 +249,23 @@ def _area_row(area) -> dict:
     return {"area_id": area.id, "name": area.name, "picture": area.picture}
 
 
+# Home Assistant 2026.9 added child devices, which have no model, manufacturer
+# or firmware of their own: asking one for them logs a deprecation that stops
+# working in 2027.9. Before 2026.9 the class does not exist, and `()` makes
+# the isinstance below always false. Compatibility shim: see DEVELOPMENT.md.
+_CHILD_DEVICE_ENTRY = getattr(dr, "ChildDeviceEntry", ())
+
+
 def _device_row(device) -> dict:
     """One device, as a row for the `devices` table."""
+    child = isinstance(device, _CHILD_DEVICE_ENTRY)
     return {
         "device_id": device.id,
         "name": device.name,
         "name_by_user": device.name_by_user,
-        "model": device.model,
-        "manufacturer": device.manufacturer,
-        "sw_version": device.sw_version,
+        "model": None if child else device.model,
+        "manufacturer": None if child else device.manufacturer,
+        "sw_version": None if child else device.sw_version,
         "area_id": device.area_id,
         "primary_config_entry": next(iter(device.config_entries), None)
         if device.config_entries
@@ -294,8 +302,22 @@ def _collect_areas(hass) -> list[dict]:
 
 
 def _collect_devices(hass) -> list[dict]:
-    """The whole device registry."""
-    return [_device_row(d) for d in dr.async_get(hass).devices.values()]
+    """The whole device registry, child devices included.
+
+    Up to 2026.8 `devices` is a mapping of id to entry. From 2026.9 iterating
+    it yields the entries and its mapping methods are deprecated, to stop
+    working in 2027.9 (#56); child devices are kept apart, in `child_devices`,
+    and entities can belong to them. `hasattr` would not do as the test: on
+    the new view it goes through the deprecated lookup and logs the warning.
+    """
+    registry = dr.async_get(hass)
+    devices = registry.devices
+    # Compatibility shims, both removable once 2026.9 is the minimum: see
+    # DEVELOPMENT.md.
+    if isinstance(devices, Mapping):
+        devices = devices.values()
+    children = getattr(registry, "child_devices", ())
+    return [_device_row(d) for d in (*devices, *children)]
 
 
 def _collect_integrations(hass) -> list[dict]:
