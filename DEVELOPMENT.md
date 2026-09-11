@@ -329,12 +329,13 @@ git add -p && git commit                         # as many commits as needed
 git push -u origin fix/56-device-registry
 gh pr create --base master --fill                # add "Closes #56" to the description
 gh pr checks --watch                             # wait for CI
-gh pr merge --rebase --delete-branch             # merge, delete the branch (local and remote)
+gh pr merge --merge --delete-branch              # merge, delete the branch (local and remote)
 git switch master && git pull --ff-only
 ```
 
-- **Merge method: "Rebase and merge"** (`--rebase`). Each commit lands on `master` with its message, and the history stays linear. Use **"Squash and merge"** (`--squash`) instead when the branch has "wip" or "fix typo" commits, and write a proper message for the squashed commit.
-- After a rebase merge, the commits on `master` have new SHAs. **Do not keep working on the merged branch**: start a new one from `master`.
+- **Merge method: "Create a merge commit"** (`--merge`). The branch's commits land on `master` unchanged, with the same SHAs CI tested, and a merge commit named after the pull request groups them. `git revert -m 1 <merge commit>` undoes the whole pull request.
+- Use **"Squash and merge"** (`--squash`) instead when the branch has "wip" or "fix typo" commits, and write a proper message for the squashed commit. Do not use "Rebase and merge": it rewrites every commit.
+- **Do not keep working on a merged branch**: start a new one from `master`.
 - **To bring a branch up to date with `master`:** `git fetch origin && git rebase origin/master`, then `git push --force-with-lease`. Only force-push your own branches, never `master`.
 - The repository deletes a branch on GitHub automatically once its pull request is merged.
 
