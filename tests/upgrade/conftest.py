@@ -23,9 +23,9 @@ from unittest.mock import patch
 from urllib.parse import urlsplit, urlunsplit
 
 import asyncpg
-import custom_components.scribe.writer  # noqa: F401  (patched below)
 import psycopg2
 import pytest
+from custom_components.scribe import writer as scribe_writer
 
 REPO = Path(__file__).resolve().parents[2]
 ADMIN_DSN = os.environ.get(
@@ -90,9 +90,7 @@ def mock_create_pool():
         kwargs.setdefault("max_inactive_connection_lifetime", 0)
         return real(*args, **kwargs)
 
-    with patch(
-        "custom_components.scribe.writer.asyncpg.create_pool", side_effect=factory
-    ):
+    with patch.object(scribe_writer.asyncpg, "create_pool", side_effect=factory):
         yield
 
 
