@@ -379,15 +379,20 @@ git switch master && git pull --ff-only
   - GitHub Actions and `ruff`: merge once CI is green. A new `ruff` can report new findings. Fix them in the same pull request or in a separate one.
   - `pytest-homeassistant-custom-component`: **check which Home Assistant it pins first** ([section 5](#5-development-environment)). If it pins a beta, close the pull request with a comment saying so. When a release that pins a stable version exists, bump to it on a branch of your own.
 
-### 7.5 Protecting `master` (recommended)
+### 7.5 `master` is protected
 
-In GitHub → Settings → Branches, add a rule for `master`:
+`master` has a branch protection rule (GitHub → Settings → Branches), which applies to administrators too:
 
-- **Require a pull request before merging**, with 0 required approvals: a single maintainer cannot approve their own pull request.
-- **Require status checks to pass**: `Run Unit Tests`, `Upgrade from older releases`, `HACS`, `Hassfest`. CodeQL stays advisory.
-- **Block force pushes and deletions.**
+- **A pull request is required to change it**, with 0 required approvals: a single maintainer cannot approve their own pull request. A direct `git push` to `master` is refused.
+- **These checks must pass before merging**: `Run Unit Tests`, `Upgrade from older releases`, `HACS`, `Hassfest`. CodeQL stays advisory.
+- **Force pushes and deleting the branch are refused.**
+- Branches do not have to be up to date with `master` before merging.
 
-Without this rule, the workflow above is only a convention: a direct `git push` to `master` still works.
+Tags are not affected: a release is still published by pushing a tag ([section 9](#9-releasing)).
+
+A check listed as required must exist in every pull request's workflows, or that pull request waits for it forever. When adding or renaming a CI job that should be required, merge it first, then add it to the rule.
+
+**In an emergency** (CI broken by something outside the repository, and a fix must land): lift the rule temporarily in Settings → Branches, or with `gh api -X DELETE repos/jonathan-gtd/scribe/branches/master/protection`, and put it back afterwards with the settings above.
 
 ### 7.6 Fixing a released version
 
