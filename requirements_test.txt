@@ -15,7 +15,7 @@ pytest
 #
 # 0.13.364 pins Home Assistant 2026.9.1, a *stable* release. Dependabot also
 # proposes the releases in between, which pin betas (0.13.359 pins 2026.9.0b1):
-# check the mapping before merging one (see DEVELOPMENT.md, section 5). The
+# check the mapping before merging one (see docs/DEVELOPMENT.md, section 5). The
 # gating job must not depend on a beta — that is what upstream-watch.yaml is for.
 pytest-homeassistant-custom-component==0.13.364
 pytest-asyncio

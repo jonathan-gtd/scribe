@@ -9,7 +9,7 @@ Scribe ist anders gebaut. Anders als Integrationen, die auf synchrone Treiber od
 
 **Datenstruktur und Abfragen**
 
-Eine Erklärung der Datenstruktur und wie man sie abfragt, findest du hier: [Datenstruktur](datastructre.md)
+Eine Erklärung der Datenstruktur und wie man sie abfragt, findest du hier: [Datenstruktur](docs/data-structure.md)
 
 ## Inhaltsverzeichnis
 

@@ -9,7 +9,7 @@ Scribe is built differently. Unlike other integrations that rely on synchronous 
 
 **Data structure and query**
 
-An explanation of the data structure how to query can be found here: [Data structure](datastructre.md)
+An explanation of the data structure how to query can be found here: [Data structure](docs/data-structure.md)
 
 ## Table of Contents
 
