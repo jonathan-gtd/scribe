@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - **Turning TLS off left the "TLS is not fully in force" repair up**: the issue describes a certificate that could not be loaded, and disabling TLS in the options makes it moot — but the entry reloads without restarting Home Assistant, and nothing retired the issue until the next restart. It now clears as soon as Scribe starts without TLS.
+- **Repairs kept warning about tables Scribe had stopped managing, and outlived Scribe itself**: an issue about the `events` or `states_raw` table — not a hypertable, never compressed, a retention policy that could not be applied — stayed up after turning off *Record events* or *Record states*, and the `states` view issue after turning states off. Saving the options reloads Scribe, and the storage checks skip a table that is no longer recorded, so nothing cleared what they had reported. Removing the integration left every one of its issues in the panel too. All of them lasted until the next Home Assistant restart. A reload now ends where a restart would — the issues about a table go with the table — and removing Scribe retires everything it raised.
 
 ## [4.1.0] - 2026-09-11
 

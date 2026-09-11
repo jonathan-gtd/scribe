@@ -1202,6 +1202,29 @@ class ScribeWriter:
             if enabled:
                 await create(conn)
 
+        if not self.record_states:
+            # The view is only (re)built while states are recorded. Nothing
+            # re-checks it otherwise, so an issue about it would stay up until
+            # the next restart — which would then drop it and never raise it
+            # again. A reload has to leave the panel as a restart would.
+            self._clear_issue(ISSUE_VIEW_FAILED)
+
+    def _retire_table_issues(self, table: str):
+        """Clear every issue about a table Scribe no longer manages.
+
+        Turning recording off for states or events reloads the entry, and the
+        storage checks then skip that table — so nothing would clear what they
+        said about it last time. A restart drops those issues anyway (they are
+        not persistent) and never raises them again: a reload must end up in
+        the same place.
+        """
+        for issue in (
+            ISSUE_NO_HYPERTABLE,
+            ISSUE_NO_COMPRESSION,
+            ISSUE_RETENTION_FAILED,
+        ):
+            self._clear_issue(issue.format(table=table))
+
     async def _init_hypertables(self):
         """Convert and tune each recorded table, one failure never stopping another.
 
@@ -1218,6 +1241,7 @@ class ScribeWriter:
             ),
         ):
             if not enabled:
+                self._retire_table_issues(table)
                 continue
             try:
                 await self._init_hypertable(table, segment_by, retention)

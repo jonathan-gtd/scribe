@@ -21,6 +21,7 @@ from homeassistant.helpers import (
     area_registry as ar,
     device_registry as dr,
     entity_registry as er,
+    issue_registry as ir,
 )
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.const import (
@@ -1045,6 +1046,20 @@ async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """
     await async_unload_entry(hass, entry)
     await async_setup_entry(hass, entry)
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Retire every Repairs issue once Scribe itself is removed.
+
+    Unloading alone leaves them up: the writer that would have cleared them is
+    gone, so a card about a database Scribe no longer talks to stayed in the
+    panel until the next Home Assistant restart. Scribe is a single-entry
+    integration, so everything under its domain belongs to this entry.
+    """
+    registry = ir.async_get(hass)
+    for domain, issue_id in list(registry.issues):
+        if domain == DOMAIN:
+            ir.async_delete_issue(hass, DOMAIN, issue_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
