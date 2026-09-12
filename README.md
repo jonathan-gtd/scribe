@@ -35,7 +35,15 @@ Home Assistant's recorder keeps a few weeks of history in SQLite and slows down 
 
 *Or by hand:* copy `custom_components/scribe` into your `custom_components` folder. Either way, restart Home Assistant.
 
-**3. The database URL**, in `configuration.yaml`:
+**3. The database URL.** Go to **Settings → Devices & services → Add integration**, search for **Scribe**, and paste it:
+
+[![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=scribe)
+
+```
+postgresql://scribe:password@192.168.1.10:5432/scribe
+```
+
+*Or in `configuration.yaml`*, if you would rather keep your configuration in files:
 
 ```yaml
 scribe:
