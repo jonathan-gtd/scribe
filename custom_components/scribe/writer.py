@@ -45,6 +45,8 @@ from .const import (
     DEFAULT_ENABLE_INTEGRATIONS,
     DEFAULT_ENABLE_STATS_IO,
     DEFAULT_ENABLE_ROLLUPS,
+    DEFAULT_QUERY_MAX_ROWS,
+    DEFAULT_QUERY_TIMEOUT,
     DEFAULT_ENABLE_USERS,
     DEFAULT_FLUSH_INTERVAL,
     DEFAULT_MAX_QUEUE_SIZE,
@@ -224,17 +226,12 @@ WRITE_FAILURE_ISSUE_THRESHOLD = 3
 RECONNECT_MIN_DELAY = 5
 RECONNECT_MAX_DELAY = 300
 
-# Ceiling for the `scribe.query` service, in milliseconds. Long enough for a
-# genuine report over a year of history, short enough that a runaway query
-# cannot hold a pooled connection and hammer the server indefinitely.
-QUERY_TIMEOUT_MS = 60_000
-
-# How many rows the service will hand back. A query is written by a person and
-# answered into Home Assistant's memory: `SELECT * FROM states` over a year is
-# tens of millions of rows, and loading them would take the whole process down
-# long before anything got drawn. Past this the query is refused, with what to
-# do about it, rather than truncated into a wrong answer.
-QUERY_MAX_ROWS = 10_000
+# What `scribe.query` is allowed to cost, unless the configuration says
+# otherwise (`query_timeout`, `query_max_rows`). A query is written by a person
+# and answered into Home Assistant's memory: without a ceiling on the time, one
+# careless aggregate holds a pooled connection and works the server; without a
+# ceiling on the rows, `SELECT * FROM states` over a year loads tens of
+# millions of them and takes the process down before anything is drawn.
 
 
 def _json_default(obj):
@@ -506,6 +503,8 @@ class WriterConfig:
     enable_table_users: bool = DEFAULT_ENABLE_USERS
     enable_stats_io: bool = DEFAULT_ENABLE_STATS_IO
     enable_rollups: bool = DEFAULT_ENABLE_ROLLUPS
+    query_timeout: int = DEFAULT_QUERY_TIMEOUT
+    query_max_rows: int = DEFAULT_QUERY_MAX_ROWS
 
 
 class ScribeWriter:
@@ -560,6 +559,8 @@ class ScribeWriter:
         self.enable_table_users = config.enable_table_users
         self.enable_stats_io = config.enable_stats_io
         self.enable_rollups = config.enable_rollups
+        self.query_timeout = config.query_timeout
+        self.query_max_rows = config.query_max_rows
 
         # Stats for sensors
         self._states_written = 0
@@ -3459,7 +3460,7 @@ class ScribeWriter:
                     # drag the whole machine into swap. SET LOCAL is scoped to
                     # this transaction, so nothing else is affected.
                     await conn.execute(
-                        f"SET LOCAL statement_timeout = {QUERY_TIMEOUT_MS}"
+                        f"SET LOCAL statement_timeout = {self.query_timeout * 1000}"
                     )
                     # Streamed, and one row past the ceiling: a query that
                     # returns too much must not be held in memory in full
@@ -3467,9 +3468,9 @@ class ScribeWriter:
                     rows = []
                     async for row in conn.cursor(sql):
                         rows.append(row)
-                        if len(rows) > QUERY_MAX_ROWS:
+                        if len(rows) > self.query_max_rows:
                             raise ValueError(
-                                f"the query returns more than {QUERY_MAX_ROWS} rows; "
+                                f"the query returns more than {self.query_max_rows} rows; "
                                 "narrow it with a WHERE, group it with "
                                 "time_bucket(), or add a LIMIT"
                             )

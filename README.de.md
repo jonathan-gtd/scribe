@@ -131,6 +131,8 @@ scribe:
   batch_size: 500
   flush_interval: 5
   max_queue_size: 10000
+  query_timeout: 60
+  query_max_rows: 20000
   buffer_on_failure: true
   enable_stats_io: false
   enable_stats_chunk: false
@@ -178,6 +180,8 @@ scribe:
 | `batch_size` | Anzahl der Einträge, die gepuffert werden, bevor in die Datenbank geschrieben wird. |
 | `flush_interval` | Maximale Wartezeit (in Sekunden), bevor der Puffer geleert wird. |
 | `max_queue_size` | Maximale Anzahl an Einträgen im Speicher, bevor neue verworfen werden. |
+| `query_timeout` | Sekunden, die ein `scribe.query`-Aufruf laufen darf, bevor die Datenbank ihn beendet (Standard `60`). |
+| `query_max_rows` | Zeilen, die ein `scribe.query`-Aufruf zurückgeben darf, bevor er abgelehnt wird (Standard `20000`). |
 | `buffer_on_failure` | Wenn wahr, bleiben Daten im Speicher, solange die Datenbank nicht erreichbar ist (bis `max_queue_size`). |
 | `enable_stats_io` | Echtzeit-Sensoren zur Schreibleistung aktivieren (ohne Datenbankabfragen). |
 | `enable_stats_chunk` | Sensoren für die Chunk-Anzahl aktivieren (fragen die Datenbank ab). |

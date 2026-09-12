@@ -115,7 +115,9 @@
           "ssl_cert_file": "Pfad zum SSL-Client-Zertifikat",
           "ssl_key_file": "Pfad zum SSL-Client-Schlüssel",
           "retention_states": "Zustände löschen, die älter sind als",
-          "retention_events": "Ereignisse löschen, die älter sind als"
+          "retention_events": "Ereignisse löschen, die älter sind als",
+          "query_timeout": "Zeitlimit einer Abfrage",
+          "query_max_rows": "Maximale Zeilen je Abfrage"
         },
         "data_description": {
           "db_schema": "Leer lassen, um das zu verwenden, worauf die Verbindung ohnehin zeigt (normalerweise `public`). Wird ein Name angegeben, legt Scribe dieses Schema an und schreibt dorthin — seine Tabellen, seine Hypertables, seine Richtlinien. Nur neue Daten landen dort: bereits anderswo geschriebene Historie wird nicht verschoben, und Scribe zeichnet gar nichts auf, wenn das Schema nicht erreichbar ist.",
@@ -126,7 +128,9 @@
           "ssl_cert_file": "Path to the client certificate file",
           "ssl_key_file": "Path to the client private key file",
           "retention_states": "Leer lassen, um alle Zustände unbegrenzt aufzubewahren (Standard). Ein Intervall (z. B. '365 days', '6 months') lässt TimescaleDB älteren Zustandsverlauf LÖSCHEN — endgültig und ohne Rückgängig. Scribe verwaltet diese Richtlinie: Das Feld zu leeren entfernt sie.",
-          "retention_events": "Leer lassen, um alle Ereignisse unbegrenzt aufzubewahren (Standard). Ein Intervall (z. B. '30 days') lässt TimescaleDB älteren Ereignisverlauf LÖSCHEN — endgültig und ohne Rückgängig. Scribe verwaltet diese Richtlinie: Das Feld zu leeren entfernt sie."
+          "retention_events": "Leer lassen, um alle Ereignisse unbegrenzt aufzubewahren (Standard). Ein Intervall (z. B. '30 days') lässt TimescaleDB älteren Ereignisverlauf LÖSCHEN — endgültig und ohne Rückgängig. Scribe verwaltet diese Richtlinie: Das Feld zu leeren entfernt sie.",
+          "query_timeout": "Sekunden, die ein `scribe.query`-Aufruf laufen darf, bevor die Datenbank ihn beendet. Standard 60.",
+          "query_max_rows": "Zeilen, die ein `scribe.query`-Aufruf zurückgeben darf, bevor er abgelehnt wird. Sie landen im Speicher von Home Assistant: das verhindert, dass eine unachtsame Abfrage ihn umwirft. Standard 20000."
         }
       }
     },

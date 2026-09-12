@@ -41,6 +41,14 @@ CONF_STATS_IO_INTERVAL = "stats_io_interval"
 CONF_STATS_CHUNK_INTERVAL = "stats_chunk_interval"
 CONF_STATS_SIZE_INTERVAL = "stats_size_interval"
 
+# What a `scribe.query` call is allowed to cost. Both are deliberately
+# generous defaults rather than limits anyone should have to raise, and both
+# are there so a careless query cannot take Home Assistant down with it.
+CONF_QUERY_TIMEOUT = "query_timeout"
+DEFAULT_QUERY_TIMEOUT = 60  # seconds
+CONF_QUERY_MAX_ROWS = "query_max_rows"
+DEFAULT_QUERY_MAX_ROWS = 20_000
+
 CONF_BUFFER_ON_FAILURE = "buffer_on_failure"
 
 DEFAULT_CHUNK_TIME_INTERVAL = "7 days"
