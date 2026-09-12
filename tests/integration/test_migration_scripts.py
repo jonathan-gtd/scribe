@@ -343,6 +343,23 @@ def influx_record(when, entity_id, domain, value=None, state=None, unit="state")
 
 
 @pytest.fixture
+def influx_env(migration_env, monkeypatch):
+    """The InfluxDB half of the configuration the script reads at import.
+
+    Every test that imports `influx2scribe` needs it: without it the module
+    calls `sys.exit` on a missing INFLUX_TOKEN. That went unnoticed locally
+    because the scripts call `load_dotenv()`, which resolves relative to
+    `migration/` — so a developer's own untracked `migration/.env` filled the
+    gap, and only CI, which has no such file, saw the tests fail.
+    """
+    monkeypatch.setenv("INFLUX_URL", "http://127.0.0.1:8086")
+    monkeypatch.setenv("INFLUX_TOKEN", "token")
+    monkeypatch.setenv("INFLUX_ORG", "org")
+    monkeypatch.setenv("INFLUX_BUCKET", "homeassistant")
+    return migration_env
+
+
+@pytest.fixture
 def fake_influx(monkeypatch):
     """Stand in for `influxdb_client`, so the script can be imported and run.
 
@@ -383,15 +400,8 @@ def fake_influx(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_influx_backfills_states_and_entities(
-    db, migration_env, monkeypatch, fake_influx
-):
+async def test_influx_backfills_states_and_entities(db, influx_env, fake_influx):
     """The record shapes InfluxDB hands back, turned into states_raw rows."""
-    monkeypatch.setenv("INFLUX_URL", "http://127.0.0.1:8086")
-    monkeypatch.setenv("INFLUX_TOKEN", "token")
-    monkeypatch.setenv("INFLUX_ORG", "org")
-    monkeypatch.setenv("INFLUX_BUCKET", "homeassistant")
-
     fake_influx.append(
         influx_record(
             START + timedelta(hours=1), "temperature", "sensor", value=21.5, unit="°C"
@@ -413,7 +423,7 @@ async def test_influx_backfills_states_and_entities(
     assert by_entity["binary_sensor.door"][3] is None
 
 
-def test_influx_prefixes_the_entity_id_with_its_domain(fake_influx):
+def test_influx_prefixes_the_entity_id_with_its_domain(influx_env, fake_influx):
     """Influx stores `entity_id` without the domain; states_raw needs it whole."""
     influx = load_script("influx2scribe")
 
@@ -462,7 +472,7 @@ async def test_ltss_fills_state_as_well_as_value_for_a_number(
     assert (state, value) == ("48.2", 48.2)
 
 
-def test_influx_fills_state_as_well_as_value_for_a_number(fake_influx):
+def test_influx_fills_state_as_well_as_value_for_a_number(influx_env, fake_influx):
     """The same divergence, in the other script. See the LTSS test above."""
     influx = load_script("influx2scribe")
 
