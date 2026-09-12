@@ -40,7 +40,7 @@ async def test_query_select_valid(writer, mock_db_connection):
     assert len(result) == 1
     assert result[0]["id"] == 1
     assert result[0]["name"] == "test"
-    assert mock_db_connection.fetch.called
+    mock_db_connection.cursor.assert_called_once_with("SELECT * FROM states")
 
 
 @pytest.mark.asyncio
@@ -64,18 +64,18 @@ async def test_ensure_read_only_transaction(writer, mock_db_connection):
 
 @pytest.mark.asyncio
 async def test_query_whitespace(writer, mock_db_connection):
-    """Test query with leading whitespace."""
+    """The query reaches the database as it was written."""
     mock_db_connection.fetch.return_value = []
     await writer.query("  SELECT * FROM states")
-    assert mock_db_connection.fetch.called
+    mock_db_connection.cursor.assert_called_once_with("  SELECT * FROM states")
 
 
 @pytest.mark.asyncio
 async def test_query_case_insensitive(writer, mock_db_connection):
-    """Test query case insensitivity."""
+    """Nothing here parses the SQL, so its case is the database's business."""
     mock_db_connection.fetch.return_value = []
     await writer.query("select * from states")
-    assert mock_db_connection.fetch.called
+    mock_db_connection.cursor.assert_called_once_with("select * from states")
 
 
 @pytest.mark.asyncio
