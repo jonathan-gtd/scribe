@@ -134,6 +134,7 @@ scribe:
   enable_stats_io: false
   enable_stats_chunk: false
   enable_stats_size: false
+  stats_io_interval: 60
   stats_chunk_interval: 60
   stats_size_interval: 60
   include_domains: []
@@ -180,6 +181,7 @@ scribe:
 | `enable_stats_io` | Enable real-time writer performance sensors (no DB queries). |
 | `enable_stats_chunk` | Enable chunk count statistics sensors (queries DB). |
 | `enable_stats_size` | Enable storage size statistics sensors (queries DB). |
+| `stats_io_interval` | Seconds between two values of the I/O sensors (default `60`). Every change is a row Scribe records about itself. |
 | `stats_chunk_interval` | Interval (in minutes) to update chunk statistics. |
 | `stats_size_interval` | Interval (in minutes) to update size statistics. |
 | `include_domains` | List of domains to include. |

@@ -66,6 +66,8 @@ from .const import (
     DEFAULT_ENABLE_STATS_CHUNK,
     CONF_ENABLE_STATS_SIZE,
     DEFAULT_ENABLE_STATS_SIZE,
+    CONF_STATS_IO_INTERVAL,
+    DEFAULT_STATS_IO_INTERVAL,
     CONF_STATS_CHUNK_INTERVAL,
     DEFAULT_STATS_CHUNK_INTERVAL,
     CONF_STATS_SIZE_INTERVAL,
@@ -152,6 +154,7 @@ def _coerce_options(data: dict) -> dict:
         CONF_BATCH_SIZE,
         CONF_FLUSH_INTERVAL,
         CONF_MAX_QUEUE_SIZE,
+        CONF_STATS_IO_INTERVAL,
         CONF_STATS_CHUNK_INTERVAL,
         CONF_STATS_SIZE_INTERVAL,
     ):
@@ -418,6 +421,14 @@ class ScribeOptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_ENABLE_STATS_CHUNK,
                     default=g(CONF_ENABLE_STATS_CHUNK, DEFAULT_ENABLE_STATS_CHUNK),
                 ): selector.BooleanSelector(),
+                vol.Optional(
+                    CONF_STATS_IO_INTERVAL,
+                    default=g(CONF_STATS_IO_INTERVAL, DEFAULT_STATS_IO_INTERVAL),
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=5, max=3600, step=5, mode=selector.NumberSelectorMode.BOX
+                    )
+                ),
                 vol.Optional(
                     CONF_STATS_CHUNK_INTERVAL,
                     default=g(CONF_STATS_CHUNK_INTERVAL, DEFAULT_STATS_CHUNK_INTERVAL),

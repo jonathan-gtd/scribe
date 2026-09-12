@@ -135,6 +135,7 @@ scribe:
   enable_stats_io: false
   enable_stats_chunk: false
   enable_stats_size: false
+  stats_io_interval: 60
   stats_chunk_interval: 60
   stats_size_interval: 60
   include_domains: []
@@ -181,6 +182,7 @@ scribe:
 | `enable_stats_io` | Activer les capteurs de performance de l'écrivain en temps réel (aucune requête en base). |
 | `enable_stats_chunk` | Activer les capteurs de nombre de chunks (interrogent la base). |
 | `enable_stats_size` | Activer les capteurs de taille de stockage (interrogent la base). |
+| `stats_io_interval` | Secondes entre deux valeurs des capteurs d'E/S (défaut `60`). Chaque changement est une ligne que Scribe enregistre sur lui-même. |
 | `stats_chunk_interval` | Intervalle (en minutes) de mise à jour des statistiques de chunks. |
 | `stats_size_interval` | Intervalle (en minutes) de mise à jour des statistiques de taille. |
 | `include_domains` | Liste des domaines à inclure. |
