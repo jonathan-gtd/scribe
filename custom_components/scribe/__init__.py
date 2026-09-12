@@ -752,7 +752,59 @@ def _register_services(hass, writer):
             )
             raise HomeAssistantError(f"Query failed: {e} ({type(e).__name__})")
 
+    async def handle_purge(call):
+        """Delete history, on purpose and only what was asked for."""
+        entity_ids = call.data.get("entity_id")
+        if isinstance(entity_ids, str):
+            entity_ids = [entity_ids]
+        keep_days = call.data.get("keep_days")
+
+        _LOGGER.warning(
+            "[__init__.handle_purge] Purge requested (entity_id=%s, keep_days=%s, events=%s)",
+            entity_ids or "all",
+            keep_days,
+            call.data.get("events", False),
+        )
+        try:
+            return await writer.purge(
+                entity_ids=entity_ids,
+                keep_days=keep_days,
+                include_events=bool(call.data.get("events", False)),
+            )
+        except ValueError as e:
+            # Nothing was deleted: the call did not say what to delete.
+            raise HomeAssistantError(str(e))
+        except Exception as e:
+            _LOGGER.error(
+                "[__init__.handle_purge] Purge failed: %s (%s)",
+                e,
+                type(e).__name__,
+                exc_info=True,
+            )
+            raise HomeAssistantError(f"Purge failed: {e} ({type(e).__name__})")
+
     hass.services.async_register(DOMAIN, "flush", handle_flush)
+    hass.services.async_register(
+        DOMAIN,
+        "purge",
+        handle_purge,
+        # At least one of the two, so an empty call cannot delete a history:
+        # `entity_id` alone removes those entities, `keep_days` alone trims
+        # everything older, and together they trim those entities.
+        schema=vol.All(
+            vol.Schema(
+                {
+                    vol.Optional("entity_id"): cv.entity_ids,
+                    vol.Optional("keep_days"): vol.All(
+                        vol.Coerce(int), vol.Range(min=0)
+                    ),
+                    vol.Optional("events"): cv.boolean,
+                }
+            ),
+            cv.has_at_least_one_key("entity_id", "keep_days"),
+        ),
+        supports_response=True,
+    )
     hass.services.async_register(
         DOMAIN,
         "query",

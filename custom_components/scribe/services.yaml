@@ -13,3 +13,40 @@ query:
       selector:
         text:
           multiline: true
+
+purge:
+  name: Purge History
+  description: >-
+    Delete recorded history. Give entities to remove them from the database,
+    an age to trim everything older, or both to trim those entities. This
+    cannot be undone.
+  fields:
+    entity_id:
+      name: Entities
+      description: >-
+        Entities to purge. Without an age, their whole history and their row in
+        the entities table are deleted; recording them again starts from
+        nothing.
+      required: false
+      selector:
+        entity:
+          multiple: true
+    keep_days:
+      name: Keep days
+      description: >-
+        Delete anything older than this many days. 0 deletes everything.
+      required: false
+      selector:
+        number:
+          min: 0
+          max: 3650
+          mode: box
+          unit_of_measurement: days
+    events:
+      name: Events too
+      description: >-
+        Also delete events older than the age given. Ignored when no age is given.
+      required: false
+      default: false
+      selector:
+        boolean:

@@ -22,7 +22,7 @@ import dataclasses
 import json
 import math
 import uuid
-from datetime import date, datetime as dt_datetime, timedelta
+from datetime import UTC, date, datetime as dt_datetime, timedelta
 from decimal import Decimal
 
 import asyncpg
@@ -2947,6 +2947,115 @@ class ScribeWriter:
                 old_entity_id,
             )
         return merge_reason, merged_orphan_rows, dropped_duplicate_rows
+
+    # ------------------------------------------------------------------
+    # Purge
+    # ------------------------------------------------------------------
+
+    async def purge(
+        self,
+        entity_ids: list[str] | None = None,
+        keep_days: int | None = None,
+        include_events: bool = False,
+    ) -> dict[str, int]:
+        """Delete history, and report how much of it went.
+
+        Three shapes, and nothing else deletes anything:
+
+        - entities, with no age: their whole history and their `entities` row,
+          so the entity leaves the database entirely. Recording it again
+          recreates the row, with a new id and no past.
+        - entities, with an age: those entities, older than that.
+        - an age alone: everything older than that, events too when asked.
+
+        Deleting inside a compressed chunk is TimescaleDB's business and it
+        handles it; the rows go, the chunk stays compressed.
+        """
+        if not self._pool:
+            raise RuntimeError("Database not connected")
+        if not entity_ids and keep_days is None:
+            raise ValueError("purge needs entity_id, keep_days, or both")
+
+        cutoff = (
+            None
+            if keep_days is None
+            else dt_datetime.now(tz=UTC) - timedelta(days=keep_days)
+        )
+        purged = {"states": 0, "events": 0, "entities": 0}
+
+        # Held for the same reason a rename holds it: a flush resolving
+        # entity_ids must not meet a half-deleted `entities`.
+        async with self._metadata_lock:
+            async with self._pool.acquire() as conn:
+                async with conn.transaction():
+                    if entity_ids:
+                        rows = await conn.fetch(
+                            "SELECT id, entity_id FROM entities WHERE entity_id = ANY($1)",
+                            entity_ids,
+                        )
+                        ids = [row["id"] for row in rows]
+                        if not ids:
+                            _LOGGER.warning(
+                                "[writer.purge] None of %s is recorded; nothing to purge",
+                                entity_ids,
+                            )
+                            return purged
+
+                        if cutoff is None:
+                            purged["states"] = _affected_rows(
+                                await conn.execute(
+                                    "DELETE FROM states_raw WHERE metadata_id = ANY($1)",
+                                    ids,
+                                )
+                            )
+                            purged["entities"] = _affected_rows(
+                                await conn.execute(
+                                    "DELETE FROM entities WHERE id = ANY($1)", ids
+                                )
+                            )
+                        else:
+                            purged["states"] = _affected_rows(
+                                await conn.execute(
+                                    "DELETE FROM states_raw "
+                                    "WHERE metadata_id = ANY($1) AND time < $2",
+                                    ids,
+                                    cutoff,
+                                )
+                            )
+
+                        for row in rows:
+                            # Whatever was deleted, the cache must not keep
+                            # pointing at an id that may no longer exist.
+                            metadata_id = self._entity_id_map.pop(
+                                row["entity_id"], None
+                            )
+                            if metadata_id is not None:
+                                self._metadata_id_map.pop(metadata_id, None)
+                    else:
+                        purged["states"] = _affected_rows(
+                            await conn.execute(
+                                "DELETE FROM states_raw WHERE time < $1", cutoff
+                            )
+                        )
+
+                    if include_events and cutoff is not None:
+                        purged["events"] = _affected_rows(
+                            await conn.execute(
+                                f"DELETE FROM {self.table_name_events} WHERE time < $1",
+                                cutoff,
+                            )
+                        )
+
+        _LOGGER.warning(
+            "[writer.purge] Deleted %d state(s), %d event(s) and %d entity row(s) "
+            "(entities=%s, keep_days=%s)",
+            purged["states"],
+            purged["events"],
+            purged["entities"],
+            entity_ids or "all",
+            keep_days,
+        )
+        return purged
 
     async def rename_entity(self, old_entity_id: str, new_entity_id: str):
         """Rename an entity in the database (metadata only).
