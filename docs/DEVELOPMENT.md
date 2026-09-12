@@ -149,6 +149,7 @@ Runs after every successful connection, in this order:
 4. **TimescaleDB** (`ensure_timescaledb`). If the extension is missing but available, Scribe runs `CREATE EXTENSION`. If it still is not there, `no_timescaledb` is raised and the hypertable steps are skipped.
 5. **Hypertables**, separately for `states_raw` (segmented by `metadata_id`) and `events` (segmented by `event_type`):
    `create_hypertable` → enable compression → `_apply_chunk_interval` → `_apply_compression_policy` → `_verify_storage_features` → `_apply_retention_policy`.
+6. **Summaries** (`_init_rollups`), after the hypertables since a continuous aggregate needs one. With `enable_rollups` off, whatever exists is dropped — Scribe owns them like its retention policy. With it on and TimescaleDB present, each of `_ROLLUPS` gets its aggregate, its refresh policy and the view by `entity_id`; a failure raises `rollups_failed` and recording is untouched. `CREATE MATERIALIZED VIEW … WITH (timescaledb.continuous)` cannot run inside a transaction block, so those statements go one by one. Note that an aggregate looks like a plain view in `pg_class` but only `DROP MATERIALIZED VIEW` removes it — which is what the integration teardown does.
    The chunk interval, compression policy and retention policy are **brought in line with the settings at every start**, not only when the table is created. A new chunk interval only applies to chunks created afterwards.
 
 The tables:
@@ -157,6 +158,8 @@ The tables:
 |---|---|---|
 | `states_raw` | `(metadata_id, time)` | `time`, `metadata_id` → `entities.id`, `state`, `value`, `attributes` (jsonb). Hypertable. |
 | `states` (view) | — | `states_raw` joined to `entities`: `time`, `entity_id`, `state`, `value`, `attributes`. What users query. |
+| `states_hourly_raw`, `states_daily_raw` | — | Continuous aggregates of `states_raw` (average, minimum, maximum, count per `metadata_id` and bucket). Only with `enable_rollups`. |
+| `states_hourly`, `states_daily` (views) | — | The same, by `entity_id` — what `states` is to `states_raw`. |
 | `events` | none | `time`, `event_type`, `event_data` (jsonb), `origin`, `context_id`, `context_user_id`, `context_parent_id`. Hypertable. |
 | `entities` | `id` (SERIAL), `entity_id` UNIQUE | `unique_id`, `platform`, `domain`, `name`, `device_id`, `area_id`, `capabilities`. |
 | `devices` | `device_id` | `name`, `name_by_user`, `model`, `manufacturer`, `sw_version`, `area_id`, `primary_config_entry`. |

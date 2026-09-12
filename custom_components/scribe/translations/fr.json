@@ -1,202 +1,208 @@
 {
-    "config": {
-        "step": {
-            "user": {
-                "title": "Connexion à TimescaleDB",
-                "description": "Entrez l'URL de connexion PostgreSQL de votre instance TimescaleDB.\n\nFormat : `postgresql://utilisateur:motdepasse@hôte:5432/base`\n\nLes options avancées (SSL, filtres, intervalles de chunks) sont disponibles après la configuration via **Configurer**.",
-                "data": {
-                    "db_url": "URL de la base de données"
-                },
-                "data_description": {
-                    "db_url": "URL PostgreSQL complète, ex. postgresql://scribe:secret@192.168.1.10:5432/scribe"
-                }
-            }
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connexion à TimescaleDB",
+        "description": "Entrez l'URL de connexion PostgreSQL de votre instance TimescaleDB.\n\nFormat : `postgresql://utilisateur:motdepasse@hôte:5432/base`\n\nLes options avancées (SSL, filtres, intervalles de chunks) sont disponibles après la configuration via **Configurer**.",
+        "data": {
+          "db_url": "URL de la base de données"
         },
-        "error": {
-            "cannot_connect": "Impossible de se connecter à la base de données. Vérifiez l'URL et que PostgreSQL est accessible.",
-            "no_timescaledb": "Connexion établie, mais cette base n'a pas l'extension TimescaleDB et Scribe n'a pas pu l'activer. Scribe est une intégration TimescaleDB : sans elle, ni découpage en chunks, ni compression, ni rétention — et la base grossit plusieurs fois plus vite. Exécutez `CREATE EXTENSION timescaledb;` sur cette base (l'utilisateur doit avoir le droit CREATE dessus), ou pointez Scribe vers une instance TimescaleDB."
-        },
-        "abort": {
-            "already_configured": "Scribe est déjà configuré. Utilisez **Configurer** pour modifier les paramètres.",
-            "single_instance_allowed": "Une seule instance de Scribe est autorisée.",
-            "no_timescaledb": "Cette base n'a pas l'extension TimescaleDB et Scribe n'a pas pu l'activer : la configuration a été refusée. Exécutez `CREATE EXTENSION timescaledb;` dessus, puis redémarrez Home Assistant."
+        "data_description": {
+          "db_url": "URL PostgreSQL complète, ex. postgresql://scribe:secret@192.168.1.10:5432/scribe"
         }
+      }
     },
-    "options": {
-        "step": {
-            "init": {
-                "title": "Enregistrement & Filtrage",
-                "data": {
-                    "record_states": "Enregistrer les changements d'état",
-                    "record_events": "Enregistrer les événements",
-                    "include_domains": "Inclure les domaines",
-                    "exclude_domains": "Exclure les domaines",
-                    "include_entities": "Inclure les entités",
-                    "exclude_entities": "Exclure les entités",
-                    "include_entity_globs": "Inclure les entités par motif",
-                    "exclude_entity_globs": "Exclure les entités par motif",
-                    "exclude_attributes": "Exclure les attributs",
-                    "include_events": "Inclure les types d'événements",
-                    "exclude_events": "Exclure les types d'événements"
-                },
-                "data_description": {
-                    "record_states": "Écrire chaque changement d'état dans TimescaleDB",
-                    "record_events": "Écrire les événements Home Assistant (automations, scripts…) dans TimescaleDB",
-                    "include_domains": "N'enregistrer que les entités de ces domaines. Laisser vide pour tout inclure.",
-                    "exclude_domains": "Ne jamais enregistrer les entités de ces domaines",
-                    "include_entities": "N'enregistrer que ces entités spécifiques. Laisser vide pour tout inclure.",
-                    "exclude_entities": "Ne jamais enregistrer ces entités spécifiques",
-                    "include_entity_globs": "N'enregistrer que les entités correspondant à ces motifs (ex. sensor.temp_*)",
-                    "exclude_entity_globs": "Ne jamais enregistrer les entités correspondant à ces motifs",
-                    "exclude_attributes": "Supprimer ces clés d'attributs avant l'écriture (économise de l'espace)",
-                    "include_events": "N'enregistrer que ces types d'événements spécifiques. Laisser vide pour tout enregistrer.",
-                    "exclude_events": "Ne jamais enregistrer ces types d'événements (appliqué après include_events)."
-                }
-            },
-            "performance": {
-                "title": "Performance",
-                "data": {
-                    "batch_size": "Taille du lot",
-                    "flush_interval": "Intervalle d'envoi (secondes)",
-                    "max_queue_size": "Taille max de la file d'attente",
-                    "buffer_on_failure": "Mise en tampon en cas d'échec"
-                },
-                "data_description": {
-                    "batch_size": "Nombre de lignes accumulées avant un envoi forcé (défaut 500)",
-                    "flush_interval": "Nombre maximal de secondes entre deux envois automatiques (défaut 5)",
-                    "max_queue_size": "Nombre max d'écritures en attente avant suppression des plus anciennes (défaut 10000)",
-                    "buffer_on_failure": "Conserver les événements en mémoire et réessayer quand la base redevient disponible"
-                }
-            },
-            "stats": {
-                "title": "Capteurs de statistiques",
-                "data": {
-                    "enable_stats_io": "Activer les capteurs de statistiques I/O",
-                    "enable_stats_chunk": "Activer les capteurs de statistiques de chunks",
-                    "stats_chunk_interval": "Intervalle de rafraîchissement des stats chunks",
-                    "enable_stats_size": "Activer les capteurs de taille",
-                    "stats_size_interval": "Intervalle de rafraîchissement des stats de taille"
-                },
-                "data_description": {
-                    "enable_stats_io": "Expose les compteurs d'écriture, la taille du tampon et la durée d'écriture comme capteurs",
-                    "enable_stats_chunk": "Expose le nombre de chunks par table (total / compressés / non compressés) comme capteurs",
-                    "stats_chunk_interval": "Fréquence (en minutes) de rafraîchissement des stats de chunks depuis la base",
-                    "enable_stats_size": "Expose les tailles par table et les ratios de compression comme capteurs",
-                    "stats_size_interval": "Fréquence (en minutes) de rafraîchissement des stats de taille depuis la base"
-                }
-            },
-            "metadata": {
-                "title": "Tables de métadonnées",
-                "data": {
-                    "enable_table_areas": "Synchroniser la table des zones",
-                    "enable_table_devices": "Synchroniser la table des appareils",
-                    "enable_table_integrations": "Synchroniser la table des intégrations",
-                    "enable_table_users": "Synchroniser la table des utilisateurs"
-                },
-                "data_description": {
-                    "enable_table_areas": "Maintenir un miroir des zones Home Assistant dans TimescaleDB",
-                    "enable_table_devices": "Maintenir un miroir des appareils Home Assistant dans TimescaleDB",
-                    "enable_table_integrations": "Maintenir un miroir des entrées de config (intégrations) dans TimescaleDB",
-                    "enable_table_users": "Maintenir un miroir des utilisateurs Home Assistant dans TimescaleDB"
-                }
-            },
-            "advanced": {
-                "title": "Avancé (TimescaleDB & SSL)",
-                "data": {
-                    "db_schema": "Schéma de la base de données",
-                    "chunk_time_interval": "Intervalle de temps des chunks",
-                    "compress_after": "Compresser après",
-                    "retention_states": "Supprimer les états plus anciens que",
-                    "retention_events": "Supprimer les événements plus anciens que",
-                    "db_ssl": "Activer SSL",
-                    "ssl_root_cert": "Chemin du certificat racine SSL",
-                    "ssl_cert_file": "Chemin du certificat client SSL",
-                    "ssl_key_file": "Chemin de la clé privée client SSL"
-                },
-                "data_description": {
-                    "db_schema": "Laissez vide pour utiliser ce que la connexion désigne déjà (normalement `public`). Indiquez un nom et Scribe crée ce schéma et y enregistre — ses tables, ses hypertables, ses politiques. Seules les nouvelles données y vont : l'historique déjà écrit ailleurs n'est pas déplacé, et Scribe n'enregistre plus rien si le schéma est inaccessible.",
-                    "chunk_time_interval": "Intervalle de chunks TimescaleDB (ex. '7 days'). Affecte les nouveaux chunks uniquement.",
-                    "compress_after": "Compresser les chunks plus anciens que cet intervalle (ex. '7 days'). Nécessite la compression TimescaleDB.",
-                    "retention_states": "Laisser vide pour conserver tous les états indéfiniment (défaut). Indiquer un intervalle (ex. '365 days', '6 months') pour que TimescaleDB SUPPRIME l'historique des états plus ancien — définitivement, sans retour possible. Scribe gère cette politique : vider le champ la supprime.",
-                    "retention_events": "Laisser vide pour conserver tous les événements indéfiniment (défaut). Indiquer un intervalle (ex. '30 days') pour que TimescaleDB SUPPRIME l'historique des événements plus ancien — définitivement, sans retour possible. Scribe gère cette politique : vider le champ la supprime.",
-                    "db_ssl": "Exiger une connexion SSL/TLS vers PostgreSQL",
-                    "ssl_root_cert": "Chemin vers le fichier CA (ex. /ssl/ca.crt)",
-                    "ssl_cert_file": "Chemin vers le certificat client pour mTLS",
-                    "ssl_key_file": "Chemin vers la clé privée client pour mTLS"
-                }
-            }
-        },
-        "error": {
-            "must_record_something": "Au moins l'une des options 'Enregistrer les changements d'état' ou 'Enregistrer les événements' doit être activée.",
-            "invalid_interval": "La rétention doit être un intervalle comme '365 days', '6 months' ou '1 year' — laisser vide pour tout conserver.",
-            "invalid_schema": "Un nom de schéma ne peut contenir que des lettres, des chiffres et des tirets bas, et ne peut pas commencer par un chiffre — laissez vide pour utiliser le schéma de la connexion.",
-            "invalid_storage_interval": "L'intervalle de chunk et l'intervalle de compression doivent être un intervalle comme « 7 days », « 12 hours » ou « 1 month » — ils ne peuvent pas être vides."
-        }
+    "error": {
+      "cannot_connect": "Impossible de se connecter à la base de données. Vérifiez l'URL et que PostgreSQL est accessible.",
+      "no_timescaledb": "Connexion établie, mais cette base n'a pas l'extension TimescaleDB et Scribe n'a pas pu l'activer. Scribe est une intégration TimescaleDB : sans elle, ni découpage en chunks, ni compression, ni rétention — et la base grossit plusieurs fois plus vite. Exécutez `CREATE EXTENSION timescaledb;` sur cette base (l'utilisateur doit avoir le droit CREATE dessus), ou pointez Scribe vers une instance TimescaleDB."
     },
-    "issues": {
-        "rename_refused_live": {
-            "title": "Renommage d'entité vers {new_entity_id} non appliqué",
-            "description": "Home Assistant a renommé `{old_entity_id}` en `{new_entity_id}`, mais la base de Scribe suit déjà `{new_entity_id}` pour une autre entité encore active (`{occupant}`). Pour ne pas mélanger l'historique de deux entités vivantes, Scribe n'a rien modifié : l'historique déjà enregistré reste sous `{old_entity_id}`, et les nouveaux états peuvent être enregistrés sous la ligne `{new_entity_id}` existante. Si l'autre entité vient elle aussi d'être renommée, cela se résout généralement en moins d'une minute — cette réparation disparaîtra dès que le renommage aboutit. Si le problème persiste, examinez la table `entities` de votre base."
-        },
-        "rename_refused_unprovable": {
-            "title": "Renommage d'entité vers {new_entity_id} non appliqué",
-            "description": "Home Assistant a renommé `{old_entity_id}` en `{new_entity_id}`, mais la base de Scribe contient déjà une ligne `{new_entity_id}` aux métadonnées incomplètes : Scribe ne peut pas prouver qu'elle appartient à une entité supprimée. Pour ne pas corrompre l'historique, rien n'a été modifié : l'historique déjà enregistré reste sous `{old_entity_id}`. Si vous êtes certain que la ligne `{new_entity_id}` est un reliquat d'une entité supprimée, supprimez-la manuellement de la table `entities` ; Scribe appliquera alors le renommage au prochain renommage de l'entité."
-        },
-        "rename_failed": {
-            "title": "Échec du renommage de {old_entity_id}",
-            "description": "Scribe a rencontré une erreur en renommant `{old_entity_id}` en `{new_entity_id}` dans la base : {error}. L'historique de l'entité est peut-être désormais scindé entre les deux identifiants. Consultez les logs de Home Assistant pour le détail ; renommer à nouveau l'entité relancera l'opération."
-        },
-        "db_unreachable": {
-            "title": "Scribe ne peut pas joindre sa base de données",
-            "description": "Scribe n'a pas pu se connecter à `{host}`. La base a répondu : {error}\n\nPlus rien n'arrive jusqu'à la base, mais l'enregistrement ne s'est pas arrêté : les états sont conservés en mémoire et Scribe retente la connexion en arrière-plan, puis écrit tout ce qu'il a mis en tampon dès qu'une tentative aboutit. L'historique n'est perdu que si Home Assistant redémarre avant, ou si le tampon se remplit.\n\nVérifiez que le serveur tourne et qu'il est joignable depuis Home Assistant, et que l'URL, l'identifiant et le mot de passe dans les réglages de Scribe sont corrects. Cette réparation disparaît d'elle-même dès qu'une connexion aboutit."
-        },
-        "write_failing": {
-            "title": "Scribe n'arrive plus à écrire dans sa base",
-            "description": "Les {failures} dernières tentatives d'écriture ont échoué. Les données sont conservées en mémoire et seront écrites au rétablissement de la base, mais elles seront perdues si Home Assistant redémarre avant — ou si la mémoire tampon se remplit.\n\nDernière erreur : {error}\n\nVérifiez le serveur de base de données (espace disque, limite de connexions, ses propres logs). Cette réparation disparaît dès qu'une écriture aboutit."
-        },
-        "buffer_full": {
-            "title": "La mémoire tampon de Scribe est pleine — de l'historique est perdu",
-            "description": "Les écritures échouent depuis assez longtemps pour avoir rempli la mémoire tampon ({max_queue_size} éléments). Les enregistrements les plus anciens sont désormais supprimés pour faire de la place aux nouveaux : **de l'historique est définitivement perdu**.\n\nCorrigez d'abord le problème de base de données — voyez l'autre réparation Scribe, ou les logs de Home Assistant. Si votre base est simplement plus lente que votre rythme de changements d'état, augmentez la taille du tampon dans les réglages de Scribe. Cette réparation disparaît dès que l'écriture reprend."
-        },
-        "data_dropped": {
-            "title": "Scribe abandonne des enregistrements",
-            "description": "{dropped} enregistrements ont été abandonnés depuis le démarrage de Home Assistant, parce qu'une écriture a échoué et que la mise en tampon est désactivée dans les réglages de Scribe.\n\nActivez la mise en tampon pour conserver les enregistrements en mémoire pendant une panne temporaire de la base, et consultez les logs pour l'erreur d'écriture sous-jacente."
-        },
-        "no_timescaledb": {
-            "title": "TimescaleDB n'est pas installé sur la base de Scribe",
-            "description": "Scribe enregistre bien vers `{host}`, mais l'extension TimescaleDB n'y est pas installée. L'historique est sauvegardé et reste interrogeable — en revanche le découpage en chunks et la **compression sont indisponibles**, donc la base grossira nettement plus vite, et les capteurs de taille et de compression resteront vides.\n\nInstallez l'extension puis exécutez `CREATE EXTENSION timescaledb;` sur cette base, et redémarrez Home Assistant. Cette réparation disparaît dès que l'extension est détectée."
-        },
-        "retention_failed": {
-            "title": "Scribe n'a pas pu appliquer la politique de rétention sur {table}",
-            "description": "Scribe devait supprimer les données de plus de **{retention}** dans `{table}`, et la mise en place de cette politique a échoué avec : {error}\n\nRien n'a été supprimé et rien ne l'est actuellement — la table continue de grossir et son historique est intact. La rétention est une fonctionnalité TimescaleDB : elle nécessite l'extension installée sur cette base, que `{table}` soit une hypertable, et que l'utilisateur PostgreSQL de Scribe en soit propriétaire.\n\nCorrigez la cause, ou videz le champ de rétention dans les options de Scribe, puis redémarrez Home Assistant. Ce problème disparaît une fois la politique en place."
-        },
-        "ssl_degraded": {
-            "title": "La configuration TLS de Scribe n'est pas entièrement appliquée",
-            "description": "Scribe se connecte à sa base en TLS, mais une partie de ce que vous avez configuré n'a pas pu être appliqué : {problems}\n\nLa connexion reste chiffrée et le certificat du serveur reste vérifié via le magasin d'autorités du système. Ce qui manque, c'est la protection supplémentaire que vous aviez demandée — le plus souvent un certificat client : Scribe s'authentifie alors comme un client ordinaire et non comme celui que vous aviez provisionné, ce qui est indiscernable de l'extérieur jusqu'au jour d'un audit.\n\nVérifiez que les chemins sont corrects et lisibles par Home Assistant (les chemins relatifs partent du répertoire de configuration), puis redémarrez. Ce problème disparaît dès que tous les fichiers configurés se chargent."
-        },
-        "schema_failed": {
-            "title": "Scribe n'a pas pu créer ses tables",
-            "description": "Scribe a bien joint `{host}` mais a échoué en construisant son schéma, avec : {error}\n\nCe qu'il n'a pas pu créer est tout simplement absent : sur une base neuve, **plus rien n'est enregistré du tout** ; sur une base existante, l'enregistrement peut être partiel — certaines tables à jour, d'autres figées ou manquantes. La cause la plus fréquente est un problème de droits : l'utilisateur PostgreSQL utilisé par Scribe doit pouvoir créer des tables dans cette base, et être propriétaire de celles déjà créées.\n\nAccordez-lui ces droits (ou pointez Scribe vers une base qui lui appartient) puis redémarrez Home Assistant. Ce problème disparaît une fois le schéma en place."
-        },
-        "view_failed": {
-            "title": "Scribe n'a pas pu créer la vue `{view}`",
-            "description": "Les états sont enregistrés normalement dans `states_raw`, mais la vue `{view}` qui permet de les relire n'a pas pu être créée : {error}\n\nToutes les requêtes, tableaux de bord et exemples de la documentation passent par cette vue : votre historique paraîtra vide alors qu'il ne l'est pas. Rien n'est perdu.\n\nIl s'agit généralement d'un problème de droits, ou d'un autre objet portant déjà ce nom. Corrigez la cause puis redémarrez Home Assistant."
-        },
-        "no_hypertable": {
-            "title": "`{table}` n'est pas une hypertable TimescaleDB",
-            "description": "TimescaleDB est installé sur cette base, mais `{table}` est une table ordinaire : la conversion a échoué. L'historique est enregistré et reste interrogeable, mais **le découpage en chunks, la compression et la rétention ne font plus rien du tout** — la base va grossir plusieurs fois plus vite que nécessaire et les capteurs de taille resteront vides.\n\nConvertir une table exige d'en être propriétaire : c'est donc généralement que l'utilisateur PostgreSQL de Scribe ne l'est pas. Donnez-lui la propriété de `{table}` puis redémarrez Home Assistant ; ce problème disparaît dès que la conversion réussit."
-        },
-        "no_compression": {
-            "title": "`{table}` n'est jamais compressée",
-            "description": "`{table}` est bien une hypertable, mais aucune politique de compression n'a pu être mise en place : les chunks de plus de {compress_after} ne sont jamais compressés et la table conserve sa taille non compressée — typiquement plusieurs fois plus que nécessaire.\n\nC'est généralement que l'utilisateur PostgreSQL de Scribe n'est pas propriétaire de la table. Consultez les logs de Home Assistant pour l'erreur exacte, corrigez-la, puis redémarrez Home Assistant."
-        },
-        "legacy_schema": {
-            "title": "La base de données de Scribe est antérieure à la version 3.0",
-            "description": "La base contient encore `{relation}`, issue du schéma pré-3.0, et cette version de Scribe ne sait pas le convertir. **Plus rien n'est enregistré** — et rien n'a été renommé, créé ni supprimé non plus : votre historique est exactement là où il était.\n\nPour le convertir : installez Scribe **{version}** (dans HACS, choisissez explicitement cette version), démarrez Home Assistant et laissez-le tourner jusqu'à ce que les logs indiquent la fin de la migration — une quinzaine de minutes sur une grosse base — puis mettez Scribe à jour de nouveau. L'enregistrement reprend au redémarrage suivant et ce problème disparaît.\n\nSi vous préférez repartir d'une base vide, supprimez `{relation}` (cela efface l'ancien historique) et redémarrez Home Assistant."
-        },
-        "schema_unavailable": {
-            "title": "Scribe ne peut pas atteindre le schéma indiqué",
-            "description": "Scribe est configuré pour enregistrer dans le schéma `{schema}` sur `{host}`, mais la session aboutit à `{fallback}` — le schéma n'existe pas, ou l'utilisateur de base de données de Scribe n'y a aucun droit.\n\n**Plus rien n'est enregistré.** PostgreSQL n'échoue pas sur un schéma absent : il passe silencieusement au suivant du search path. Continuer aurait donc écrit tout votre historique dans `{fallback}` pendant que l'interface affichait `{schema}`. Scribe s'arrête plutôt que de remplir le mauvais schéma.\n\nSoit créez-le et accordez les droits :\n\n```sql\nCREATE SCHEMA IF NOT EXISTS {schema};\nGRANT USAGE, CREATE ON SCHEMA {schema} TO scribe;\n```\n\nsoit videz le champ sous Configurer → Avancé. Redémarrez ensuite Home Assistant — ce problème disparaît dès que Scribe enregistre dans le schéma indiqué."
-        }
+    "abort": {
+      "already_configured": "Scribe est déjà configuré. Utilisez **Configurer** pour modifier les paramètres.",
+      "single_instance_allowed": "Une seule instance de Scribe est autorisée.",
+      "no_timescaledb": "Cette base n'a pas l'extension TimescaleDB et Scribe n'a pas pu l'activer : la configuration a été refusée. Exécutez `CREATE EXTENSION timescaledb;` dessus, puis redémarrez Home Assistant."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Enregistrement & Filtrage",
+        "data": {
+          "record_states": "Enregistrer les changements d'état",
+          "record_events": "Enregistrer les événements",
+          "include_domains": "Inclure les domaines",
+          "exclude_domains": "Exclure les domaines",
+          "include_entities": "Inclure les entités",
+          "exclude_entities": "Exclure les entités",
+          "include_entity_globs": "Inclure les entités par motif",
+          "exclude_entity_globs": "Exclure les entités par motif",
+          "exclude_attributes": "Exclure les attributs",
+          "include_events": "Inclure les types d'événements",
+          "exclude_events": "Exclure les types d'événements"
+        },
+        "data_description": {
+          "record_states": "Écrire chaque changement d'état dans TimescaleDB",
+          "record_events": "Écrire les événements Home Assistant (automations, scripts…) dans TimescaleDB",
+          "include_domains": "N'enregistrer que les entités de ces domaines. Laisser vide pour tout inclure.",
+          "exclude_domains": "Ne jamais enregistrer les entités de ces domaines",
+          "include_entities": "N'enregistrer que ces entités spécifiques. Laisser vide pour tout inclure.",
+          "exclude_entities": "Ne jamais enregistrer ces entités spécifiques",
+          "include_entity_globs": "N'enregistrer que les entités correspondant à ces motifs (ex. sensor.temp_*)",
+          "exclude_entity_globs": "Ne jamais enregistrer les entités correspondant à ces motifs",
+          "exclude_attributes": "Supprimer ces clés d'attributs avant l'écriture (économise de l'espace)",
+          "include_events": "N'enregistrer que ces types d'événements spécifiques. Laisser vide pour tout enregistrer.",
+          "exclude_events": "Ne jamais enregistrer ces types d'événements (appliqué après include_events)."
+        }
+      },
+      "performance": {
+        "title": "Performance",
+        "data": {
+          "batch_size": "Taille du lot",
+          "flush_interval": "Intervalle d'envoi (secondes)",
+          "max_queue_size": "Taille max de la file d'attente",
+          "buffer_on_failure": "Mise en tampon en cas d'échec"
+        },
+        "data_description": {
+          "batch_size": "Nombre de lignes accumulées avant un envoi forcé (défaut 500)",
+          "flush_interval": "Nombre maximal de secondes entre deux envois automatiques (défaut 5)",
+          "max_queue_size": "Nombre max d'écritures en attente avant suppression des plus anciennes (défaut 10000)",
+          "buffer_on_failure": "Conserver les événements en mémoire et réessayer quand la base redevient disponible"
+        }
+      },
+      "stats": {
+        "title": "Capteurs de statistiques",
+        "data": {
+          "enable_stats_io": "Activer les capteurs de statistiques I/O",
+          "enable_stats_chunk": "Activer les capteurs de statistiques de chunks",
+          "stats_chunk_interval": "Intervalle de rafraîchissement des stats chunks",
+          "enable_stats_size": "Activer les capteurs de taille",
+          "stats_size_interval": "Intervalle de rafraîchissement des stats de taille"
+        },
+        "data_description": {
+          "enable_stats_io": "Expose les compteurs d'écriture, la taille du tampon et la durée d'écriture comme capteurs",
+          "enable_stats_chunk": "Expose le nombre de chunks par table (total / compressés / non compressés) comme capteurs",
+          "stats_chunk_interval": "Fréquence (en minutes) de rafraîchissement des stats de chunks depuis la base",
+          "enable_stats_size": "Expose les tailles par table et les ratios de compression comme capteurs",
+          "stats_size_interval": "Fréquence (en minutes) de rafraîchissement des stats de taille depuis la base"
+        }
+      },
+      "metadata": {
+        "title": "Tables de métadonnées",
+        "data": {
+          "enable_table_areas": "Synchroniser la table des zones",
+          "enable_table_devices": "Synchroniser la table des appareils",
+          "enable_table_integrations": "Synchroniser la table des intégrations",
+          "enable_table_users": "Synchroniser la table des utilisateurs",
+          "enable_rollups": "Résumés horaires et journaliers"
+        },
+        "data_description": {
+          "enable_table_areas": "Maintenir un miroir des zones Home Assistant dans TimescaleDB",
+          "enable_table_devices": "Maintenir un miroir des appareils Home Assistant dans TimescaleDB",
+          "enable_table_integrations": "Maintenir un miroir des entrées de config (intégrations) dans TimescaleDB",
+          "enable_table_users": "Maintenir un miroir des utilisateurs Home Assistant dans TimescaleDB",
+          "enable_rollups": "Conserve des moyennes horaires et journalières de vos états, pré-calculées et tenues à jour par TimescaleDB. Un graphique sur des mois ou des années lit alors des milliers de lignes au lieu de millions. Ajoute les vues states_hourly et states_daily."
+        }
+      },
+      "advanced": {
+        "title": "Avancé (TimescaleDB & SSL)",
+        "data": {
+          "db_schema": "Schéma de la base de données",
+          "chunk_time_interval": "Intervalle de temps des chunks",
+          "compress_after": "Compresser après",
+          "retention_states": "Supprimer les états plus anciens que",
+          "retention_events": "Supprimer les événements plus anciens que",
+          "db_ssl": "Activer SSL",
+          "ssl_root_cert": "Chemin du certificat racine SSL",
+          "ssl_cert_file": "Chemin du certificat client SSL",
+          "ssl_key_file": "Chemin de la clé privée client SSL"
+        },
+        "data_description": {
+          "db_schema": "Laissez vide pour utiliser ce que la connexion désigne déjà (normalement `public`). Indiquez un nom et Scribe crée ce schéma et y enregistre — ses tables, ses hypertables, ses politiques. Seules les nouvelles données y vont : l'historique déjà écrit ailleurs n'est pas déplacé, et Scribe n'enregistre plus rien si le schéma est inaccessible.",
+          "chunk_time_interval": "Intervalle de chunks TimescaleDB (ex. '7 days'). Affecte les nouveaux chunks uniquement.",
+          "compress_after": "Compresser les chunks plus anciens que cet intervalle (ex. '7 days'). Nécessite la compression TimescaleDB.",
+          "retention_states": "Laisser vide pour conserver tous les états indéfiniment (défaut). Indiquer un intervalle (ex. '365 days', '6 months') pour que TimescaleDB SUPPRIME l'historique des états plus ancien — définitivement, sans retour possible. Scribe gère cette politique : vider le champ la supprime.",
+          "retention_events": "Laisser vide pour conserver tous les événements indéfiniment (défaut). Indiquer un intervalle (ex. '30 days') pour que TimescaleDB SUPPRIME l'historique des événements plus ancien — définitivement, sans retour possible. Scribe gère cette politique : vider le champ la supprime.",
+          "db_ssl": "Exiger une connexion SSL/TLS vers PostgreSQL",
+          "ssl_root_cert": "Chemin vers le fichier CA (ex. /ssl/ca.crt)",
+          "ssl_cert_file": "Chemin vers le certificat client pour mTLS",
+          "ssl_key_file": "Chemin vers la clé privée client pour mTLS"
+        }
+      }
+    },
+    "error": {
+      "must_record_something": "Au moins l'une des options 'Enregistrer les changements d'état' ou 'Enregistrer les événements' doit être activée.",
+      "invalid_interval": "La rétention doit être un intervalle comme '365 days', '6 months' ou '1 year' — laisser vide pour tout conserver.",
+      "invalid_schema": "Un nom de schéma ne peut contenir que des lettres, des chiffres et des tirets bas, et ne peut pas commencer par un chiffre — laissez vide pour utiliser le schéma de la connexion.",
+      "invalid_storage_interval": "L'intervalle de chunk et l'intervalle de compression doivent être un intervalle comme « 7 days », « 12 hours » ou « 1 month » — ils ne peuvent pas être vides."
+    }
+  },
+  "issues": {
+    "rename_refused_live": {
+      "title": "Renommage d'entité vers {new_entity_id} non appliqué",
+      "description": "Home Assistant a renommé `{old_entity_id}` en `{new_entity_id}`, mais la base de Scribe suit déjà `{new_entity_id}` pour une autre entité encore active (`{occupant}`). Pour ne pas mélanger l'historique de deux entités vivantes, Scribe n'a rien modifié : l'historique déjà enregistré reste sous `{old_entity_id}`, et les nouveaux états peuvent être enregistrés sous la ligne `{new_entity_id}` existante. Si l'autre entité vient elle aussi d'être renommée, cela se résout généralement en moins d'une minute — cette réparation disparaîtra dès que le renommage aboutit. Si le problème persiste, examinez la table `entities` de votre base."
+    },
+    "rename_refused_unprovable": {
+      "title": "Renommage d'entité vers {new_entity_id} non appliqué",
+      "description": "Home Assistant a renommé `{old_entity_id}` en `{new_entity_id}`, mais la base de Scribe contient déjà une ligne `{new_entity_id}` aux métadonnées incomplètes : Scribe ne peut pas prouver qu'elle appartient à une entité supprimée. Pour ne pas corrompre l'historique, rien n'a été modifié : l'historique déjà enregistré reste sous `{old_entity_id}`. Si vous êtes certain que la ligne `{new_entity_id}` est un reliquat d'une entité supprimée, supprimez-la manuellement de la table `entities` ; Scribe appliquera alors le renommage au prochain renommage de l'entité."
+    },
+    "rename_failed": {
+      "title": "Échec du renommage de {old_entity_id}",
+      "description": "Scribe a rencontré une erreur en renommant `{old_entity_id}` en `{new_entity_id}` dans la base : {error}. L'historique de l'entité est peut-être désormais scindé entre les deux identifiants. Consultez les logs de Home Assistant pour le détail ; renommer à nouveau l'entité relancera l'opération."
+    },
+    "db_unreachable": {
+      "title": "Scribe ne peut pas joindre sa base de données",
+      "description": "Scribe n'a pas pu se connecter à `{host}`. La base a répondu : {error}\n\nPlus rien n'arrive jusqu'à la base, mais l'enregistrement ne s'est pas arrêté : les états sont conservés en mémoire et Scribe retente la connexion en arrière-plan, puis écrit tout ce qu'il a mis en tampon dès qu'une tentative aboutit. L'historique n'est perdu que si Home Assistant redémarre avant, ou si le tampon se remplit.\n\nVérifiez que le serveur tourne et qu'il est joignable depuis Home Assistant, et que l'URL, l'identifiant et le mot de passe dans les réglages de Scribe sont corrects. Cette réparation disparaît d'elle-même dès qu'une connexion aboutit."
+    },
+    "write_failing": {
+      "title": "Scribe n'arrive plus à écrire dans sa base",
+      "description": "Les {failures} dernières tentatives d'écriture ont échoué. Les données sont conservées en mémoire et seront écrites au rétablissement de la base, mais elles seront perdues si Home Assistant redémarre avant — ou si la mémoire tampon se remplit.\n\nDernière erreur : {error}\n\nVérifiez le serveur de base de données (espace disque, limite de connexions, ses propres logs). Cette réparation disparaît dès qu'une écriture aboutit."
+    },
+    "buffer_full": {
+      "title": "La mémoire tampon de Scribe est pleine — de l'historique est perdu",
+      "description": "Les écritures échouent depuis assez longtemps pour avoir rempli la mémoire tampon ({max_queue_size} éléments). Les enregistrements les plus anciens sont désormais supprimés pour faire de la place aux nouveaux : **de l'historique est définitivement perdu**.\n\nCorrigez d'abord le problème de base de données — voyez l'autre réparation Scribe, ou les logs de Home Assistant. Si votre base est simplement plus lente que votre rythme de changements d'état, augmentez la taille du tampon dans les réglages de Scribe. Cette réparation disparaît dès que l'écriture reprend."
+    },
+    "data_dropped": {
+      "title": "Scribe abandonne des enregistrements",
+      "description": "{dropped} enregistrements ont été abandonnés depuis le démarrage de Home Assistant, parce qu'une écriture a échoué et que la mise en tampon est désactivée dans les réglages de Scribe.\n\nActivez la mise en tampon pour conserver les enregistrements en mémoire pendant une panne temporaire de la base, et consultez les logs pour l'erreur d'écriture sous-jacente."
+    },
+    "no_timescaledb": {
+      "title": "TimescaleDB n'est pas installé sur la base de Scribe",
+      "description": "Scribe enregistre bien vers `{host}`, mais l'extension TimescaleDB n'y est pas installée. L'historique est sauvegardé et reste interrogeable — en revanche le découpage en chunks et la **compression sont indisponibles**, donc la base grossira nettement plus vite, et les capteurs de taille et de compression resteront vides.\n\nInstallez l'extension puis exécutez `CREATE EXTENSION timescaledb;` sur cette base, et redémarrez Home Assistant. Cette réparation disparaît dès que l'extension est détectée."
+    },
+    "retention_failed": {
+      "title": "Scribe n'a pas pu appliquer la politique de rétention sur {table}",
+      "description": "Scribe devait supprimer les données de plus de **{retention}** dans `{table}`, et la mise en place de cette politique a échoué avec : {error}\n\nRien n'a été supprimé et rien ne l'est actuellement — la table continue de grossir et son historique est intact. La rétention est une fonctionnalité TimescaleDB : elle nécessite l'extension installée sur cette base, que `{table}` soit une hypertable, et que l'utilisateur PostgreSQL de Scribe en soit propriétaire.\n\nCorrigez la cause, ou videz le champ de rétention dans les options de Scribe, puis redémarrez Home Assistant. Ce problème disparaît une fois la politique en place."
+    },
+    "ssl_degraded": {
+      "title": "La configuration TLS de Scribe n'est pas entièrement appliquée",
+      "description": "Scribe se connecte à sa base en TLS, mais une partie de ce que vous avez configuré n'a pas pu être appliqué : {problems}\n\nLa connexion reste chiffrée et le certificat du serveur reste vérifié via le magasin d'autorités du système. Ce qui manque, c'est la protection supplémentaire que vous aviez demandée — le plus souvent un certificat client : Scribe s'authentifie alors comme un client ordinaire et non comme celui que vous aviez provisionné, ce qui est indiscernable de l'extérieur jusqu'au jour d'un audit.\n\nVérifiez que les chemins sont corrects et lisibles par Home Assistant (les chemins relatifs partent du répertoire de configuration), puis redémarrez. Ce problème disparaît dès que tous les fichiers configurés se chargent."
+    },
+    "schema_failed": {
+      "title": "Scribe n'a pas pu créer ses tables",
+      "description": "Scribe a bien joint `{host}` mais a échoué en construisant son schéma, avec : {error}\n\nCe qu'il n'a pas pu créer est tout simplement absent : sur une base neuve, **plus rien n'est enregistré du tout** ; sur une base existante, l'enregistrement peut être partiel — certaines tables à jour, d'autres figées ou manquantes. La cause la plus fréquente est un problème de droits : l'utilisateur PostgreSQL utilisé par Scribe doit pouvoir créer des tables dans cette base, et être propriétaire de celles déjà créées.\n\nAccordez-lui ces droits (ou pointez Scribe vers une base qui lui appartient) puis redémarrez Home Assistant. Ce problème disparaît une fois le schéma en place."
+    },
+    "view_failed": {
+      "title": "Scribe n'a pas pu créer la vue `{view}`",
+      "description": "Les états sont enregistrés normalement dans `states_raw`, mais la vue `{view}` qui permet de les relire n'a pas pu être créée : {error}\n\nToutes les requêtes, tableaux de bord et exemples de la documentation passent par cette vue : votre historique paraîtra vide alors qu'il ne l'est pas. Rien n'est perdu.\n\nIl s'agit généralement d'un problème de droits, ou d'un autre objet portant déjà ce nom. Corrigez la cause puis redémarrez Home Assistant."
+    },
+    "no_hypertable": {
+      "title": "`{table}` n'est pas une hypertable TimescaleDB",
+      "description": "TimescaleDB est installé sur cette base, mais `{table}` est une table ordinaire : la conversion a échoué. L'historique est enregistré et reste interrogeable, mais **le découpage en chunks, la compression et la rétention ne font plus rien du tout** — la base va grossir plusieurs fois plus vite que nécessaire et les capteurs de taille resteront vides.\n\nConvertir une table exige d'en être propriétaire : c'est donc généralement que l'utilisateur PostgreSQL de Scribe ne l'est pas. Donnez-lui la propriété de `{table}` puis redémarrez Home Assistant ; ce problème disparaît dès que la conversion réussit."
+    },
+    "no_compression": {
+      "title": "`{table}` n'est jamais compressée",
+      "description": "`{table}` est bien une hypertable, mais aucune politique de compression n'a pu être mise en place : les chunks de plus de {compress_after} ne sont jamais compressés et la table conserve sa taille non compressée — typiquement plusieurs fois plus que nécessaire.\n\nC'est généralement que l'utilisateur PostgreSQL de Scribe n'est pas propriétaire de la table. Consultez les logs de Home Assistant pour l'erreur exacte, corrigez-la, puis redémarrez Home Assistant."
+    },
+    "legacy_schema": {
+      "title": "La base de données de Scribe est antérieure à la version 3.0",
+      "description": "La base contient encore `{relation}`, issue du schéma pré-3.0, et cette version de Scribe ne sait pas le convertir. **Plus rien n'est enregistré** — et rien n'a été renommé, créé ni supprimé non plus : votre historique est exactement là où il était.\n\nPour le convertir : installez Scribe **{version}** (dans HACS, choisissez explicitement cette version), démarrez Home Assistant et laissez-le tourner jusqu'à ce que les logs indiquent la fin de la migration — une quinzaine de minutes sur une grosse base — puis mettez Scribe à jour de nouveau. L'enregistrement reprend au redémarrage suivant et ce problème disparaît.\n\nSi vous préférez repartir d'une base vide, supprimez `{relation}` (cela efface l'ancien historique) et redémarrez Home Assistant."
+    },
+    "schema_unavailable": {
+      "title": "Scribe ne peut pas atteindre le schéma indiqué",
+      "description": "Scribe est configuré pour enregistrer dans le schéma `{schema}` sur `{host}`, mais la session aboutit à `{fallback}` — le schéma n'existe pas, ou l'utilisateur de base de données de Scribe n'y a aucun droit.\n\n**Plus rien n'est enregistré.** PostgreSQL n'échoue pas sur un schéma absent : il passe silencieusement au suivant du search path. Continuer aurait donc écrit tout votre historique dans `{fallback}` pendant que l'interface affichait `{schema}`. Scribe s'arrête plutôt que de remplir le mauvais schéma.\n\nSoit créez-le et accordez les droits :\n\n```sql\nCREATE SCHEMA IF NOT EXISTS {schema};\nGRANT USAGE, CREATE ON SCHEMA {schema} TO scribe;\n```\n\nsoit videz le champ sous Configurer → Avancé. Redémarrez ensuite Home Assistant — ce problème disparaît dès que Scribe enregistre dans le schéma indiqué."
+    },
+    "rollups_failed": {
+      "title": "Scribe n'a pas pu construire ses résumés",
+      "description": "Les résumés horaires et journaliers sont activés, mais Scribe n'a pas pu les créer : {error}\n\nL'enregistrement n'est pas affecté — ceci n'accélère que les graphiques longs — et les vues states_hourly et states_daily sont absentes. L'utilisateur de la base doit pouvoir créer des vues matérialisées. Scribe réessaie à chaque démarrage."
+    }
+  }
 }

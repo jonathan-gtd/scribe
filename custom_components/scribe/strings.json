@@ -1,202 +1,208 @@
 {
-    "config": {
-        "step": {
-            "user": {
-                "title": "Connect to TimescaleDB",
-                "description": "Enter the PostgreSQL connection URL for your TimescaleDB instance.\n\nFormat: `postgresql://user:password@host:5432/dbname`\n\nAdditional options (SSL, filtering, chunk intervals) are available after setup via **Configure**.",
-                "data": {
-                    "db_url": "Database URL"
-                },
-                "data_description": {
-                    "db_url": "Full PostgreSQL connection URL, e.g. postgresql://scribe:secret@192.168.1.10:5432/scribe"
-                }
-            }
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to TimescaleDB",
+        "description": "Enter the PostgreSQL connection URL for your TimescaleDB instance.\n\nFormat: `postgresql://user:password@host:5432/dbname`\n\nAdditional options (SSL, filtering, chunk intervals) are available after setup via **Configure**.",
+        "data": {
+          "db_url": "Database URL"
         },
-        "error": {
-            "cannot_connect": "Could not connect to the database. Check the URL and make sure PostgreSQL is reachable.",
-            "no_timescaledb": "Connected, but this database has no TimescaleDB extension and Scribe could not enable it. Scribe is a TimescaleDB integration: without it there is no chunking, no compression and no retention, and the database grows several times faster. Run `CREATE EXTENSION timescaledb;` on this database (the user needs CREATE on it), or point Scribe at a TimescaleDB instance."
-        },
-        "abort": {
-            "already_configured": "Scribe is already configured. Use **Configure** to change settings.",
-            "single_instance_allowed": "Only one Scribe instance is allowed.",
-            "no_timescaledb": "This database has no TimescaleDB extension and Scribe could not enable it, so setup was refused. Run `CREATE EXTENSION timescaledb;` on it, then restart Home Assistant."
+        "data_description": {
+          "db_url": "Full PostgreSQL connection URL, e.g. postgresql://scribe:secret@192.168.1.10:5432/scribe"
         }
+      }
     },
-    "options": {
-        "step": {
-            "init": {
-                "title": "Recording & Filtering",
-                "data": {
-                    "record_states": "Record state changes",
-                    "record_events": "Record events",
-                    "include_domains": "Include domains",
-                    "exclude_domains": "Exclude domains",
-                    "include_entities": "Include entities",
-                    "exclude_entities": "Exclude entities",
-                    "include_entity_globs": "Include entity globs",
-                    "exclude_entity_globs": "Exclude entity globs",
-                    "exclude_attributes": "Exclude attributes",
-                    "include_events": "Include event types",
-                    "exclude_events": "Exclude event types"
-                },
-                "data_description": {
-                    "record_states": "Write every state change to TimescaleDB",
-                    "record_events": "Write Home Assistant events (automations, scripts…) to TimescaleDB",
-                    "include_domains": "Only record entities from these domains. Leave empty to include all.",
-                    "exclude_domains": "Never record entities from these domains",
-                    "include_entities": "Only record these specific entities. Leave empty to include all.",
-                    "exclude_entities": "Never record these specific entities",
-                    "include_entity_globs": "Only record entities matching these patterns (e.g. sensor.temp_*)",
-                    "exclude_entity_globs": "Never record entities matching these patterns",
-                    "exclude_attributes": "Drop these attribute keys before writing (saves space)",
-                    "include_events": "Only record these specific event types. Leave empty to record all events.",
-                    "exclude_events": "Never record these event types (applied after include_events)."
-                }
-            },
-            "performance": {
-                "title": "Performance",
-                "data": {
-                    "batch_size": "Batch size",
-                    "flush_interval": "Flush interval (seconds)",
-                    "max_queue_size": "Max queue size",
-                    "buffer_on_failure": "Buffer on database failure"
-                },
-                "data_description": {
-                    "batch_size": "Number of rows accumulated before a flush is triggered (default 500)",
-                    "flush_interval": "Maximum seconds between automatic flushes (default 5)",
-                    "max_queue_size": "Maximum pending writes before oldest are dropped (default 10000)",
-                    "buffer_on_failure": "Keep events in memory and retry when the database becomes available again"
-                }
-            },
-            "stats": {
-                "title": "Statistics Sensors",
-                "data": {
-                    "enable_stats_io": "Enable I/O statistics sensors",
-                    "enable_stats_chunk": "Enable chunk statistics sensors",
-                    "stats_chunk_interval": "Chunk stats refresh interval",
-                    "enable_stats_size": "Enable size statistics sensors",
-                    "stats_size_interval": "Size stats refresh interval"
-                },
-                "data_description": {
-                    "enable_stats_io": "Expose real-time write counters, buffer size and write duration as sensors",
-                    "enable_stats_chunk": "Expose per-table chunk counts (total / compressed / uncompressed) as sensors",
-                    "stats_chunk_interval": "How often (in minutes) chunk stats are refreshed from the database",
-                    "enable_stats_size": "Expose per-table sizes and compression ratios as sensors",
-                    "stats_size_interval": "How often (in minutes) size stats are refreshed from the database"
-                }
-            },
-            "metadata": {
-                "title": "Metadata Tables",
-                "data": {
-                    "enable_table_areas": "Sync areas table",
-                    "enable_table_devices": "Sync devices table",
-                    "enable_table_integrations": "Sync integrations table",
-                    "enable_table_users": "Sync users table"
-                },
-                "data_description": {
-                    "enable_table_areas": "Keep a mirror of Home Assistant areas in TimescaleDB",
-                    "enable_table_devices": "Keep a mirror of Home Assistant devices in TimescaleDB",
-                    "enable_table_integrations": "Keep a mirror of config entries (integrations) in TimescaleDB",
-                    "enable_table_users": "Keep a mirror of Home Assistant users in TimescaleDB"
-                }
-            },
-            "advanced": {
-                "title": "Advanced (TimescaleDB & SSL)",
-                "data": {
-                    "db_schema": "Database schema",
-                    "chunk_time_interval": "Chunk time interval",
-                    "compress_after": "Compress after",
-                    "retention_states": "Delete states older than",
-                    "retention_events": "Delete events older than",
-                    "db_ssl": "Enable SSL",
-                    "ssl_root_cert": "SSL root certificate path",
-                    "ssl_cert_file": "SSL client certificate path",
-                    "ssl_key_file": "SSL client key path"
-                },
-                "data_description": {
-                    "db_schema": "Leave empty to use whatever the connection already points at (normally `public`). Set a name and Scribe creates that schema and records into it — its tables, its hypertables, its policies. Only new data goes there: history already written elsewhere is not moved, and Scribe records nothing at all if the schema cannot be reached.",
-                    "chunk_time_interval": "TimescaleDB chunk interval (e.g. '7 days'). Affects new chunks only.",
-                    "compress_after": "Compress chunks older than this interval (e.g. '7 days'). Requires TimescaleDB compression.",
-                    "retention_states": "Leave empty to keep every state forever (default). Set an interval (e.g. '365 days', '6 months') to have TimescaleDB DELETE state history older than it — permanently, with no undo. Scribe owns this policy: emptying the field removes it.",
-                    "retention_events": "Leave empty to keep every event forever (default). Set an interval (e.g. '30 days') to have TimescaleDB DELETE event history older than it — permanently, with no undo. Scribe owns this policy: emptying the field removes it.",
-                    "db_ssl": "Require an SSL/TLS connection to PostgreSQL",
-                    "ssl_root_cert": "Path to the CA certificate file (e.g. /ssl/ca.crt)",
-                    "ssl_cert_file": "Path to the client certificate file for mTLS",
-                    "ssl_key_file": "Path to the client private key file for mTLS"
-                }
-            }
-        },
-        "error": {
-            "must_record_something": "At least one of 'Record state changes' or 'Record events' must be enabled.",
-            "invalid_interval": "Retention must be an interval like '365 days', '6 months' or '1 year' — leave it empty to keep history forever.",
-            "invalid_schema": "A schema name may only contain letters, digits and underscores, and cannot start with a digit — leave it empty to use the connection's own schema.",
-            "invalid_storage_interval": "Chunk interval and compression interval must be an interval like '7 days', '12 hours' or '1 month' — they cannot be left empty."
-        }
+    "error": {
+      "cannot_connect": "Could not connect to the database. Check the URL and make sure PostgreSQL is reachable.",
+      "no_timescaledb": "Connected, but this database has no TimescaleDB extension and Scribe could not enable it. Scribe is a TimescaleDB integration: without it there is no chunking, no compression and no retention, and the database grows several times faster. Run `CREATE EXTENSION timescaledb;` on this database (the user needs CREATE on it), or point Scribe at a TimescaleDB instance."
     },
-    "issues": {
-        "rename_refused_live": {
-            "title": "Entity rename to {new_entity_id} was not applied",
-            "description": "Home Assistant renamed `{old_entity_id}` to `{new_entity_id}`, but Scribe's database already tracks `{new_entity_id}` for another entity that is still active (`{occupant}`). To avoid mixing the history of two live entities, Scribe left the database unchanged: history recorded so far stays under `{old_entity_id}`, and new states may be recorded under the existing `{new_entity_id}` row. If the other entity was also just renamed, this usually resolves itself within a minute — this issue will disappear once the rename succeeds. If it persists, review the `entities` table in your database."
-        },
-        "rename_refused_unprovable": {
-            "title": "Entity rename to {new_entity_id} was not applied",
-            "description": "Home Assistant renamed `{old_entity_id}` to `{new_entity_id}`, but Scribe's database already has a row for `{new_entity_id}` with incomplete metadata, so Scribe cannot prove it belongs to a removed entity. To avoid corrupting history, the database was left unchanged: history recorded so far stays under `{old_entity_id}`. If you are sure the existing `{new_entity_id}` row is a leftover from a removed entity, delete it from the `entities` table manually; Scribe will then apply the rename the next time the entity is renamed."
-        },
-        "rename_failed": {
-            "title": "Entity rename of {old_entity_id} failed",
-            "description": "Scribe hit an error while renaming `{old_entity_id}` to `{new_entity_id}` in the database: {error}. The entity's history may now be split across the two IDs. Check the Home Assistant logs for details; renaming the entity again will retry the operation."
-        },
-        "db_unreachable": {
-            "title": "Scribe cannot reach its database",
-            "description": "Scribe could not connect to `{host}`. The database reported: {error}\n\nNothing is reaching the database, but recording has not stopped: states are held in memory and Scribe retries the connection in the background, then writes everything it buffered once one succeeds. History is lost only if Home Assistant restarts first, or if the buffer fills up.\n\nCheck that the server is running and reachable from Home Assistant, and that the URL, username and password in Scribe's settings are correct. This issue disappears on its own once a connection succeeds."
-        },
-        "write_failing": {
-            "title": "Scribe cannot write to its database",
-            "description": "The last {failures} attempts to write history failed. Recorded data is being held in memory and will be written once the database recovers, but it will be lost if Home Assistant restarts first — or if the buffer fills up.\n\nThe last error was: {error}\n\nCheck the database server (disk space, connection limits, and its own logs). This issue clears itself as soon as a write succeeds."
-        },
-        "buffer_full": {
-            "title": "Scribe's buffer is full — history is being lost",
-            "description": "Writes have been failing long enough to fill the in-memory buffer ({max_queue_size} items). The oldest records are now being discarded to make room for new ones, so **history is being permanently lost**.\n\nFix the database problem first — see the other Scribe repair, or the Home Assistant logs. If your database is simply slower than your rate of state changes, raise the buffer size in Scribe's settings. This issue clears once writing resumes."
-        },
-        "data_dropped": {
-            "title": "Scribe is discarding records",
-            "description": "{dropped} records have been discarded since Home Assistant started, because a write failed and buffering is disabled in Scribe's settings.\n\nEnable buffering to keep records in memory through a temporary database outage, and check the logs for the underlying write error."
-        },
-        "no_timescaledb": {
-            "title": "TimescaleDB is not installed on Scribe's database",
-            "description": "Scribe is recording to `{host}`, but the TimescaleDB extension is not installed there. History is still being saved and remains queryable — however chunking and **compression are unavailable**, so the database will grow considerably faster, and the size and compression sensors will stay empty.\n\nInstall the extension and run `CREATE EXTENSION timescaledb;` on this database, then restart Home Assistant. This issue disappears once the extension is detected."
-        },
-        "retention_failed": {
-            "title": "Scribe could not apply the retention policy on {table}",
-            "description": "Scribe was asked to delete data older than **{retention}** from `{table}`, and setting that policy failed with: {error}\n\nNothing was deleted and nothing is being deleted — the table keeps growing, and its history is intact. Retention is a TimescaleDB feature: it needs the extension installed on this database, `{table}` to be a hypertable, and the Scribe database user to own it.\n\nFix the cause, or clear the retention field in Scribe's options, then restart Home Assistant. This issue disappears once the policy is in place."
-        },
-        "ssl_degraded": {
-            "title": "Scribe's TLS configuration is not fully in force",
-            "description": "Scribe is connecting to its database over TLS, but part of what you configured could not be applied: {problems}\n\nThe connection is still encrypted, and the server's certificate is still checked against the system CA store. What is missing is the extra protection you asked for — most often a client certificate, so Scribe authenticates as an ordinary client instead of the one you provisioned, which looks identical from the outside until someone audits it.\n\nCheck that the paths are right and readable by Home Assistant (relative paths are resolved from the configuration directory), then restart. This issue disappears once every configured file loads."
-        },
-        "schema_failed": {
-            "title": "Scribe could not create its tables",
-            "description": "Scribe reached `{host}` but failed while building its schema, with: {error}\n\nWhatever it could not create is simply missing: on a new database that means **nothing is being recorded at all**, and on an existing one recording may be partial — some tables kept up to date, others stale or absent. The most common cause is privileges: the database user Scribe connects with needs to create tables in this database, and to own the ones it already created.\n\nGrant it those rights (or point Scribe at a database it owns) and restart Home Assistant. This issue disappears once the schema is in place."
-        },
-        "view_failed": {
-            "title": "Scribe could not create the `{view}` view",
-            "description": "States are being recorded normally into `states_raw`, but the `{view}` view that reads them back could not be created: {error}\n\nEvery query, dashboard and example in the documentation goes through that view, so your history will look empty even though it is not. Nothing is lost.\n\nThis is usually a privileges problem, or another object already holding that name. Fix the cause and restart Home Assistant."
-        },
-        "no_hypertable": {
-            "title": "`{table}` is not a TimescaleDB hypertable",
-            "description": "TimescaleDB is installed on this database, but `{table}` is an ordinary table: it could not be converted. History is recorded and stays queryable, but **chunking, compression and retention do nothing at all** — expect the database to grow several times faster than it should, and the size sensors to stay empty.\n\nConverting a table requires owning it, so this usually means the Scribe database user is not the owner of `{table}`. Grant it ownership and restart Home Assistant; this issue disappears once the conversion succeeds."
-        },
-        "no_compression": {
-            "title": "`{table}` is never compressed",
-            "description": "`{table}` is a hypertable, but no compression policy could be put in place, so chunks older than {compress_after} are never compressed and the table keeps its full uncompressed size — typically several times larger than it needs to be.\n\nThis usually means the Scribe database user does not own the table. Check the Home Assistant logs for the exact error, fix it, and restart Home Assistant."
-        },
-        "legacy_schema": {
-            "title": "Scribe's database predates version 3.0",
-            "description": "The database still holds `{relation}` from the pre-3.0 layout, and this version of Scribe cannot convert it. **Nothing is being recorded** — and nothing has been renamed, created or deleted either, so your history is exactly where it was.\n\nTo convert it: install Scribe **{version}** (in HACS, choose that version explicitly), start Home Assistant and leave it running until the logs report the migration finished — around fifteen minutes on a large database — then update Scribe again. Recording resumes on the next restart, and this issue disappears.\n\nIf you would rather start from a clean database, drop `{relation}` (this deletes the old history) and restart Home Assistant."
-        },
-        "schema_unavailable": {
-            "title": "Scribe cannot reach the schema it was given",
-            "description": "Scribe is configured to record into the schema `{schema}` on `{host}`, but the session resolves to `{fallback}` instead — the schema does not exist, or the Scribe database user has no rights on it.\n\n**Nothing is being recorded.** PostgreSQL does not fail on a missing schema, it silently falls through to the next one on the search path, so carrying on would have written your whole history into `{fallback}` while the UI kept showing `{schema}`. Scribe stops instead of filling the wrong schema.\n\nEither create it and grant the rights:\n\n```sql\nCREATE SCHEMA IF NOT EXISTS {schema};\nGRANT USAGE, CREATE ON SCHEMA {schema} TO scribe;\n```\n\nor clear the schema field under Configure → Advanced. Then restart Home Assistant — this issue disappears once Scribe records into the schema it was given."
-        }
+    "abort": {
+      "already_configured": "Scribe is already configured. Use **Configure** to change settings.",
+      "single_instance_allowed": "Only one Scribe instance is allowed.",
+      "no_timescaledb": "This database has no TimescaleDB extension and Scribe could not enable it, so setup was refused. Run `CREATE EXTENSION timescaledb;` on it, then restart Home Assistant."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Recording & Filtering",
+        "data": {
+          "record_states": "Record state changes",
+          "record_events": "Record events",
+          "include_domains": "Include domains",
+          "exclude_domains": "Exclude domains",
+          "include_entities": "Include entities",
+          "exclude_entities": "Exclude entities",
+          "include_entity_globs": "Include entity globs",
+          "exclude_entity_globs": "Exclude entity globs",
+          "exclude_attributes": "Exclude attributes",
+          "include_events": "Include event types",
+          "exclude_events": "Exclude event types"
+        },
+        "data_description": {
+          "record_states": "Write every state change to TimescaleDB",
+          "record_events": "Write Home Assistant events (automations, scripts…) to TimescaleDB",
+          "include_domains": "Only record entities from these domains. Leave empty to include all.",
+          "exclude_domains": "Never record entities from these domains",
+          "include_entities": "Only record these specific entities. Leave empty to include all.",
+          "exclude_entities": "Never record these specific entities",
+          "include_entity_globs": "Only record entities matching these patterns (e.g. sensor.temp_*)",
+          "exclude_entity_globs": "Never record entities matching these patterns",
+          "exclude_attributes": "Drop these attribute keys before writing (saves space)",
+          "include_events": "Only record these specific event types. Leave empty to record all events.",
+          "exclude_events": "Never record these event types (applied after include_events)."
+        }
+      },
+      "performance": {
+        "title": "Performance",
+        "data": {
+          "batch_size": "Batch size",
+          "flush_interval": "Flush interval (seconds)",
+          "max_queue_size": "Max queue size",
+          "buffer_on_failure": "Buffer on database failure"
+        },
+        "data_description": {
+          "batch_size": "Number of rows accumulated before a flush is triggered (default 500)",
+          "flush_interval": "Maximum seconds between automatic flushes (default 5)",
+          "max_queue_size": "Maximum pending writes before oldest are dropped (default 10000)",
+          "buffer_on_failure": "Keep events in memory and retry when the database becomes available again"
+        }
+      },
+      "stats": {
+        "title": "Statistics Sensors",
+        "data": {
+          "enable_stats_io": "Enable I/O statistics sensors",
+          "enable_stats_chunk": "Enable chunk statistics sensors",
+          "stats_chunk_interval": "Chunk stats refresh interval",
+          "enable_stats_size": "Enable size statistics sensors",
+          "stats_size_interval": "Size stats refresh interval"
+        },
+        "data_description": {
+          "enable_stats_io": "Expose real-time write counters, buffer size and write duration as sensors",
+          "enable_stats_chunk": "Expose per-table chunk counts (total / compressed / uncompressed) as sensors",
+          "stats_chunk_interval": "How often (in minutes) chunk stats are refreshed from the database",
+          "enable_stats_size": "Expose per-table sizes and compression ratios as sensors",
+          "stats_size_interval": "How often (in minutes) size stats are refreshed from the database"
+        }
+      },
+      "metadata": {
+        "title": "Metadata Tables",
+        "data": {
+          "enable_table_areas": "Sync areas table",
+          "enable_table_devices": "Sync devices table",
+          "enable_table_integrations": "Sync integrations table",
+          "enable_table_users": "Sync users table",
+          "enable_rollups": "Hourly and daily summaries"
+        },
+        "data_description": {
+          "enable_table_areas": "Keep a mirror of Home Assistant areas in TimescaleDB",
+          "enable_table_devices": "Keep a mirror of Home Assistant devices in TimescaleDB",
+          "enable_table_integrations": "Keep a mirror of config entries (integrations) in TimescaleDB",
+          "enable_table_users": "Keep a mirror of Home Assistant users in TimescaleDB",
+          "enable_rollups": "Keep pre-computed hourly and daily averages of your states, maintained by TimescaleDB. Charts over months or years then read thousands of rows instead of millions. Adds the states_hourly and states_daily views."
+        }
+      },
+      "advanced": {
+        "title": "Advanced (TimescaleDB & SSL)",
+        "data": {
+          "db_schema": "Database schema",
+          "chunk_time_interval": "Chunk time interval",
+          "compress_after": "Compress after",
+          "retention_states": "Delete states older than",
+          "retention_events": "Delete events older than",
+          "db_ssl": "Enable SSL",
+          "ssl_root_cert": "SSL root certificate path",
+          "ssl_cert_file": "SSL client certificate path",
+          "ssl_key_file": "SSL client key path"
+        },
+        "data_description": {
+          "db_schema": "Leave empty to use whatever the connection already points at (normally `public`). Set a name and Scribe creates that schema and records into it — its tables, its hypertables, its policies. Only new data goes there: history already written elsewhere is not moved, and Scribe records nothing at all if the schema cannot be reached.",
+          "chunk_time_interval": "TimescaleDB chunk interval (e.g. '7 days'). Affects new chunks only.",
+          "compress_after": "Compress chunks older than this interval (e.g. '7 days'). Requires TimescaleDB compression.",
+          "retention_states": "Leave empty to keep every state forever (default). Set an interval (e.g. '365 days', '6 months') to have TimescaleDB DELETE state history older than it — permanently, with no undo. Scribe owns this policy: emptying the field removes it.",
+          "retention_events": "Leave empty to keep every event forever (default). Set an interval (e.g. '30 days') to have TimescaleDB DELETE event history older than it — permanently, with no undo. Scribe owns this policy: emptying the field removes it.",
+          "db_ssl": "Require an SSL/TLS connection to PostgreSQL",
+          "ssl_root_cert": "Path to the CA certificate file (e.g. /ssl/ca.crt)",
+          "ssl_cert_file": "Path to the client certificate file for mTLS",
+          "ssl_key_file": "Path to the client private key file for mTLS"
+        }
+      }
+    },
+    "error": {
+      "must_record_something": "At least one of 'Record state changes' or 'Record events' must be enabled.",
+      "invalid_interval": "Retention must be an interval like '365 days', '6 months' or '1 year' — leave it empty to keep history forever.",
+      "invalid_schema": "A schema name may only contain letters, digits and underscores, and cannot start with a digit — leave it empty to use the connection's own schema.",
+      "invalid_storage_interval": "Chunk interval and compression interval must be an interval like '7 days', '12 hours' or '1 month' — they cannot be left empty."
+    }
+  },
+  "issues": {
+    "rename_refused_live": {
+      "title": "Entity rename to {new_entity_id} was not applied",
+      "description": "Home Assistant renamed `{old_entity_id}` to `{new_entity_id}`, but Scribe's database already tracks `{new_entity_id}` for another entity that is still active (`{occupant}`). To avoid mixing the history of two live entities, Scribe left the database unchanged: history recorded so far stays under `{old_entity_id}`, and new states may be recorded under the existing `{new_entity_id}` row. If the other entity was also just renamed, this usually resolves itself within a minute — this issue will disappear once the rename succeeds. If it persists, review the `entities` table in your database."
+    },
+    "rename_refused_unprovable": {
+      "title": "Entity rename to {new_entity_id} was not applied",
+      "description": "Home Assistant renamed `{old_entity_id}` to `{new_entity_id}`, but Scribe's database already has a row for `{new_entity_id}` with incomplete metadata, so Scribe cannot prove it belongs to a removed entity. To avoid corrupting history, the database was left unchanged: history recorded so far stays under `{old_entity_id}`. If you are sure the existing `{new_entity_id}` row is a leftover from a removed entity, delete it from the `entities` table manually; Scribe will then apply the rename the next time the entity is renamed."
+    },
+    "rename_failed": {
+      "title": "Entity rename of {old_entity_id} failed",
+      "description": "Scribe hit an error while renaming `{old_entity_id}` to `{new_entity_id}` in the database: {error}. The entity's history may now be split across the two IDs. Check the Home Assistant logs for details; renaming the entity again will retry the operation."
+    },
+    "db_unreachable": {
+      "title": "Scribe cannot reach its database",
+      "description": "Scribe could not connect to `{host}`. The database reported: {error}\n\nNothing is reaching the database, but recording has not stopped: states are held in memory and Scribe retries the connection in the background, then writes everything it buffered once one succeeds. History is lost only if Home Assistant restarts first, or if the buffer fills up.\n\nCheck that the server is running and reachable from Home Assistant, and that the URL, username and password in Scribe's settings are correct. This issue disappears on its own once a connection succeeds."
+    },
+    "write_failing": {
+      "title": "Scribe cannot write to its database",
+      "description": "The last {failures} attempts to write history failed. Recorded data is being held in memory and will be written once the database recovers, but it will be lost if Home Assistant restarts first — or if the buffer fills up.\n\nThe last error was: {error}\n\nCheck the database server (disk space, connection limits, and its own logs). This issue clears itself as soon as a write succeeds."
+    },
+    "buffer_full": {
+      "title": "Scribe's buffer is full — history is being lost",
+      "description": "Writes have been failing long enough to fill the in-memory buffer ({max_queue_size} items). The oldest records are now being discarded to make room for new ones, so **history is being permanently lost**.\n\nFix the database problem first — see the other Scribe repair, or the Home Assistant logs. If your database is simply slower than your rate of state changes, raise the buffer size in Scribe's settings. This issue clears once writing resumes."
+    },
+    "data_dropped": {
+      "title": "Scribe is discarding records",
+      "description": "{dropped} records have been discarded since Home Assistant started, because a write failed and buffering is disabled in Scribe's settings.\n\nEnable buffering to keep records in memory through a temporary database outage, and check the logs for the underlying write error."
+    },
+    "no_timescaledb": {
+      "title": "TimescaleDB is not installed on Scribe's database",
+      "description": "Scribe is recording to `{host}`, but the TimescaleDB extension is not installed there. History is still being saved and remains queryable — however chunking and **compression are unavailable**, so the database will grow considerably faster, and the size and compression sensors will stay empty.\n\nInstall the extension and run `CREATE EXTENSION timescaledb;` on this database, then restart Home Assistant. This issue disappears once the extension is detected."
+    },
+    "retention_failed": {
+      "title": "Scribe could not apply the retention policy on {table}",
+      "description": "Scribe was asked to delete data older than **{retention}** from `{table}`, and setting that policy failed with: {error}\n\nNothing was deleted and nothing is being deleted — the table keeps growing, and its history is intact. Retention is a TimescaleDB feature: it needs the extension installed on this database, `{table}` to be a hypertable, and the Scribe database user to own it.\n\nFix the cause, or clear the retention field in Scribe's options, then restart Home Assistant. This issue disappears once the policy is in place."
+    },
+    "ssl_degraded": {
+      "title": "Scribe's TLS configuration is not fully in force",
+      "description": "Scribe is connecting to its database over TLS, but part of what you configured could not be applied: {problems}\n\nThe connection is still encrypted, and the server's certificate is still checked against the system CA store. What is missing is the extra protection you asked for — most often a client certificate, so Scribe authenticates as an ordinary client instead of the one you provisioned, which looks identical from the outside until someone audits it.\n\nCheck that the paths are right and readable by Home Assistant (relative paths are resolved from the configuration directory), then restart. This issue disappears once every configured file loads."
+    },
+    "schema_failed": {
+      "title": "Scribe could not create its tables",
+      "description": "Scribe reached `{host}` but failed while building its schema, with: {error}\n\nWhatever it could not create is simply missing: on a new database that means **nothing is being recorded at all**, and on an existing one recording may be partial — some tables kept up to date, others stale or absent. The most common cause is privileges: the database user Scribe connects with needs to create tables in this database, and to own the ones it already created.\n\nGrant it those rights (or point Scribe at a database it owns) and restart Home Assistant. This issue disappears once the schema is in place."
+    },
+    "view_failed": {
+      "title": "Scribe could not create the `{view}` view",
+      "description": "States are being recorded normally into `states_raw`, but the `{view}` view that reads them back could not be created: {error}\n\nEvery query, dashboard and example in the documentation goes through that view, so your history will look empty even though it is not. Nothing is lost.\n\nThis is usually a privileges problem, or another object already holding that name. Fix the cause and restart Home Assistant."
+    },
+    "no_hypertable": {
+      "title": "`{table}` is not a TimescaleDB hypertable",
+      "description": "TimescaleDB is installed on this database, but `{table}` is an ordinary table: it could not be converted. History is recorded and stays queryable, but **chunking, compression and retention do nothing at all** — expect the database to grow several times faster than it should, and the size sensors to stay empty.\n\nConverting a table requires owning it, so this usually means the Scribe database user is not the owner of `{table}`. Grant it ownership and restart Home Assistant; this issue disappears once the conversion succeeds."
+    },
+    "no_compression": {
+      "title": "`{table}` is never compressed",
+      "description": "`{table}` is a hypertable, but no compression policy could be put in place, so chunks older than {compress_after} are never compressed and the table keeps its full uncompressed size — typically several times larger than it needs to be.\n\nThis usually means the Scribe database user does not own the table. Check the Home Assistant logs for the exact error, fix it, and restart Home Assistant."
+    },
+    "legacy_schema": {
+      "title": "Scribe's database predates version 3.0",
+      "description": "The database still holds `{relation}` from the pre-3.0 layout, and this version of Scribe cannot convert it. **Nothing is being recorded** — and nothing has been renamed, created or deleted either, so your history is exactly where it was.\n\nTo convert it: install Scribe **{version}** (in HACS, choose that version explicitly), start Home Assistant and leave it running until the logs report the migration finished — around fifteen minutes on a large database — then update Scribe again. Recording resumes on the next restart, and this issue disappears.\n\nIf you would rather start from a clean database, drop `{relation}` (this deletes the old history) and restart Home Assistant."
+    },
+    "schema_unavailable": {
+      "title": "Scribe cannot reach the schema it was given",
+      "description": "Scribe is configured to record into the schema `{schema}` on `{host}`, but the session resolves to `{fallback}` instead — the schema does not exist, or the Scribe database user has no rights on it.\n\n**Nothing is being recorded.** PostgreSQL does not fail on a missing schema, it silently falls through to the next one on the search path, so carrying on would have written your whole history into `{fallback}` while the UI kept showing `{schema}`. Scribe stops instead of filling the wrong schema.\n\nEither create it and grant the rights:\n\n```sql\nCREATE SCHEMA IF NOT EXISTS {schema};\nGRANT USAGE, CREATE ON SCHEMA {schema} TO scribe;\n```\n\nor clear the schema field under Configure → Advanced. Then restart Home Assistant — this issue disappears once Scribe records into the schema it was given."
+    },
+    "rollups_failed": {
+      "title": "Scribe could not build its summaries",
+      "description": "Hourly and daily summaries are turned on, but Scribe could not create them: {error}\n\nRecording is unaffected — this only speeds up long charts — and the states_hourly and states_daily views are missing. The database user needs the right to create materialized views. Scribe retries at every start."
+    }
+  }
 }

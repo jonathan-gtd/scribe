@@ -81,5 +81,11 @@ DEFAULT_ENABLE_INTEGRATIONS = True
 CONF_ENABLE_USERS = "enable_table_users"
 DEFAULT_ENABLE_USERS = True
 
+# Hourly and daily summaries of states_raw, maintained by TimescaleDB itself.
+# Off by default: they are derived data, and a database that does not need them
+# should not carry them.
+CONF_ENABLE_ROLLUPS = "enable_rollups"
+DEFAULT_ENABLE_ROLLUPS = False
+
 CONF_INCLUDE_EVENTS = "include_events"
 CONF_EXCLUDE_EVENTS = "exclude_events"

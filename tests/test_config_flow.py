@@ -231,7 +231,10 @@ def _readme_config_keys(text):
     example = text.split("```yaml\nscribe:\n", 2)[2].split("```")[0]
     return (
         re.findall(r"^  ([a-z_]+):", example, re.M),
-        re.findall(r"^\| `([a-z_]+)` \|", text, re.M),
+        # The parameter reference is the two-column table: name, meaning. Any
+        # other table — the summary views, the Repairs list — has more columns
+        # and is not a list of options.
+        re.findall(r"^\| `([a-z_]+)` \| [^|]*\|\s*$", text, re.M),
     )
 
 
