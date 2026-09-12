@@ -115,7 +115,9 @@
           "ssl_cert_file": "Ruta del certificado de cliente SSL",
           "ssl_key_file": "Ruta de la clave de cliente SSL",
           "retention_states": "Eliminar estados anteriores a",
-          "retention_events": "Eliminar eventos anteriores a"
+          "retention_events": "Eliminar eventos anteriores a",
+          "query_timeout": "Tiempo máximo de una consulta",
+          "query_max_rows": "Filas máximas por consulta"
         },
         "data_description": {
           "db_schema": "Déjelo vacío para usar aquello a lo que ya apunta la conexión (normalmente `public`). Indique un nombre y Scribe crea ese esquema y registra en él: sus tablas, sus hipertablas, sus políticas. Solo van allí los datos nuevos: el historial ya escrito en otro sitio no se mueve, y Scribe no registra nada si el esquema es inaccesible.",
@@ -126,7 +128,9 @@
           "ssl_cert_file": "Path to the client certificate file",
           "ssl_key_file": "Path to the client private key file",
           "retention_states": "Déjalo vacío para conservar todos los estados para siempre (predeterminado). Indica un intervalo (p. ej. '365 days', '6 months') para que TimescaleDB BORRE el historial de estados más antiguo — de forma permanente y sin deshacer. Scribe gestiona esta política: vaciar el campo la elimina.",
-          "retention_events": "Déjalo vacío para conservar todos los eventos para siempre (predeterminado). Indica un intervalo (p. ej. '30 days') para que TimescaleDB BORRE el historial de eventos más antiguo — de forma permanente y sin deshacer. Scribe gestiona esta política: vaciar el campo la elimina."
+          "retention_events": "Déjalo vacío para conservar todos los eventos para siempre (predeterminado). Indica un intervalo (p. ej. '30 days') para que TimescaleDB BORRE el historial de eventos más antiguo — de forma permanente y sin deshacer. Scribe gestiona esta política: vaciar el campo la elimina.",
+          "query_timeout": "Segundos que una llamada a `scribe.query` puede ejecutarse antes de que la base la detenga. 60 por defecto.",
+          "query_max_rows": "Filas que una llamada a `scribe.query` puede devolver antes de ser rechazada. Pasan a la memoria de Home Assistant: es lo que evita que una consulta descuidada lo tumbe. 20000 por defecto."
         }
       }
     },

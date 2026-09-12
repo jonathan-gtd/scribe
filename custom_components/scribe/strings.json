@@ -115,7 +115,9 @@
           "db_ssl": "Enable SSL",
           "ssl_root_cert": "SSL root certificate path",
           "ssl_cert_file": "SSL client certificate path",
-          "ssl_key_file": "SSL client key path"
+          "ssl_key_file": "SSL client key path",
+          "query_timeout": "Query timeout",
+          "query_max_rows": "Maximum rows per query"
         },
         "data_description": {
           "db_schema": "Leave empty to use whatever the connection already points at (normally `public`). Set a name and Scribe creates that schema and records into it — its tables, its hypertables, its policies. Only new data goes there: history already written elsewhere is not moved, and Scribe records nothing at all if the schema cannot be reached.",
@@ -126,7 +128,9 @@
           "db_ssl": "Require an SSL/TLS connection to PostgreSQL",
           "ssl_root_cert": "Path to the CA certificate file (e.g. /ssl/ca.crt)",
           "ssl_cert_file": "Path to the client certificate file for mTLS",
-          "ssl_key_file": "Path to the client private key file for mTLS"
+          "ssl_key_file": "Path to the client private key file for mTLS",
+          "query_timeout": "Seconds a `scribe.query` call may run before the database stops it. 60 by default.",
+          "query_max_rows": "Rows a `scribe.query` call may return before it is refused. They travel into Home Assistant's memory, so this is what keeps a careless query from taking it down. 20000 by default."
         }
       }
     },
