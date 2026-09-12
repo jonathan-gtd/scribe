@@ -18,6 +18,7 @@ Aquí encontrarás una explicación de la estructura de datos y de cómo consult
 - [Configuración](#configuración)
 - [Ajuste del almacenamiento](#ajuste-del-almacenamiento)
 - [Retención](#retención)
+- [Resúmenes](#resúmenes)
 - [Esquema de la base de datos](#esquema-de-la-base-de-datos)
 - [Migración](#migración)
 - [Sensores de estadísticas](#sensores-de-estadísticas)
@@ -150,6 +151,7 @@ scribe:
   enable_table_devices: true
   enable_table_integrations: true
   enable_table_users: true
+  enable_rollups: false
 ```
 </details>
 
@@ -194,6 +196,7 @@ scribe:
 | `enable_table_devices` | Activar la creación y sincronización de la tabla `devices`. |
 | `enable_table_integrations` | Activar la creación y sincronización de la tabla `integrations`. |
 | `enable_table_users` | Activar la creación y sincronización de la tabla `users`. |
+| `enable_rollups` | Mantener resúmenes por hora y por día precalculados de los estados (`states_hourly`, `states_daily`). Desactivado por defecto. |
 </details>
 
 ## Ajuste del almacenamiento
@@ -320,6 +323,36 @@ Conviene saber:
 - Los valores aceptados son intervalos simples: `30 days`, `6 months`,
   `1 year`. Cualquier otra cosa se rechaza con un error en vez de enviarse a la
   base de datos.
+
+## Resúmenes
+
+Un año de un sensor que informa cada 30 segundos son cerca de un millón de filas. Un gráfico de ese año las lee todas, cada vez que se dibuja.
+
+Con `enable_rollups: true`, TimescaleDB mantiene al día dos resúmenes de sus estados a medida que se escriben —por hora y por día— y un gráfico de varios años lee miles de filas en lugar de millones.
+
+```yaml
+scribe:
+  enable_rollups: true
+```
+
+Esto añade dos vistas:
+
+| Vista | Una fila por | Columnas |
+| --- | --- | --- |
+| `states_hourly` | entidad y hora | `entity_id`, `bucket`, `value_avg`, `value_min`, `value_max`, `samples` |
+| `states_daily` | entidad y día | las mismas |
+
+```sql
+SELECT bucket, value_avg, value_min, value_max
+FROM states_daily
+WHERE entity_id = 'sensor.temperatura_exterior'
+  AND bucket > now() - interval '2 years'
+ORDER BY bucket;
+```
+
+Solo se resumen los estados numéricos —la media de `on` y `off` no significa nada— y `samples` indica cuántos estados representa cada fila.
+
+**Son datos derivados.** No se duplica nada que vaya a echar de menos: desactivar la opción elimina ambas vistas, reactivarla las reconstruye a partir del historial, y sus estados no se tocan en ningún caso. TimescaleDB las mantiene por sí mismo; Scribe solo las crea.
 
 ## Esquema de la base de datos
 
