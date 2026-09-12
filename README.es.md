@@ -35,7 +35,15 @@ El recorder de Home Assistant guarda unas semanas de historial en SQLite y se ra
 
 *O a mano:* copie `custom_components/scribe` en su carpeta `custom_components`. En ambos casos, reinicie Home Assistant.
 
-**3. La URL de la base de datos**, en `configuration.yaml`:
+**3. La URL de la base de datos.** Vaya a **Ajustes → Dispositivos y servicios → Añadir integración**, busque **Scribe** y péguela:
+
+[![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=scribe)
+
+```
+postgresql://scribe:password@192.168.1.10:5432/scribe
+```
+
+*O en `configuration.yaml`*, si prefiere mantener su configuración en archivos:
 
 ```yaml
 scribe:
