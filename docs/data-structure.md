@@ -15,6 +15,8 @@ Scribe is a long-term storage integration for Home Assistant. It stores entity s
 | `integrations` | Table | HA integrations (platforms) |
 | `users` | Table | HA user accounts |
 | `states` | View | Convenience join of `states_raw` + `entities` |
+| `states_hourly` | View | Hourly summary per entity — only with `enable_rollups` |
+| `states_daily` | View | Daily summary per entity — only with `enable_rollups` |
 
 ---
 
@@ -113,6 +115,36 @@ SELECT s.time, e.entity_id, s.state, s.value, s.attributes
 FROM states_raw s
 JOIN entities e ON e.id = s.metadata_id
 ```
+
+---
+
+### `states_hourly` and `states_daily` — Summaries
+
+Created only when `enable_rollups` is on. They are views over two TimescaleDB **continuous aggregates**, which the database keeps up to date as states arrive. A chart over years reads thousands of rows here instead of millions in `states_raw`.
+
+| Column | Type | Description |
+|---|---|---|
+| `entity_id` | `text` | The entity |
+| `bucket` | `timestamptz` | Start of the hour (or of the day) |
+| `value_avg` | `double precision` | Average of the numeric states in that bucket |
+| `value_min` | `double precision` | Lowest |
+| `value_max` | `double precision` | Highest |
+| `samples` | `bigint` | How many states the row stands for |
+
+Only numeric states are summarised: the average of `on` and `off` means nothing. A bucket with no numeric state has no row.
+
+```sql
+-- Two years of daily temperatures, in one quick query
+SELECT bucket, value_avg, value_min, value_max
+FROM states_daily
+WHERE entity_id = 'sensor.outside_temperature'
+  AND bucket > now() - interval '2 years'
+ORDER BY bucket;
+```
+
+The tables underneath are `states_hourly_raw` and `states_daily_raw`, keyed by `metadata_id` — the same relationship `states_raw` has with `states`. Query the views unless you need the join yourself.
+
+They hold nothing that is not derived from `states_raw`: turning the option off drops them, turning it on rebuilds them from the history.
 
 ---
 
