@@ -155,7 +155,7 @@ scribe:
 
   # Wie es schreibt
   batch_size: 500               # Zeilen im Puffer vor einem Schreibvorgang
-  flush_interval: 5             # Sekunden, bevor ein unvollständiger Stapel geschrieben wird
+  flush_interval: 30            # Sekunden, bevor ein unvollständiger Stapel geschrieben wird
   max_queue_size: 10000         # Zeilen im Speicher, bevor neue verworfen werden
   buffer_on_failure: true       # weiter puffern, solange die Datenbank nicht erreichbar ist
 
@@ -199,7 +199,7 @@ scribe:
 | `record_states` | Ob Zustandsänderungen aufgezeichnet werden. |
 | `record_events` | Ob Ereignisse aufgezeichnet werden. |
 | `batch_size` | Anzahl der Einträge, die gepuffert werden, bevor in die Datenbank geschrieben wird. |
-| `flush_interval` | Maximale Wartezeit (in Sekunden), bevor der Puffer geleert wird. |
+| `flush_interval` | Sekunden, bevor ein unvollständiger Stapel trotzdem geschrieben wird (Standard `30`). Jeder Schreibvorgang ist eine Transaktion: ein kurzes Intervall schreibt jeweils eine Handvoll Zeilen, statt sie zu bündeln, ein langes riskiert nur das letzte Intervall an Historie — und auch nur, wenn Home Assistant abgeschossen wird. |
 | `max_queue_size` | Maximale Anzahl an Einträgen im Speicher, bevor neue verworfen werden. |
 | `query_timeout` | Sekunden, die ein `scribe.query`-Aufruf laufen darf, bevor die Datenbank ihn beendet (Standard `60`). |
 | `query_max_rows` | Zeilen, die ein `scribe.query`-Aufruf zurückgeben darf, bevor er abgelehnt wird (Standard `20000`). |
@@ -652,7 +652,7 @@ behoben ist.
 
 ### Hoher Speicherverbrauch
 - `max_queue_size` verringern
-- `flush_interval` verringern, um häufiger zu schreiben
+- `flush_interval` verringern, damit der Puffer häufiger geleert wird
 - `sensor.scribe_buffer_size` im Auge behalten
 
 ### Leistungsoptimierung

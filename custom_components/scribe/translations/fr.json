@@ -63,7 +63,7 @@
         },
         "data_description": {
           "batch_size": "Nombre de lignes accumulées avant un envoi forcé (défaut 500)",
-          "flush_interval": "Nombre maximal de secondes entre deux envois automatiques (défaut 5)",
+          "flush_interval": "Nombre maximal de secondes entre deux envois automatiques (défaut 30). Chaque envoi est une transaction : un intervalle court écrit quelques lignes à la fois au lieu de les regrouper. Un intervalle long ne risque que le dernier intervalle d'historique, et seulement si Home Assistant est tué — un arrêt normal écrit tout.",
           "max_queue_size": "Nombre max d'écritures en attente avant suppression des plus anciennes (défaut 10000)",
           "buffer_on_failure": "Conserver les événements en mémoire et réessayer quand la base redevient disponible"
         }

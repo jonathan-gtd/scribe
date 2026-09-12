@@ -155,7 +155,7 @@ scribe:
 
   # Comment il écrit
   batch_size: 500               # lignes mises en tampon avant une écriture
-  flush_interval: 5             # secondes avant d'écrire un lot incomplet
+  flush_interval: 30            # secondes avant d'écrire un lot incomplet
   max_queue_size: 10000         # lignes gardées en mémoire avant d'écarter les nouvelles
   buffer_on_failure: true       # continuer à tamponner tant que la base est injoignable
 
@@ -199,7 +199,7 @@ scribe:
 | `record_states` | Enregistrer ou non les changements d'état. |
 | `record_events` | Enregistrer ou non les événements. |
 | `batch_size` | Nombre d'éléments mis en tampon avant écriture en base. |
-| `flush_interval` | Délai maximal (en secondes) avant de vider le tampon. |
+| `flush_interval` | Secondes avant qu'un lot incomplet soit écrit quand même (défaut `30`). Chaque envoi est une transaction : un intervalle court écrit quelques lignes à la fois au lieu de les regrouper, un intervalle long ne risque que le dernier intervalle d'historique, et seulement si Home Assistant est tué. |
 | `max_queue_size` | Nombre maximal d'éléments gardés en mémoire avant d'écarter les nouveaux. |
 | `query_timeout` | Secondes pendant lesquelles un appel à `scribe.query` peut tourner avant que la base ne l'arrête (défaut `60`). |
 | `query_max_rows` | Lignes qu'un appel à `scribe.query` peut renvoyer avant d'être refusé (défaut `20000`). |
@@ -649,7 +649,7 @@ Chacun disparaît de lui-même une fois la cause corrigée.
 
 ### Consommation mémoire élevée
 - Réduisez `max_queue_size`
-- Réduisez `flush_interval` pour écrire plus souvent
+- Réduisez `flush_interval` pour vider le tampon plus souvent
 - Surveillez `sensor.scribe_buffer_size`
 
 ### Réglage des performances

@@ -155,7 +155,7 @@ scribe:
 
   # Cómo escribe
   batch_size: 500               # filas en el búfer antes de una escritura
-  flush_interval: 5             # segundos antes de escribir un lote incompleto
+  flush_interval: 30            # segundos antes de escribir un lote incompleto
   max_queue_size: 10000         # filas en memoria antes de descartar las nuevas
   buffer_on_failure: true       # seguir almacenando mientras la base no responda
 
@@ -199,7 +199,7 @@ scribe:
 | `record_states` | Registrar o no los cambios de estado. |
 | `record_events` | Registrar o no los eventos. |
 | `batch_size` | Número de elementos que se acumulan antes de escribir en la base de datos. |
-| `flush_interval` | Tiempo máximo (en segundos) antes de vaciar el búfer. |
+| `flush_interval` | Segundos antes de que un lote incompleto se escriba igualmente (por defecto `30`). Cada volcado es una transacción: un intervalo corto escribe unas pocas filas cada vez en lugar de agruparlas, y uno largo solo arriesga el último intervalo de historial, y solo si Home Assistant muere. |
 | `max_queue_size` | Número máximo de elementos en memoria antes de descartar los nuevos. |
 | `query_timeout` | Segundos que una llamada a `scribe.query` puede ejecutarse antes de que la base la detenga (por defecto `60`). |
 | `query_max_rows` | Filas que una llamada a `scribe.query` puede devolver antes de ser rechazada (por defecto `20000`). |
@@ -646,7 +646,7 @@ registros. Cada uno desaparece solo en cuanto se corrige la causa.
 
 ### Consumo de memoria elevado
 - Reduce `max_queue_size`
-- Reduce `flush_interval` para escribir más a menudo
+- Reduce `flush_interval` para vaciar el búfer más a menudo
 - Vigila `sensor.scribe_buffer_size`
 
 ### Ajuste del rendimiento

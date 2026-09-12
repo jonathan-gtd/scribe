@@ -63,7 +63,7 @@
         },
         "data_description": {
           "batch_size": "Number of rows accumulated before a flush is triggered (default 500)",
-          "flush_interval": "Maximum seconds between automatic flushes (default 5)",
+          "flush_interval": "Maximum seconds between automatic flushes (default 30). Each flush is one transaction, so a short interval writes a handful of rows at a time instead of batching them. What a long one risks is the last interval of history, and only if Home Assistant is killed — a normal shutdown writes everything out.",
           "max_queue_size": "Maximum pending writes before oldest are dropped (default 10000)",
           "buffer_on_failure": "Keep events in memory and retry when the database becomes available again"
         }

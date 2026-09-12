@@ -63,7 +63,7 @@
         },
         "data_description": {
           "batch_size": "Number of rows accumulated before a flush is triggered",
-          "flush_interval": "Maximum seconds between automatic flushes",
+          "flush_interval": "Segundos máximos entre dos volcados automáticos (por defecto 30). Cada volcado es una transacción: un intervalo corto escribe unas pocas filas cada vez en lugar de agruparlas. Un intervalo largo solo arriesga el último intervalo de historial, y solo si Home Assistant muere — un apagado normal lo escribe todo.",
           "max_queue_size": "Maximum pending writes before oldest are dropped",
           "buffer_on_failure": "Mantener los eventos en memoria y reintentar cuando la base de datos vuelva a estar disponible"
         }
