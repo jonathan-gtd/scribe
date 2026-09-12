@@ -169,7 +169,7 @@ def _keys(node, prefix=""):
 
 
 def test_the_documented_languages_are_fully_translated():
-    """English, French, Spanish and German — the four the README exists in.
+    """The five the README exists in: English, French, Spanish, German, Dutch.
 
     A missing key falls back to English silently, which is how the whole
     Repairs panel stayed untranslated for three of them without anyone
@@ -181,7 +181,7 @@ def test_the_documented_languages_are_fully_translated():
     root = Path(__file__).resolve().parents[1] / "custom_components" / "scribe"
     reference = _keys(json.loads((root / "strings.json").read_text()))
 
-    for language in ("en", "fr", "es", "de"):
+    for language in ("en", "fr", "es", "de", "nl"):
         path = root / "translations" / f"{language}.json"
         missing = reference - _keys(json.loads(path.read_text()))
         assert not missing, f"{language}.json is missing {sorted(missing)}"
@@ -209,7 +209,7 @@ def test_every_placeholder_survives_translation():
     root = Path(__file__).resolve().parents[1] / "custom_components" / "scribe"
     reference = json.loads((root / "strings.json").read_text())["issues"]
 
-    for language in ("fr", "es", "de"):
+    for language in ("fr", "es", "de", "nl"):
         translated = json.loads(
             (root / "translations" / f"{language}.json").read_text()
         )["issues"]
@@ -262,7 +262,8 @@ def _yaml_schema_keys():
 
 
 @pytest.mark.parametrize(
-    "readme", ["README.md", "README.fr.md", "README.es.md", "README.de.md"]
+    "readme",
+    ["README.md", "README.fr.md", "README.es.md", "README.de.md", "README.nl.md"],
 )
 def test_every_yaml_option_is_documented_in_every_readme(readme):
     """ "Full Configuration" and "Parameter Reference" have to mean it.
@@ -289,7 +290,8 @@ def test_every_yaml_option_is_documented_in_every_readme(readme):
 
 
 @pytest.mark.parametrize(
-    "readme", ["README.md", "README.fr.md", "README.es.md", "README.de.md"]
+    "readme",
+    ["README.md", "README.fr.md", "README.es.md", "README.de.md", "README.nl.md"],
 )
 def test_no_readme_documents_an_option_that_does_not_exist(readme):
     """A documented key nothing reads is worse than an undocumented one."""
@@ -314,7 +316,7 @@ def test_no_readme_documents_an_option_that_does_not_exist(readme):
 ALLOWED_IDENTICAL_TO_ENGLISH = {("fr", "options.step.performance.title")}
 
 
-@pytest.mark.parametrize("language", ["fr", "es", "de"])
+@pytest.mark.parametrize("language", ["fr", "es", "de", "nl"])
 def test_no_documented_language_is_secretly_still_english(language):
     """Key-presence is not translation.
 

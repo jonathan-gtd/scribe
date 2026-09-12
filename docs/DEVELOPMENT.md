@@ -65,7 +65,7 @@ HACS installs **only `custom_components/scribe/`**. Everything else in the repos
 | `scripts/` | Local helper shell scripts. See [section 15](#15-migration-scripts-and-helper-scripts). |
 | `.github/workflows/` | CI. See [section 6](#6-tests) and [section 9](#9-releasing). |
 | `hacs.json` | HACS metadata, including the **minimum Home Assistant version**. |
-| `README.md`, `README.fr.md`, `README.es.md`, `README.de.md` | User documentation, in four languages, kept in sync by tests. |
+| `README.md`, `README.fr.md`, `README.es.md`, `README.de.md`, `README.nl.md` | User documentation, in five languages, kept in sync by tests. |
 | `CHANGELOG.md` | One entry per user-visible change. See [section 8](#8-changelog). |
 | `docs/DEVELOPMENT.md` | This guide. |
 | `docs/data-structure.md` | User guide to the tables and to querying them. |
