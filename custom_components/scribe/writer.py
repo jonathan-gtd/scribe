@@ -227,7 +227,14 @@ RECONNECT_MAX_DELAY = 300
 # Ceiling for the `scribe.query` service, in milliseconds. Long enough for a
 # genuine report over a year of history, short enough that a runaway query
 # cannot hold a pooled connection and hammer the server indefinitely.
-QUERY_TIMEOUT_MS = 120_000
+QUERY_TIMEOUT_MS = 60_000
+
+# How many rows the service will hand back. A query is written by a person and
+# answered into Home Assistant's memory: `SELECT * FROM states` over a year is
+# tens of millions of rows, and loading them would take the whole process down
+# long before anything got drawn. Past this the query is refused, with what to
+# do about it, rather than truncated into a wrong answer.
+QUERY_MAX_ROWS = 10_000
 
 
 def _json_default(obj):
@@ -3454,7 +3461,18 @@ class ScribeWriter:
                     await conn.execute(
                         f"SET LOCAL statement_timeout = {QUERY_TIMEOUT_MS}"
                     )
-                    rows = await conn.fetch(sql)
+                    # Streamed, and one row past the ceiling: a query that
+                    # returns too much must not be held in memory in full
+                    # before being refused.
+                    rows = []
+                    async for row in conn.cursor(sql):
+                        rows.append(row)
+                        if len(rows) > QUERY_MAX_ROWS:
+                            raise ValueError(
+                                f"the query returns more than {QUERY_MAX_ROWS} rows; "
+                                "narrow it with a WHERE, group it with "
+                                "time_bucket(), or add a LIMIT"
+                            )
                     # Through the same sanitizer the write path uses: a query
                     # can select any type at all, and the result becomes a
                     # service response Home Assistant has to serialize.
