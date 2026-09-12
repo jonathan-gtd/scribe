@@ -25,6 +25,8 @@ Le recorder de Home Assistant garde quelques semaines d'historique dans SQLite e
 - 🧩 **Le contexte avec** — entités, appareils, pièces, utilisateurs et intégrations, pas seulement des valeurs.
 - 🩺 **Il dit quand quelque chose ne va pas**, dans Repairs plutôt que dans un journal que personne ne lit.
 
+---
+
 ## Installation
 
 **1. Une base TimescaleDB.** L'extension est obligatoire — voir *Installer TimescaleDB* plus bas.
@@ -52,11 +54,11 @@ scribe:
 
 Voilà — les états sont enregistrés, découpés et compressés, avec le contexte entité, appareil et pièce. Tout ce qui suit est facultatif.
 
+---
+
 <details>
 <summary><b>🧩 Scribe Card — des graphiques sur votre tableau de bord</b></summary>
 <br>
-
-[![Scribe Card](https://raw.githubusercontent.com/jonathan-gtd/scribe-card/master/docs/screenshot.png)](https://github.com/jonathan-gtd/scribe-card)
 
 **[Scribe Card](https://github.com/jonathan-gtd/scribe-card)** affiche n'importe quelle requête de votre historique sur un tableau de bord. Dessinée avec Apache ECharts — la bibliothèque qu'utilisent les graphiques d'historique de Home Assistant — et configurée dans un formulaire, où le type de graphique, l'unité et les axes se choisissent parmi les colonnes que votre requête renvoie.
 
@@ -72,8 +74,7 @@ Elle passe par le service `scribe.query`, donc **aucune seconde connexion à la 
 
 Il vous faut une instance TimescaleDB en fonctionnement. Je recommande PostgreSQL 17 ou 18.
 
-> [!IMPORTANT]
-> **L'extension TimescaleDB est obligatoire.** Le découpage en chunks, la
+> **❗ Important** — **L'extension TimescaleDB est obligatoire.** Le découpage en chunks, la
 > compression, la rétention et les capteurs de taille sont toute la raison
 > d'être de Scribe, et aucun n'existe sur PostgreSQL nu. Une nouvelle
 > installation est refusée si l'extension manque — Scribe l'active toutefois
@@ -118,49 +119,63 @@ GRANT ALL ON SCHEMA public TO scribe;
 
 ### Configuration complète (valeurs par défaut)
 
-#### Afficher la configuration YAML complète
-
 ```yaml
 scribe:
+  # La seule option obligatoire.
   db_url: postgresql://scribe:password@192.168.1.10:5432/scribe
-  db_ssl: false
-  ssl_root_cert: ""      # utilisé uniquement si db_ssl vaut true
-  ssl_cert_file: ""
-  ssl_key_file: ""
-  db_schema: ""      # vide = le schéma de la connexion
-  chunk_time_interval: "7 days"
-  compress_after: "7 days"
-  retention_states: ""   # vide = conservation illimitée
-  retention_events: ""   # vide = conservation illimitée
-  record_states: true
-  record_events: false
-  batch_size: 500
-  flush_interval: 5
-  max_queue_size: 10000
-  query_timeout: 60
-  query_max_rows: 20000
-  buffer_on_failure: true
-  enable_stats_io: false
-  enable_stats_chunk: false
-  enable_stats_size: false
-  stats_io_interval: 60
-  stats_chunk_interval: 60
-  stats_size_interval: 60
-  include_domains: []
-  include_entities: []
-  include_entity_globs: []
-  exclude_domains: []
+
+  # Tout le reste est facultatif. Voici les valeurs par défaut.
+
+  # Où il enregistre
+  db_schema: ""                 # vide = le schéma de la connexion, normalement public
+  db_ssl: false                 # TLS vers la base
+  ssl_root_cert: ""             # certificat CA ; lu uniquement si db_ssl est true
+  ssl_cert_file: ""             # certificat client, pour le TLS mutuel
+  ssl_key_file: ""              # sa clé privée
+
+  # Ce qu'il enregistre
+  record_states: true           # les changements d'état
+  record_events: false          # les événements Home Assistant (automatisations, scripts…)
+  include_domains: []           # vide = tous les domaines
+  include_entities: []          # vide = toutes les entités
+  include_entity_globs: []      # ex. sensor.meteo_*
+  exclude_domains: []           # appliqué après les listes d'inclusion
   exclude_entities: []
   exclude_entity_globs: []
-  exclude_attributes: []
-  include_events: []
-  exclude_events: []
-  # Optionnel : désactiver certaines tables de métadonnées (défaut : true)
+  exclude_attributes: []        # attributs retirés de la colonne attributes
+  include_events: []            # vide = tous les types d'événements
+  exclude_events: []            # appliqué après include_events
+
+  # Combien de temps il le garde
+  chunk_time_interval: "7 days" # durée couverte par un chunk
+  compress_after: "7 days"      # les chunks plus vieux que ça sont compressés
+  retention_states: ""          # vide = pour toujours ; sinon SUPPRIME les états plus anciens
+  retention_events: ""          # vide = pour toujours ; sinon SUPPRIME les événements plus anciens
+  enable_rollups: false         # résumés horaires et journaliers des états numériques
+
+  # Comment il écrit
+  batch_size: 500               # lignes mises en tampon avant une écriture
+  flush_interval: 5             # secondes avant d'écrire un lot incomplet
+  max_queue_size: 10000         # lignes gardées en mémoire avant d'écarter les nouvelles
+  buffer_on_failure: true       # continuer à tamponner tant que la base est injoignable
+
+  # Ce que scribe.query a le droit de coûter
+  query_timeout: 60             # secondes qu'une requête peut durer
+  query_max_rows: 20000         # lignes qu'elle peut renvoyer avant d'être refusée
+
+  # Capteurs sur Scribe lui-même
+  enable_stats_io: false        # compteurs du writer, lus en mémoire
+  enable_stats_chunk: false     # nombre de chunks, une requête par rafraîchissement
+  enable_stats_size: false      # tailles sur disque, une requête par rafraîchissement
+  stats_io_interval: 60         # secondes entre deux valeurs d'écriture
+  stats_chunk_interval: 60      # minutes entre deux requêtes de chunks
+  stats_size_interval: 60       # minutes entre deux requêtes de taille
+
+  # Tables de contexte, synchronisées avec les registres de Home Assistant
   enable_table_areas: true
   enable_table_devices: true
   enable_table_integrations: true
   enable_table_users: true
-  enable_rollups: false
 ```
 
 </details>
@@ -169,8 +184,6 @@ scribe:
 <summary><b>📋 Référence des paramètres</b></summary>
 <br>
 
-#### Afficher la référence des paramètres
-
 | Paramètre | Description |
 | :--- | :--- |
 | `db_url` | **Obligatoire.** Chaîne de connexion vers votre base TimescaleDB. |
@@ -178,11 +191,11 @@ scribe:
 | `ssl_root_cert` | Chemin vers le fichier CA (ex. `/ssl/ca.crt`). Un chemin relatif est résolu depuis le répertoire de configuration de Home Assistant. |
 | `ssl_cert_file` | Chemin vers le certificat client, pour le TLS mutuel. |
 | `ssl_key_file` | Chemin vers la clé privée client, pour le TLS mutuel. |
-| `db_schema` | Schéma PostgreSQL dans lequel enregistrer. Vide (défaut) : celui de la connexion, normalement `public`. Voir [Schéma de la base de données](#schéma-de-la-base-de-données). |
-| `chunk_time_interval` | Durée couverte par chaque chunk de la table. Voir [Réglage du stockage](#réglage-du-stockage). |
-| `compress_after` | Les chunks plus anciens que cet intervalle sont compressés. Voir [Réglage du stockage](#réglage-du-stockage). |
-| `retention_states` | **Supprime** l'historique des états plus ancien que cet intervalle (ex. `"365 days"`). Vide (défaut) : tout est conservé. Voir [Rétention](#rétention). |
-| `retention_events` | **Supprime** l'historique des événements plus ancien que cet intervalle. Vide (défaut) : tout est conservé. Voir [Rétention](#rétention). |
+| `db_schema` | Schéma PostgreSQL dans lequel enregistrer. Vide (défaut) : celui de la connexion, normalement `public`. |
+| `chunk_time_interval` | Durée couverte par chaque chunk de la table. Voir *Réglage du stockage* plus bas. |
+| `compress_after` | Les chunks plus anciens que cet intervalle sont compressés. Voir *Réglage du stockage* plus bas. |
+| `retention_states` | **Supprime** l'historique des états plus ancien que cet intervalle (ex. `"365 days"`). Vide (défaut) : tout est conservé. Voir *Rétention* plus bas. |
+| `retention_events` | **Supprime** l'historique des événements plus ancien que cet intervalle. Vide (défaut) : tout est conservé. Voir *Rétention* plus bas. |
 | `record_states` | Enregistrer ou non les changements d'état. |
 | `record_events` | Enregistrer ou non les événements. |
 | `batch_size` | Nombre d'éléments mis en tampon avant écriture en base. |
@@ -224,7 +237,7 @@ physiquement découpée en **chunks**, chacun couvrant une tranche de temps.
 Presque tout ce qui touche à l'espace disque et à la vitesse des requêtes
 découle de ce découpage — une requête sur la semaine dernière ne lit que les
 chunks qui la recouvrent, la compression travaille chunk par chunk, et la
-[rétention](#rétention) supprime des chunks entiers plutôt que des lignes.
+*rétention* plus bas supprime des chunks entiers plutôt que des lignes.
 
 Deux réglages le pilotent, en YAML comme dans l'interface sous
 **Configurer → Avancé (TimescaleDB & SSL)** :
@@ -311,8 +324,7 @@ scribe:
 Les deux sont aussi disponibles dans l'interface, sous
 **Configurer → Avancé (TimescaleDB & SSL)**.
 
-> [!WARNING]
-> La rétention **supprime les données définitivement**. Il n'y a ni annulation
+> **⚠️ Attention** — La rétention **supprime les données définitivement**. Il n'y a ni annulation
 > ni corbeille : dès qu'un chunk sort de la fenêtre, il est supprimé, et seule
 > une sauvegarde peut le ramener. États et événements se configurent séparément,
 > ce qui permet de faire expirer des événements bavards tout en conservant
@@ -362,7 +374,7 @@ scribe:
   enable_rollups: true
 ```
 
-Cela ajoute deux vues :
+C'est aussi dans l'interface, sous **Configurer → Tables de métadonnées**. Cela ajoute deux vues :
 
 | Vue | Une ligne par | Colonnes |
 | --- | --- | --- |
@@ -377,19 +389,17 @@ WHERE entity_id = 'sensor.temperature_exterieure'
 ORDER BY bucket;
 ```
 
-Seuls les états numériques sont résumés — la moyenne de `on` et `off` n'a aucun sens — et `samples` indique combien d'états chaque ligne représente.
+Seuls les états numériques sont résumés — la moyenne de `on` et `off` n'a aucun sens — donc `value_avg`, `value_min` et `value_max` sont vides pour les autres, tandis que `samples` compte tous les états du bucket.
 
-**Ce sont des données dérivées.** Rien de ce qui compte n'est dupliqué : désactiver l'option supprime les deux vues, la réactiver les reconstruit depuis l'historique, et vos états ne sont jamais touchés. TimescaleDB les maintient lui-même ; Scribe se contente de les créer.
+**Ce sont des données dérivées.** Rien de ce qui compte n'est dupliqué : désactiver l'option supprime les deux vues, la réactiver les reconstruit depuis l'historique, et vos états ne sont jamais touchés. TimescaleDB les rafraîchit lui-même — l'horaire toutes les 30 minutes, le journalier toutes les heures — et chaque passage regarde assez loin en arrière (3 jours, 30 jours) pour qu'un lot écrit en retard y arrive quand même. Scribe se contente de les créer.
 
 </details>
 
 <details>
-<summary><b>🗃️ Schéma de la base — tables, vues et comment les interroger</b></summary>
+<summary><b>🗃️ Enregistrer dans un schéma PostgreSQL précis</b></summary>
 <br>
 
-Par défaut, Scribe enregistre dans le schéma vers lequel votre connexion pointe
-déjà — normalement `public`. Renseignez `db_schema` et il crée ce schéma et y
-place tout : ses tables, ses vues, ses hypertables et ses politiques.
+Par défaut, Scribe enregistre dans le schéma vers lequel pointe déjà votre connexion — normalement `public`. Renseignez `db_schema` et il crée ce schéma et y met tout : ses tables, ses vues, ses hypertables et ses politiques.
 
 ```yaml
 scribe:
@@ -397,47 +407,17 @@ scribe:
   db_schema: scribe
 ```
 
-L'option est aussi dans l'interface, sous **Configurer → Avancé (TimescaleDB &
-SSL)**.
+C'est aussi dans l'interface, sous **Configurer → Avancé (TimescaleDB & SSL)**.
 
-C'est ce qu'il vous faut quand Scribe partage une base avec autre chose : vos
-propres copies transformées de l'historique, les tables d'une autre intégration,
-ou un second Home Assistant qui enregistre sur le même serveur. Chaque schéma est
-indépendant — tables, hypertables, politiques de rétention et de compression
-distinctes — et rien de ce que Scribe fait dans l'un n'atteint l'autre.
+C'est ce qu'il vous faut quand Scribe partage une base avec autre chose : les tables d'une autre intégration, vos propres copies de l'historique, ou un second Home Assistant qui enregistre sur le même serveur. Les schémas sont indépendants — tables, hypertables, rétention et compression séparées — et rien de ce que Scribe fait dans l'un n'atteint l'autre.
 
-À savoir :
+- **Seules les nouvelles données y vont.** Renseigner `db_schema` ne déplace pas l'historique déjà enregistré. Déplacez-le vous-même avant de redémarrer (`ALTER TABLE public.states_raw SET SCHEMA scribe;`), ou interrogez l'ancien schéma directement.
+- **Scribe crée le schéma s'il le peut**, ce qui demande `CREATE` sur la base. Un schéma que vous avez créé à la main convient aussi, avec `USAGE` et `CREATE` dessus.
+- **Un schéma inaccessible arrête l'enregistrement.** PostgreSQL passe à l'entrée suivante du search path au lieu d'échouer : une faute de frappe remplirait donc `public` pendant que l'interface affiche autre chose. Scribe vérifie où il a atterri et n'enregistre rien plutôt que d'enregistrer au mauvais endroit, avec un problème dans Réparations qui dit quoi accorder.
+- **Vos requêtes ne changent pas.** Scribe place le schéma en tête du `search_path` de la connexion, donc `SELECT * FROM states` continue de marcher via `scribe.query`. Depuis Grafana ou psql, qualifiez le nom (`scribe.states`) ou définissez votre propre `search_path`. `public` reste sur le chemin — c'est là que vivent les fonctions TimescaleDB.
+- Les valeurs acceptées sont de simples identifiants : lettres, chiffres et tirets bas, ne commençant pas par un chiffre. Vide garde le schéma de la connexion, y compris un que vous auriez fixé vous-même avec `?options=-csearch_path%3Dmonschema` dans l'URL.
 
-- **Seules les nouvelles données y vont.** Renseigner `db_schema` ne déplace pas
-  l'historique déjà enregistré : Scribe crée un jeu de tables vide dans le
-  nouveau schéma et commence à y écrire. Pour conserver l'ancien historique,
-  déplacez-le vous-même (`ALTER TABLE public.states_raw SET SCHEMA scribe;`)
-  avant le redémarrage, ou interrogez directement l'ancien schéma.
-- **Scribe crée le schéma s'il le peut.** L'utilisateur de la base a besoin du
-  droit `CREATE` sur celle-ci. Un schéma créé par quelqu'un d'autre convient tout
-  aussi bien, tant que l'utilisateur y a `USAGE` et `CREATE` :
-  ```sql
-  CREATE SCHEMA IF NOT EXISTS scribe;
-  GRANT USAGE, CREATE ON SCHEMA scribe TO scribe;
-  ```
-- **Un schéma inaccessible arrête l'enregistrement.** PostgreSQL n'échoue pas
-  sur un schéma absent — il passe silencieusement à l'entrée suivante du search
-  path — de sorte qu'une faute de frappe ou un droit manquant remplirait
-  `public` pendant que l'interface afficherait autre chose. Scribe vérifie où il
-  a réellement atterri et n'enregistre rien plutôt que d'enregistrer au mauvais
-  endroit, avec un problème dans Réparations qui explique quels droits accorder.
-- **Vos requêtes ne changent pas.** Scribe place le schéma en tête du
-  `search_path` de la connexion, donc `SELECT * FROM states` continue de
-  fonctionner via le service `scribe.query`. Depuis ailleurs — Grafana, psql, un
-  tableau de bord — qualifiez le nom (`scribe.states`) ou définissez votre propre
-  `search_path`.
-- **`public` reste dans le chemin.** C'est là que l'extension TimescaleDB
-  installe `create_hypertable()` et consorts, que Scribe doit appeler.
-- Les valeurs acceptées sont des identifiants simples : lettres, chiffres et
-  tirets bas, ne commençant pas par un chiffre. Laissez vide pour continuer à
-  utiliser le schéma de la connexion — y compris celui que vous avez défini
-  vous-même avec `?options=-csearch_path%3Dmonschema` dans l'URL, que Scribe
-  suit sans le remplacer.
+**Les tables elles-mêmes** — chaque colonne, leurs relations, et des recettes de requêtes pour Grafana et `scribe.query` — sont documentées dans [`docs/data-structure.md`](docs/data-structure.md).
 
 </details>
 
@@ -496,7 +476,7 @@ data:
 response_variable: purged
 ```
 
-L'historique compressé est purgé lui aussi : TimescaleDB s'en charge et les chunks restent compressés. Pour une fenêtre glissante appliquée en continu, utilisez plutôt les réglages de [rétention](#rétention) : une purge est ponctuelle.
+L'historique compressé est purgé lui aussi : TimescaleDB s'en charge et les chunks restent compressés. Pour une fenêtre glissante appliquée en continu, utilisez plutôt les réglages de *rétention* plus bas : une purge est ponctuelle.
 
 </details>
 
@@ -508,8 +488,6 @@ Activez les capteurs en positionnant leurs options dans votre configuration.
 
 ### Statistiques d'écriture (`enable_stats_io: true`)
 
-#### Afficher les capteurs d'écriture
-
 Mesures en temps réel issues de l'écrivain (aucune requête en base).
 
 | Capteur | Description |
@@ -517,14 +495,11 @@ Mesures en temps réel issues de l'écrivain (aucune requête en base).
 | <img src="https://api.iconify.design/mdi:database-plus.svg?color=%232196F3" width="15" /> `sensor.scribe_states_written` | Nombre total de changements d'état écrits en base. |
 | <img src="https://api.iconify.design/mdi:database-plus.svg?color=%232196F3" width="15" /> `sensor.scribe_events_written` | Nombre total d'événements écrits en base. |
 | <img src="https://api.iconify.design/mdi:buffer.svg?color=%232196F3" width="15" /> `sensor.scribe_buffer_size` | Nombre d'éléments actuellement en attente dans le tampon mémoire. |
-| <img src="https://api.iconify.design/mdi:timer-sand.svg?color=%232196F3" width="15" /> `sensor.scribe_write_duration` | Durée (en ms) de la dernière écriture en base. |
+| <img src="https://api.iconify.design/mdi:timer-sand.svg?color=%232196F3" width="15" /> `sensor.scribe_last_write_duration` | Durée (en ms) de la dernière écriture en base. |
 | <img src="https://api.iconify.design/mdi:speedometer.svg?color=%232196F3" width="15" /> `sensor.scribe_states_rate` | Débit d'états écrits en base (par minute). |
 | <img src="https://api.iconify.design/mdi:speedometer.svg?color=%232196F3" width="15" /> `sensor.scribe_events_rate` | Débit d'événements écrits en base (par minute). |
 
-
 ### Statistiques de chunks (`enable_stats_chunk: true`)
-
-#### Afficher les capteurs de chunks
 
 Nombre de chunks (mis à jour toutes les `stats_chunk_interval` minutes).
 
@@ -537,10 +512,7 @@ Nombre de chunks (mis à jour toutes les `stats_chunk_interval` minutes).
 | <img src="https://api.iconify.design/mdi:package-down.svg?color=%232196F3" width="15" /> `sensor.scribe_events_compressed_chunks` | Nombre de chunks d'événements compressés. |
 | <img src="https://api.iconify.design/mdi:package-up.svg?color=%232196F3" width="15" /> `sensor.scribe_events_uncompressed_chunks` | Nombre de chunks d'événements non compressés. |
 
-
 ### Statistiques de taille (`enable_stats_size: true`)
-
-#### Afficher les capteurs de taille
 
 Espace occupé, en octets (mis à jour toutes les `stats_size_interval` minutes).
 
@@ -614,87 +586,24 @@ concernées.
 
 ### Reprise de données depuis d'autres sources
 
-Scribe fournit des scripts pour reprendre des données depuis diverses sources.
+`migration/` contient trois scripts qui recopient un historique dans Scribe depuis ailleurs. Ils se lancent à la main, une fois, depuis une machine qui atteint les deux bases — et Scribe doit avoir démarré au moins une fois, pour que ses tables existent.
 
-### Migration InfluxDB
+```bash
+cd migration
+pip install psycopg2-binary python-dotenv   # plus influxdb-client pour InfluxDB
+cp .env.example .env && nano .env
+python3 <script>.py
+```
 
-#### Afficher le guide de migration InfluxDB
+| Source | Script | À renseigner |
+| --- | --- | --- |
+| InfluxDB | `influx2scribe.py` | `INFLUX_*` |
+| LTSS | `ltss2scribe.py` | `LTSS_*` |
+| Recorder de Home Assistant | `recorder2scribe.py` | `RECORDER_*`, avec `RECORDER_TYPE` à `postgres` ou `sqlite` (SQLite ne demande que `RECORDER_DB_PATH`) |
 
-1. Placez-vous dans le répertoire `migration` :
-   ```bash
-   cd migration
-   ```
+Chaque exécution a aussi besoin de `SCRIBE_*` — la destination — et des réglages de migration : `MIGRATION_START_TIME`, `MIGRATION_END_TIME`, `CHUNK_SIZE` (heures par lot) et `PURGE_DESTINATION`, qui **supprime l'historique de la destination avant d'importer**. Laissez-le à `False` sauf si c'est voulu.
 
-2. Installez les dépendances :
-   ```bash
-   pip install influxdb-client psycopg2-binary python-dotenv
-   ```
-
-3. Configurez la migration :
-   ```bash
-   cp .env.example .env
-   nano .env
-   # Renseignez [InfluxDB Configuration], [Scribe Configuration] et [Migration Settings]
-   ```
-
-4. Lancez la migration :
-   ```bash
-   python3 influx2scribe.py
-   ```
-
-
-### Migration LTSS
-
-#### Afficher le guide de migration LTSS
-
-1. Placez-vous dans le répertoire `migration` :
-   ```bash
-   cd migration
-   ```
-
-2. Installez les dépendances :
-   ```bash
-   pip install psycopg2-binary python-dotenv
-   ```
-
-3. Configurez la migration :
-   ```bash
-   cp .env.example .env
-   nano .env
-   # Renseignez [LTSS Configuration], [Scribe Configuration] et [Migration Settings]
-   ```
-
-4. Lancez la migration :
-   ```bash
-   python3 ltss2scribe.py
-   ```
-
-
-### Migration Recorder
-
-#### Afficher le guide de migration Recorder
-
-1. Placez-vous dans le répertoire `migration` :
-   ```bash
-   cd migration
-   ```
-
-2. Installez les dépendances :
-   ```bash
-   pip install psycopg2-binary python-dotenv
-   ```
-
-3. Configurez la migration :
-   ```bash
-   cp .env.example .env
-   nano .env
-   # Renseignez [Recorder Configuration], [Scribe Configuration] et [Migration Settings]
-   ```
-
-4. Lancez la migration :
-   ```bash
-   python3 recorder2scribe.py
-   ```
+Chaque script vérifie le schéma de destination avant d'écrire quoi que ce soit, et s'arrête avec une explication plutôt qu'un mur d'erreurs ligne par ligne si Scribe ne l'a jamais initialisé.
 
 </details>
 
@@ -772,17 +681,7 @@ volumes.
 
 </details>
 
-<details>
-<summary><b>🔗 Projets liés</b></summary>
-<br>
-
-Ces projets fonctionnent très bien avec Scribe :
-
-- [Scribe Card](https://github.com/jonathan-gtd/scribe-card) : la carte compagnon — n'importe quelle requête de votre historique, sur un tableau de bord.
-- [timescale_database_reader](https://github.com/remmob/timescale_database_reader) : un composant personnalisé pour relire les données de TimescaleDB dans des capteurs Home Assistant.
-- [timescale-plotly-card](https://github.com/remmob/timescale-plotly-card) : une carte Plotly très personnalisable, capable d'interroger TimescaleDB directement.
-
-</details>
+---
 
 ## Licence
 
