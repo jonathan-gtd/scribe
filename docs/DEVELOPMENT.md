@@ -258,7 +258,7 @@ venv/bin/ruff check . && venv/bin/ruff format --check . \
 
 | Workflow | When | What |
 |---|---|---|
-| `tests.yaml` | push to `master`, every pull request, and before each release | `ruff check`, `ruff format --check`, the whole suite against a TimescaleDB service container, **coverage ≥ 83 %**, and a second run of `tests/integration` that **fails if any integration test was skipped**. A second job, `Upgrade from older releases`, runs `tests/upgrade` ([6.6](#66-upgrade-tests)) and fails if any of them was skipped; the first job leaves that folder out. |
+| `tests.yaml` | push to `master`, every pull request, and before each release | `ruff check`, `ruff format --check`, the whole suite against a TimescaleDB service container, **coverage ≥ 83 %**, and a second run of `tests/integration` that **fails if any integration test was skipped**. A second job, `Minimum Home Assistant`, runs the same suite against the oldest Home Assistant `hacs.json` claims to support ([6.7](#67-testing-the-oldest-supported-home-assistant)). A third, `Upgrade from older releases`, runs `tests/upgrade` ([6.6](#66-upgrade-tests)) and fails if any of them was skipped; the first job leaves that folder out. |
 | `validate.yaml` | push to `master`, pull requests, daily | HACS validation and hassfest (Home Assistant's manifest and translation checks). |
 | `codeql.yaml` | push to `master`, pull requests, weekly | GitHub CodeQL security analysis. Results go to the Security tab. It does not block a merge. |
 | `upstream-watch.yaml` | Mondays, or by hand | The suite against the **latest Home Assistant pre-release**, ignoring the pin. It only runs on a schedule, so a failure sends an email and never blocks anything. |
@@ -324,6 +324,19 @@ For each release, the `older_database` fixture (`tests/upgrade/conftest.py`):
 - `seed.py` is not named `test_*`, so pytest never collects it directly.
 - **Databases created by 3.1 to 3.5 have no primary key on `states_raw`**, and no release ever added it. On them, the test skips the check that relies on it (duplicate rows ignored with `ON CONFLICT`).
 - The old code runs on the pinned Home Assistant. If a future Home Assistant can no longer run an old release, its test fails with "`vX` could not fill the database with its own code". That is the old release failing, not a regression: raise `OLDEST` in `tests/upgrade/conftest.py` to stop testing it.
+
+### 6.7 Testing the oldest supported Home Assistant
+
+`hacs.json` names the oldest Home Assistant Scribe claims to support. The pinned release ([section 5](#5-development-environment)) is a recent one, and upstream-watch tests the newest, so nothing here sees the floor: a helper that only exists in a recent Home Assistant passes every check and reaches the users on the floor as a crash.
+
+The `Minimum Home Assistant` CI job runs the suite (without `tests/upgrade`, a different question) against it. Two values in the job say which Home Assistant that is:
+
+- `FLOOR`, the version in `hacs.json`. The job **fails if the two stop matching**, so raising the floor cannot silently leave this job testing a Home Assistant nobody supports any more.
+- `PLUGIN`, the `pytest-homeassistant-custom-component` release pinning the oldest Home Assistant at or above the floor — today `0.13.317`, for Home Assistant 2026.3.1. Find it as in [section 5](#5-development-environment).
+
+To run it locally, build a virtual environment on that plugin release as in [6.4](#64-testing-against-another-home-assistant-version), and run `pytest tests --ignore=tests/upgrade`.
+
+**When raising the floor in `hacs.json`**: set `FLOOR` to the new version, set `PLUGIN` to the matching release, and go through [section 13](#13-home-assistant-compatibility) — that is the moment the compatibility shims listed there can go.
 
 ---
 

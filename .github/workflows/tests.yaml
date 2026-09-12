@@ -100,6 +100,76 @@ jobs:
             exit 1
           fi
 
+  minimum:
+    name: Minimum Home Assistant
+    runs-on: ubuntu-latest
+
+    # `hacs.json` names the oldest Home Assistant Scribe claims to support, and
+    # nothing tested it: the gating job runs the pinned release and
+    # upstream-watch the newest, so a helper that only exists in a recent
+    # Home Assistant would reach the users on the floor as a crash.
+    env:
+      # The plugin release pinning the oldest Home Assistant at or above the
+      # floor in hacs.json. Both are checked against each other below.
+      FLOOR: "2026.3.0"
+      PLUGIN: "0.13.317"  # Home Assistant 2026.3.1
+
+    services:
+      timescaledb:
+        image: timescale/timescaledb:latest-pg17
+        env:
+          POSTGRES_PASSWORD: scribe
+          POSTGRES_DB: scribe
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Keep TimescaleDB's background jobs out of the tests
+        # See the comment on the job above.
+        run: |
+          docker exec ${{ job.services.timescaledb.id }} \
+            psql -U postgres -c "ALTER SYSTEM SET timescaledb.max_background_workers = 0"
+          docker restart ${{ job.services.timescaledb.id }}
+          until docker exec ${{ job.services.timescaledb.id }} pg_isready -U postgres -q; do sleep 1; done
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          allow-prereleases: true
+
+      - name: Check the pin still matches hacs.json
+        # Raising the floor without moving the pin would leave this job testing
+        # a Home Assistant nobody supports any more.
+        run: |
+          DECLARED=$(python3 -c "import json; print(json.load(open('hacs.json'))['homeassistant'])")
+          if [ "$DECLARED" != "$FLOOR" ]; then
+            echo "::error::hacs.json requires $DECLARED, this job tests $FLOOR. Set PLUGIN to the pytest-homeassistant-custom-component release pinning the oldest Home Assistant >= $DECLARED, and FLOOR to $DECLARED."
+            exit 1
+          fi
+
+      - name: Install the oldest supported Home Assistant
+        run: |
+          python -m pip install --upgrade pip
+          grep -v '^pytest-homeassistant-custom-component' requirements_test.txt > /tmp/requirements-minimum.txt
+          pip install -r /tmp/requirements-minimum.txt "pytest-homeassistant-custom-component==$PLUGIN"
+          python -c "import homeassistant.const as c; print('Home Assistant', c.__version__)"
+
+      - name: Test against the floor
+        # tests/upgrade is left out: it runs older releases against the current
+        # code, which is a different question from the floor.
+        env:
+          SCRIBE_TEST_DSN: postgresql://postgres:scribe@127.0.0.1:55432/scribe
+        run: pytest tests --ignore=tests/upgrade -q -p no:cacheprovider
+
   upgrade:
     name: Upgrade from older releases
     runs-on: ubuntu-latest
