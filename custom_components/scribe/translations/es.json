@@ -75,14 +75,16 @@
           "enable_stats_chunk": "Habilitar sensores de fragmentos",
           "stats_chunk_interval": "Refresh interval",
           "enable_stats_size": "Habilitar sensores de tamaño",
-          "stats_size_interval": "Refresh interval"
+          "stats_size_interval": "Refresh interval",
+          "stats_io_interval": "Frecuencia de publicación de los sensores de E/S"
         },
         "data_description": {
           "enable_stats_io": "Expose write counters, buffer size and duration as sensors",
           "enable_stats_chunk": "Expose per-table chunk counts",
           "stats_chunk_interval": "How often stats are refreshed from the database",
           "enable_stats_size": "Expose per-table sizes and compression ratios",
-          "stats_size_interval": "How often stats are refreshed from the database"
+          "stats_size_interval": "How often stats are refreshed from the database",
+          "stats_io_interval": "Segundos entre dos valores de los sensores de E/S. Cada cambio es una fila que Scribe registra sobre sí mismo: un intervalo corto llena su historial con los contadores de Scribe. 60 segundos por defecto."
         }
       },
       "metadata": {

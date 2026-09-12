@@ -7,6 +7,8 @@ including queue size, write latency, and database storage usage.
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
@@ -15,8 +17,9 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.const import UnitOfTime, UnitOfInformation, PERCENTAGE
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
 )
@@ -24,6 +27,7 @@ from homeassistant.helpers.update_coordinator import (
 from .const import (
     DOMAIN,
     DEFAULT_ENABLE_STATS_IO,
+    DEFAULT_STATS_IO_INTERVAL,
 )
 
 
@@ -96,14 +100,35 @@ async def async_setup_entry(
 
     async_add_entities(entities)
 
+    # The I/O sensors are the ones that move constantly, and Home Assistant
+    # would poll them every 30 seconds. Publishing them on a schedule of our
+    # own is what makes `stats_io_interval` mean anything — and what keeps
+    # Scribe from filling its own history with its own counters.
+    io_entities = [entity for entity in entities if isinstance(entity, ScribeSensor)]
+    if io_entities:
+        seconds = data.get("stats_io_seconds", DEFAULT_STATS_IO_INTERVAL)
+
+        @callback
+        def _publish(_now) -> None:
+            for entity in io_entities:
+                entity.async_write_ha_state()
+
+        entry.async_on_unload(
+            async_track_time_interval(hass, _publish, timedelta(seconds=seconds))
+        )
+
 
 class ScribeSensor(SensorEntity):
     """Base class for Scribe sensors.
 
-    Directly polls the writer instance for real-time metrics.
+    Reads the writer's counters directly. Home Assistant does not poll these:
+    their values change on almost every read, and each change is a row Scribe
+    records about itself. The platform publishes them on its own schedule
+    instead (`stats_io_interval`).
     """
 
     _attr_has_entity_name = True
+    _attr_should_poll = False
 
     def __init__(self, writer, entry):
         """Initialize the sensor."""

@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- **Scribe stopped filling your history with its own counters**: the I/O sensors were polled by Home Assistant every 30 seconds, and their values change on nearly every read — on one installation they were the three busiest entities in the database, about 2 900 rows a day each. They are no longer polled: the platform publishes them on its own schedule, **every 60 seconds** by default, and `stats_io_interval` sets that in seconds. Raise it to 300 and Scribe writes ten times less about itself. Nothing else changes: the values are read from the writer's counters, which cost nothing to compute.
+
 ## [4.3.0] - 2026-09-12
 
 ### Added
