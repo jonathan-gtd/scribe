@@ -20,6 +20,9 @@ pytest
 pytest-homeassistant-custom-component==0.13.364
 pytest-asyncio
 psycopg2-binary
+# The migration scripts read their configuration through it, and the
+# integration tests import those scripts.
+python-dotenv
 asyncpg
 ruff==0.16.5
 pycares
