@@ -45,6 +45,18 @@ scribe:
 Voilà — les états sont enregistrés, découpés et compressés, avec le contexte entité, appareil et pièce. Tout ce qui suit est facultatif.
 
 <details>
+<summary><b>🧩 Scribe Card — des graphiques sur votre tableau de bord</b></summary>
+<br>
+
+[![Scribe Card](https://raw.githubusercontent.com/jonathan-gtd/scribe-card/master/docs/screenshot.png)](https://github.com/jonathan-gtd/scribe-card)
+
+**[Scribe Card](https://github.com/jonathan-gtd/scribe-card)** affiche n'importe quelle requête de votre historique sur un tableau de bord. Dessinée avec Apache ECharts — la bibliothèque qu'utilisent les graphiques d'historique de Home Assistant — et configurée dans un formulaire, où le type de graphique, l'unité et les axes se choisissent parmi les colonnes que votre requête renvoie.
+
+Elle passe par le service `scribe.query`, donc **aucune seconde connexion à la base à configurer, et aucun mot de passe dans votre tableau de bord**. Installez-la via HACS en dépôt personnalisé, catégorie *Tableau de bord*.
+
+</details>
+
+<details>
 <summary><b>🗄️ Installer TimescaleDB</b></summary>
 <br>
 
@@ -758,6 +770,7 @@ volumes.
 
 Ces projets fonctionnent très bien avec Scribe :
 
+- [Scribe Card](https://github.com/jonathan-gtd/scribe-card) : la carte compagnon — n'importe quelle requête de votre historique, sur un tableau de bord.
 - [timescale_database_reader](https://github.com/remmob/timescale_database_reader) : un composant personnalisé pour relire les données de TimescaleDB dans des capteurs Home Assistant.
 - [timescale-plotly-card](https://github.com/remmob/timescale-plotly-card) : une carte Plotly très personnalisable, capable d'interroger TimescaleDB directement.
 

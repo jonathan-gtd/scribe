@@ -45,6 +45,18 @@ scribe:
 Done — states recorded, chunked and compressed, with their entity, device and area context. Everything below is optional.
 
 <details>
+<summary><b>🧩 Scribe Card — charts on your dashboard</b></summary>
+<br>
+
+[![Scribe Card](https://raw.githubusercontent.com/jonathan-gtd/scribe-card/master/docs/screenshot.png)](https://github.com/jonathan-gtd/scribe-card)
+
+**[Scribe Card](https://github.com/jonathan-gtd/scribe-card)** puts any query from your history on a dashboard. Drawn with Apache ECharts — what Home Assistant's own history charts use — and configured in a form, with the chart type, the unit and the axes picked from the columns your query returns.
+
+It talks to Scribe through the `scribe.query` service, so there is **no second database connection to configure and no password in your dashboard**. Install it through HACS as a custom repository, category *Dashboard*.
+
+</details>
+
+<details>
 <summary><b>🗄️ Setting up TimescaleDB</b></summary>
 <br>
 
@@ -726,6 +738,7 @@ Please [open an issue](https://github.com/jonathan-gtd/scribe/issues) on GitHub 
 
 Check out these related projects that work great with Scribe:
 
+- [Scribe Card](https://github.com/jonathan-gtd/scribe-card): the companion card — any query from your history, on a dashboard.
 - [timescale_database_reader](https://github.com/remmob/timescale_database_reader): A custom component to read data back from TimescaleDB into Home Assistant sensors.
 - [timescale-plotly-card](https://github.com/remmob/timescale-plotly-card): A highly customizable Plotly-based card for Home Assistant that can query TimescaleDB directly.
 
