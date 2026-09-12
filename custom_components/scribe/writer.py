@@ -560,6 +560,11 @@ class ScribeWriter:
         self._background_tasks: set[asyncio.Task] = set()
         # Resolved once per start, before the hypertable steps run.
         self._has_timescaledb = False
+        # Whether states_raw carries its (metadata_id, time) primary key, which
+        # is what drops a row already recorded. Databases created before 3.6 do
+        # not have it and no release ever added it, so the startup snapshot is
+        # skipped there rather than duplicating the history at every restart.
+        self._states_deduplicated = False
         # Set when the database predates Scribe 3.0: nothing is recorded until
         # it is converted, so there is no point queuing anything either.
         self._legacy_blocked = False
@@ -1286,6 +1291,8 @@ class ScribeWriter:
                 async with conn.transaction():
                     await self._create_tables(conn)
 
+            self._states_deduplicated = await self._states_have_primary_key()
+
             # Whether the storage features exist at all decides both what to
             # attempt below and whether a failure means anything to the user.
             self._has_timescaledb = await self._check_timescaledb_available()
@@ -1320,6 +1327,39 @@ class ScribeWriter:
                 },
                 severity=ir.IssueSeverity.ERROR,
             )
+
+    async def _states_have_primary_key(self) -> bool:
+        """Whether `states_raw` can drop a row it already holds.
+
+        The key on `(metadata_id, time)` is what makes writing a state twice
+        harmless: `COPY` fails on it and the retry passes `ON CONFLICT DO
+        NOTHING`. It is part of `CREATE TABLE` since 3.6 and no release ever
+        added it to an older table, so a database created by 3.1 to 3.5 still
+        has none — and there, writing the same state twice stores it twice.
+        """
+        if not self.record_states:
+            return False
+        try:
+            return bool(
+                await self._fetchval(
+                    "SELECT EXISTS (SELECT FROM pg_constraint "
+                    "WHERE conrelid = to_regclass($1) AND contype = 'p')",
+                    self._qualified("states_raw"),
+                )
+            )
+        except Exception as e:
+            _LOGGER.debug(
+                "[writer._states_have_primary_key] Could not check the key on "
+                "states_raw: %s (%s)",
+                e,
+                type(e).__name__,
+            )
+            return False
+
+    @property
+    def deduplicates_states(self) -> bool:
+        """True when writing a state already recorded is a no-op."""
+        return self._states_deduplicated
 
     async def _detect_legacy_schema(self, conn) -> str | None:
         """Name the pre-3.0 artifact found in the database, or None.

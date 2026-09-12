@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **What Home Assistant had already set when Scribe started was never recorded**: Scribe only ever recorded *changes*, through a listener registered once it is set up — and Home Assistant is well into its start by then. An entity that changed while Home Assistant was down and did not change again afterwards was simply missing from the history, which went on showing the previous value across the gap; Scribe's own connectivity sensor, set up before the listener existed, had not been recorded since the last time it changed. Scribe now registers its listener before its platforms, and records the state of everything already set, once, at startup. Almost every row that adds is one the database already holds — same entity, same timestamp — and the primary key on `(metadata_id, time)` drops it, so a restart costs nothing and only what really changed is added. The exception is a database created by Scribe 3.1 to 3.5, which has no such key (no release ever added it): there the startup states are skipped rather than duplicated at every restart, and a line in the log says so.
+
 ## [4.1.1] - 2026-09-12
 
 ### Fixed
