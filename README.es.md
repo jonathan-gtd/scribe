@@ -118,11 +118,12 @@ GRANT ALL ON SCHEMA public TO scribe;
 
 ### Configuración completa (valores por defecto)
 
-#### Mostrar la configuración YAML completa
-
 ```yaml
 scribe:
+  # La única opción obligatoria.
   db_url: postgresql://scribe:password@192.168.1.10:5432/scribe
+
+  # Todo lo demás es opcional. Estos son los valores por defecto.
   db_ssl: false
   ssl_root_cert: ""      # solo se usa si db_ssl es true
   ssl_cert_file: ""
@@ -155,7 +156,7 @@ scribe:
   exclude_attributes: []
   include_events: []
   exclude_events: []
-  # Opcional: desactivar tablas de metadatos concretas (por defecto: true)
+  # Las tablas de metadatos que Scribe mantiene al día.
   enable_table_areas: true
   enable_table_devices: true
   enable_table_integrations: true
