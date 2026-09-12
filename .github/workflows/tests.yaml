@@ -76,7 +76,7 @@ jobs:
           pytest tests --ignore=tests/upgrade \
             --cov=custom_components/scribe \
             --cov-report=term-missing \
-            --cov-fail-under=83
+            --cov-fail-under=93
 
       - name: Publish coverage summary
         if: always()
