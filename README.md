@@ -1,12 +1,15 @@
 <div align="center">
 
-<img src="brands_assets/logo.png" alt="Scribe" width="320">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="brands_assets/dark_logo.png">
+  <img src="brands_assets/logo.png" alt="Scribe" width="300">
+</picture>
 
 ### Home Assistant history in TimescaleDB
 
-Every state and every event, written through `asyncpg` — without blocking the event loop.
+Every state and every event, through `asyncpg` — without blocking the event loop.
 
-[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://github.com/hacs/integration) [![Release](https://img.shields.io/github/v/release/jonathan-gtd/scribe?color=41BDF5)](https://github.com/jonathan-gtd/scribe/releases/latest) [![Downloads](https://img.shields.io/github/downloads/jonathan-gtd/scribe/total?color=41BDF5)](https://github.com/jonathan-gtd/scribe/releases) [![Tests](https://img.shields.io/github/actions/workflow/status/jonathan-gtd/scribe/tests.yaml?branch=master&label=tests)](https://github.com/jonathan-gtd/scribe/actions/workflows/tests.yaml) [![License](https://img.shields.io/github/license/jonathan-gtd/scribe?color=lightgrey)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/jonathan-gtd/scribe?color=41BDF5)](https://github.com/jonathan-gtd/scribe/releases/latest) [![Downloads](https://img.shields.io/github/downloads/jonathan-gtd/scribe/total?color=41BDF5)](https://github.com/jonathan-gtd/scribe/releases) [![Tests](https://img.shields.io/github/actions/workflow/status/jonathan-gtd/scribe/tests.yaml?branch=master&label=tests)](https://github.com/jonathan-gtd/scribe/actions/workflows/tests.yaml) [![License](https://img.shields.io/github/license/jonathan-gtd/scribe?color=lightgrey)](LICENSE)
 
 [![lang en](https://img.shields.io/badge/lang-en-41BDF5)](README.md) [![lang fr](https://img.shields.io/badge/lang-fr-lightgrey)](README.fr.md) [![lang es](https://img.shields.io/badge/lang-es-lightgrey)](README.es.md) [![lang de](https://img.shields.io/badge/lang-de-lightgrey)](README.de.md)
 
@@ -14,31 +17,35 @@ Every state and every event, written through `asyncpg` — without blocking the 
 
 ---
 
-Home Assistant's recorder keeps a few weeks of history in SQLite and slows down as it grows. Scribe writes the same states and events to **TimescaleDB**, where years of history stay fast and take a fraction of the space.
+Home Assistant's recorder keeps a few weeks of history in SQLite and slows down as it grows. Scribe writes the same states and events to **TimescaleDB**, where years stay fast and take a fraction of the space.
 
-- **Asynchronous end to end** — `asyncpg` and batched `COPY`, so recording never blocks Home Assistant.
-- **Compressed automatically** — TimescaleDB chunks and compresses old history, typically 10× smaller.
-- **Nothing is lost** — a database that is down is buffered, and written when it returns.
-- **Context included** — entities, devices, areas, users and integrations, not only values.
-- **It says when something is wrong**, in Repairs, instead of in a log nobody reads.
+- 🚀 **Asynchronous end to end** — `asyncpg` and batched `COPY`: recording never blocks Home Assistant.
+- 🗜️ **Compressed automatically** — old history is chunked and compressed, typically 10× smaller.
+- 🛟 **Nothing is lost** — a database that is down is buffered, then written when it returns.
+- 🧩 **Context included** — entities, devices, areas, users and integrations, not only values.
+- 🩺 **It says when something is wrong**, in Repairs rather than in a log nobody reads.
 
 ## Install
 
+**1. A TimescaleDB database.** The extension is required — see *Setting up TimescaleDB* below.
+
+**2. Scribe, through HACS:**
+
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=jonathan-gtd&repository=scribe&category=integration)
 
-1. **A TimescaleDB database** — the extension is required; see *Setting up TimescaleDB* below.
-2. **Scribe, through HACS** — the button above, then *Download*, then restart Home Assistant.
-3. **The database URL**, in `configuration.yaml`:
+*Or by hand:* copy `custom_components/scribe` into your `custom_components` folder. Either way, restart Home Assistant.
+
+**3. The database URL**, in `configuration.yaml`:
 
 ```yaml
 scribe:
   db_url: "postgresql://scribe:password@192.168.1.10:5432/scribe"
 ```
 
-That is a working installation: states are recorded, chunked and compressed, with the entity, device and area context alongside them. Everything below is optional.
+Done — states recorded, chunked and compressed, with their entity, device and area context. Everything below is optional.
 
 <details>
-<summary><b>Setting up TimescaleDB</b></summary>
+<summary><b>🗄️ Setting up TimescaleDB</b></summary>
 <br>
 
 You need a running TimescaleDB instance. I recommend PostgreSQL 17 or 18.
@@ -83,7 +90,7 @@ GRANT ALL ON SCHEMA public TO scribe;
 </details>
 
 <details>
-<summary><b>Every option, with its defaults</b></summary>
+<summary><b>⚙️ Every option, with its defaults</b></summary>
 <br>
 
 ### Full Configuration (Default Values)
@@ -136,7 +143,7 @@ scribe:
 </details>
 
 <details>
-<summary><b>Parameter reference</b></summary>
+<summary><b>📋 Parameter reference</b></summary>
 <br>
 
 #### Show Parameter Reference
@@ -185,7 +192,7 @@ scribe:
 </details>
 
 <details>
-<summary><b>Storage tuning — chunks and compression</b></summary>
+<summary><b>🗜️ Storage tuning — chunks and compression</b></summary>
 <br>
 
 Scribe stores history in TimescaleDB **hypertables**: a table that looks and
@@ -256,7 +263,7 @@ counts, compressed and uncompressed sizes, and the compression ratio.
 </details>
 
 <details>
-<summary><b>Retention — dropping old history on a schedule</b></summary>
+<summary><b>🧹 Retention — dropping old history on a schedule</b></summary>
 <br>
 
 By default Scribe keeps everything, forever. If you only want to store a bounded
@@ -307,7 +314,7 @@ Details worth knowing:
 </details>
 
 <details>
-<summary><b>Summaries — hourly and daily rollups</b></summary>
+<summary><b>📈 Summaries — hourly and daily rollups</b></summary>
 <br>
 
 A year of a sensor that reports every 30 seconds is about a million rows. A chart of that year reads every one of them, every time it is drawn.
@@ -341,7 +348,7 @@ Only numeric states are summarised — the average of `on` and `off` means nothi
 </details>
 
 <details>
-<summary><b>Database schema — tables, views and how to query them</b></summary>
+<summary><b>🗃️ Database schema — tables, views and how to query them</b></summary>
 <br>
 
 By default Scribe records into whatever schema your connection already points
@@ -398,7 +405,7 @@ Details worth knowing:
 </details>
 
 <details>
-<summary><b>Services — flush, query, purge</b></summary>
+<summary><b>🛠️ Services — flush, query, purge</b></summary>
 <br>
 
 ### `scribe.flush`
@@ -457,7 +464,7 @@ Compressed history is purged as well; TimescaleDB handles it, and the chunks sta
 </details>
 
 <details>
-<summary><b>Statistics sensors</b></summary>
+<summary><b>📊 Statistics sensors</b></summary>
 <br>
 
 Enable sensors by setting their flags in your configuration.
@@ -516,7 +523,7 @@ Storage usage in bytes (updated every `stats_size_interval` minutes).
 </details>
 
 <details>
-<summary><b>Dashboard</b></summary>
+<summary><b>🖼️ Dashboard</b></summary>
 <br>
 
 A pre-configured Lovelace layout containing all useful Scribe sensors (Database Statistics, Compression Ratios, I/O Performance) is available in this repository, in two flavours:
@@ -544,7 +551,7 @@ A pre-configured Lovelace layout containing all useful Scribe sensors (Database 
 </details>
 
 <details>
-<summary><b>Migrating from InfluxDB, LTSS, the recorder or Scribe 2.x</b></summary>
+<summary><b>📦 Migrating from InfluxDB, LTSS, the recorder or Scribe 2.x</b></summary>
 <br>
 
 ### Upgrading from Scribe 2.x
@@ -649,7 +656,7 @@ Scribe provided helper scripts to backfill data from various sources.
 </details>
 
 <details>
-<summary><b>Troubleshooting</b></summary>
+<summary><b>🩺 Troubleshooting</b></summary>
 <br>
 
 ### Before anything else
@@ -714,7 +721,7 @@ Please [open an issue](https://github.com/jonathan-gtd/scribe/issues) on GitHub 
 </details>
 
 <details>
-<summary><b>Related projects</b></summary>
+<summary><b>🔗 Related projects</b></summary>
 <br>
 
 Check out these related projects that work great with Scribe:
