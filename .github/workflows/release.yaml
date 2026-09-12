@@ -18,6 +18,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # Attesting what was built, below.
+      id-token: write
+      attestations: write
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -46,6 +49,14 @@ jobs:
         run: |
           cd custom_components
           zip -r scribe.zip scribe
+
+      - name: Attest what was built
+        # Ties the published zip to this workflow, on this commit, so anyone
+        # can check the file they downloaded is the one this repository built:
+        #   gh attestation verify scribe.zip --repo jonathan-gtd/scribe
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: custom_components/scribe.zip
 
       - name: Create Release
         uses: softprops/action-gh-release@v3

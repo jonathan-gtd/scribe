@@ -245,7 +245,7 @@ Breaking one of these has caused a real bug before. Each is explained in a comme
 
 ```
 venv/bin/ruff check . && venv/bin/ruff format --check . \
-  && venv/bin/python -m pytest tests --cov=custom_components/scribe --cov-report=term-missing --cov-fail-under=83
+  && venv/bin/python -m pytest tests --ignore=tests/upgrade --cov=custom_components/scribe --cov-report=term-missing --cov-fail-under=93
 ```
 
 ### 6.2 Unit tests vs integration tests
@@ -266,7 +266,7 @@ venv/bin/ruff check . && venv/bin/ruff format --check . \
 
 | Workflow | When | What |
 |---|---|---|
-| `tests.yaml` | push to `master`, every pull request, and before each release | `ruff check`, `ruff format --check`, the whole suite against a TimescaleDB service container, **coverage ≥ 83 %**, and a second run of `tests/integration` that **fails if any integration test was skipped**. A second job, `Minimum Home Assistant`, runs the same suite against the oldest Home Assistant `hacs.json` claims to support ([6.7](#67-testing-the-oldest-supported-home-assistant)). A third, `Upgrade from older releases`, runs `tests/upgrade` ([6.6](#66-upgrade-tests)) and fails if any of them was skipped; the first job leaves that folder out. |
+| `tests.yaml` | push to `master`, every pull request, and before each release | `ruff check`, `ruff format --check`, the whole suite against a TimescaleDB service container, **coverage ≥ 93 %**, and a second run of `tests/integration` that **fails if any integration test was skipped**. A second job, `Minimum Home Assistant`, runs the same suite against the oldest Home Assistant `hacs.json` claims to support ([6.7](#67-testing-the-oldest-supported-home-assistant)). A third, `Upgrade from older releases`, runs `tests/upgrade` ([6.6](#66-upgrade-tests)) and fails if any of them was skipped; the first job leaves that folder out. |
 | `validate.yaml` | push to `master`, pull requests, daily | HACS validation and hassfest (Home Assistant's manifest and translation checks). |
 | `codeql.yaml` | push to `master`, pull requests, weekly | GitHub CodeQL security analysis. Results go to the Security tab. It does not block a merge. |
 | `upstream-watch.yaml` | Mondays, or by hand | The suite against the **latest Home Assistant pre-release**, ignoring the pin. It only runs on a schedule, so a failure sends an email and never blocks anything. |
@@ -473,7 +473,8 @@ Then bring the fix into `master` through a normal pull request (`git cherry-pick
    1. runs the whole `tests.yaml` workflow on the tagged commit: the test suite and the upgrade tests;
    2. fails if the tag is not `v` + the version in `manifest.json`;
    3. zips `custom_components/scribe` into `scribe.zip`;
-   4. creates the GitHub release with generated notes and the zip, marked as a pre-release if the tag ends in `aN`/`bN`/`rcN`.
+   4. attests the zip's provenance, so anyone can check the file they downloaded is the one this repository built: `gh attestation verify scribe.zip --repo jonathan-gtd/scribe`;
+   5. creates the GitHub release with generated notes and the zip, marked as a pre-release if the tag ends in `aN`/`bN`/`rcN`.
 8. Check the release on GitHub (`gh release view vX.Y.Z`). HACS picks it up from there.
 
 **If the workflow fails before the release is created** (wrong manifest version, failing tests), delete the tag, fix the problem through a pull request, then tag again:
