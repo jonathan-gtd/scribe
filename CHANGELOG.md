@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **`scribe.purge`, to delete history on purpose**: Scribe could only ever add. Retention drops old chunks on a schedule, and nothing removed a single entity — a sensor you renamed, a device you returned, an integration you tried for a week — or trimmed a database once without committing to a policy. The new service takes entities, an age, or both: entities alone remove them from the database entirely, their row in `entities` included; an age alone trims everything older, events too when asked. It reports how many states, events and entity rows went. Compressed history is purged as well, and the chunks stay compressed. A call that names neither is refused rather than read as "everything".
+
 ## [4.2.0] - 2026-09-12
 
 ### Fixed

@@ -552,6 +552,35 @@ data:
 response_variable: query_result
 ```
 
+### `scribe.purge`
+Delete recorded history. **This cannot be undone.**
+
+**Parameters** (at least one of the first two is required):
+- `entity_id`: entities to purge. Without `keep_days`, their whole history *and* their row in the `entities` table are deleted — recording them again starts from nothing.
+- `keep_days`: delete everything older than this many days.
+- `events` (default `false`): also delete events older than `keep_days`. Ignored without it.
+
+**Returns:** how many states, events and entity rows were deleted.
+
+**Examples:**
+```yaml
+# Remove one entity from the database entirely
+action: scribe.purge
+data:
+  entity_id: sensor.sensor_i_no_longer_want
+```
+
+```yaml
+# Trim everything older than two years, events included
+action: scribe.purge
+data:
+  keep_days: 730
+  events: true
+response_variable: purged
+```
+
+Compressed history is purged as well; TimescaleDB handles it, and the chunks stay compressed. For a rolling window you want to keep applying, use the [retention](#retention) settings instead: a purge is a one-off.
+
 ## Troubleshooting
 
 ### Before anything else

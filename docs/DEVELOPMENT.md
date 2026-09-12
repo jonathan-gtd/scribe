@@ -187,6 +187,7 @@ That key is therefore the condition. A database created by Scribe 3.1 to 3.5 has
 ### 3.8 Services, sensors, diagnostics
 
 - `scribe.flush` runs a flush immediately.
+- `scribe.purge` deletes history: entities (with their `entities` row), everything older than an age, or those entities older than that age. It reports what went. The service schema requires `entity_id` or `keep_days` — `cv.has_at_least_one_key` — so an empty call cannot be read as "everything", and `writer.purge` refuses the same call again on its own. It takes `_metadata_lock`, like a rename: a flush resolving entity_ids must not meet a half-deleted `entities`.
 - `scribe.query` runs one SQL statement in a `READ ONLY` transaction with `statement_timeout = 120000` ms (`QUERY_TIMEOUT_MS`). The rows go through the same sanitizer as the write path, so `Decimal` and `timedelta` come back as numbers.
 - The sensors are opt-in: `enable_stats_io` (read from the writer's counters), `enable_stats_chunk` and `enable_stats_size` (each polled by its own coordinator, every 60 minutes by default).
 - Diagnostics and system health read the writer's internal state. They never show the database URL, only `_safe_target()`, which is host, port and database name.
