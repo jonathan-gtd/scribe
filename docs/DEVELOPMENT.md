@@ -270,6 +270,7 @@ venv/bin/ruff check . && venv/bin/ruff format --check . \
 | `validate.yaml` | push to `master`, pull requests, daily | HACS validation and hassfest (Home Assistant's manifest and translation checks). |
 | `codeql.yaml` | push to `master`, pull requests, weekly | GitHub CodeQL security analysis. Results go to the Security tab. It does not block a merge. |
 | `upstream-watch.yaml` | Mondays, or by hand | The suite against the **latest Home Assistant pre-release**, ignoring the pin. It only runs on a schedule, so a failure sends an email and never blocks anything. |
+| `docs.yaml` | `master` or a pull request touching the docs | Builds the documentation site with `--strict`, so a broken link or a missing anchor fails there; publishes it to GitHub Pages from `master` ([12.1](#121-the-documentation-site)). |
 | `release.yaml` | a `v*` tag is pushed | See [section 9](#9-releasing). |
 | `stale.yml` | daily | Marks issues stale after 21 days and closes them 7 days later (pull requests: 45 + 7). |
 
@@ -553,6 +554,18 @@ The checks done by `init_db` (schema, pre-3.0 database, view, TimescaleDB, hyper
 - **Documented languages: `en`, `fr`, `es`, `de`**, the four READMEs. They must be complete and really translated: the tests in [6.3](#63-what-ci-checks) enforce it. A string may stay identical to English only if it is listed in `ALLOWED_IDENTICAL_TO_ENGLISH` in `tests/test_config_flow.py`.
 - **Other languages** (`da`, `it`, `ja`, `nl`, `pl`, `pt`, `ru`, `sk`, `sv`) are partial and come from contributors. Home Assistant falls back to English for any missing key. They may not contain keys that `strings.json` lacks.
 - **The four READMEs have the same structure.** A change to one (a new option, a Repairs row, a new section) is made in all four in the same pull request.
+
+### 12.1 The documentation site
+
+<https://jonathan-gtd.github.io/scribe/> is those same files, published: nothing there is a second copy to keep in step.
+
+`scripts/build_docs.py` writes `site-src/` (generated, git ignores it) from `README.md`, the three translations, `docs/data-structure.md` and this guide. On the way it rewrites the links that only mean something inside the repository — `docs/…`, the other READMEs, the Lovelace YAML files, which become links back to GitHub — drops the hand-written table of contents, since the theme builds one, and **fails when a link would 404 on the site**.
+
+```
+python3 scripts/build_docs.py && mkdocs serve   # http://127.0.0.1:8000
+```
+
+`mkdocs.yml` holds the navigation and the theme. It runs `mkdocs build --strict`, so a broken link or a missing anchor fails the build rather than reaching the site. Anchors keep their accents (`uslugify`), because the translated tables of contents link to them the way GitHub writes them.
 
 ---
 
