@@ -50,6 +50,10 @@ from .const import (
     CONF_MAX_QUEUE_SIZE,
     DEFAULT_MAX_QUEUE_SIZE,
     CONF_BUFFER_ON_FAILURE,
+    CONF_QUERY_TIMEOUT,
+    DEFAULT_QUERY_TIMEOUT,
+    CONF_QUERY_MAX_ROWS,
+    DEFAULT_QUERY_MAX_ROWS,
     DEFAULT_BUFFER_ON_FAILURE,
     CONF_INCLUDE_DOMAINS,
     CONF_INCLUDE_ENTITIES,
@@ -154,6 +158,8 @@ def _coerce_options(data: dict) -> dict:
         CONF_BATCH_SIZE,
         CONF_FLUSH_INTERVAL,
         CONF_MAX_QUEUE_SIZE,
+        CONF_QUERY_TIMEOUT,
+        CONF_QUERY_MAX_ROWS,
         CONF_STATS_IO_INTERVAL,
         CONF_STATS_CHUNK_INTERVAL,
         CONF_STATS_SIZE_INTERVAL,
@@ -566,6 +572,25 @@ class ScribeOptionsFlowHandler(config_entries.OptionsFlow):
 
         return vol.Schema(
             {
+                vol.Optional(
+                    CONF_QUERY_TIMEOUT,
+                    default=g(CONF_QUERY_TIMEOUT, DEFAULT_QUERY_TIMEOUT),
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=1, max=3600, step=1, mode=selector.NumberSelectorMode.BOX
+                    )
+                ),
+                vol.Optional(
+                    CONF_QUERY_MAX_ROWS,
+                    default=g(CONF_QUERY_MAX_ROWS, DEFAULT_QUERY_MAX_ROWS),
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=1,
+                        max=1000000,
+                        step=1000,
+                        mode=selector.NumberSelectorMode.BOX,
+                    )
+                ),
                 vol.Optional(
                     CONF_DB_SCHEMA, default=g(CONF_DB_SCHEMA, DEFAULT_DB_SCHEMA)
                 ): selector.TextSelector(),

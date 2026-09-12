@@ -131,6 +131,8 @@ scribe:
   batch_size: 500
   flush_interval: 5
   max_queue_size: 10000
+  query_timeout: 60
+  query_max_rows: 20000
   buffer_on_failure: true
   enable_stats_io: false
   enable_stats_chunk: false
@@ -178,6 +180,8 @@ scribe:
 | `batch_size` | Nombre d'éléments mis en tampon avant écriture en base. |
 | `flush_interval` | Délai maximal (en secondes) avant de vider le tampon. |
 | `max_queue_size` | Nombre maximal d'éléments gardés en mémoire avant d'écarter les nouveaux. |
+| `query_timeout` | Secondes pendant lesquelles un appel à `scribe.query` peut tourner avant que la base ne l'arrête (défaut `60`). |
+| `query_max_rows` | Lignes qu'un appel à `scribe.query` peut renvoyer avant d'être refusé (défaut `20000`). |
 | `buffer_on_failure` | Si vrai, conserve les données en mémoire quand la base est injoignable (jusqu'à `max_queue_size`). |
 | `enable_stats_io` | Activer les capteurs de performance de l'écrivain en temps réel (aucune requête en base). |
 | `enable_stats_chunk` | Activer les capteurs de nombre de chunks (interrogent la base). |
