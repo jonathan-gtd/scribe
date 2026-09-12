@@ -183,7 +183,12 @@ The names `states` and `events` come from `DEFAULT_TABLE_NAME_STATES` / `DEFAULT
 
 The listener only ever sees what changes *after* it is registered, and Scribe is set up well into a Home Assistant start. An entity that changed while Home Assistant was down and does not change again would never be recorded: the history shows the previous value carrying on across the gap.
 
-So `_record_current_states` walks `hass.states.async_all()` at setup and queues each state that passes the filter, through the same `_state_row` the listener uses — **same `last_updated`**, which is what makes it free: the row is the one already in `states_raw` for everything that did not change, the primary key on `(metadata_id, time)` refuses it, and only what really changed is added.
+So `_record_current_states` walks `hass.states.async_all()` at setup and queues each state that passes the filter, through the same `_state_row` the listener uses — **same `last_updated`**. What that writes depends on why Scribe is starting:
+
+- after a **Home Assistant restart**, Home Assistant has just given every entity a fresh `last_updated`, so these are new rows: one per live entity (1361 rows for 795 entities on the maintainer's installation, against ~58 000 recorded in a day). They are the point — they are the states nothing else would have recorded;
+- after a **reload** (any options change reloads the entry), the states still carry the `last_updated` they already had, so each row is the one already in `states_raw` and the key refuses it.
+
+Either way a state is never stored twice, which is what the key is for.
 
 That key is therefore the condition. A database created by Scribe 3.1 to 3.5 has none, and no release ever added it ([6.6](#66-upgrade-tests)), so writing a state twice would store it twice: `writer.deduplicates_states` is false there, the snapshot is skipped, and a warning says why. `_states_have_primary_key` settles it once per start, in `init_db`.
 
