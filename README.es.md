@@ -1,64 +1,54 @@
-[🇬🇧 English](README.md) · [🇫🇷 Français](README.fr.md) · **🇪🇸 Español** · [🇩🇪 Deutsch](README.de.md)
+<div align="center">
 
-# Scribe — Integración TimescaleDB de alto rendimiento para Home Assistant
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="brands_assets/dark_logo.png">
+  <img src="brands_assets/logo.png" alt="Scribe" width="300">
+</picture>
 
-Scribe es un componente de nueva generación que escribe los estados y eventos de Home Assistant en una base de datos TimescaleDB.
+### El historial de Home Assistant en TimescaleDB
 
-**¿Por qué Scribe?**
-Scribe está construido de otra manera. A diferencia de las integraciones que dependen de controladores síncronos o del recorder por defecto, Scribe usa **`asyncpg`**, un controlador PostgreSQL asíncrono de alto rendimiento. Esto le permite gestionar volúmenes enormes de datos sin bloquear el bucle de eventos de Home Assistant. Está diseñado para la estabilidad, la velocidad y la eficiencia.
+Cada estado y cada evento, mediante `asyncpg` — sin bloquear el bucle de eventos.
 
-**Estructura de datos y consultas**
+[![Release](https://img.shields.io/github/v/release/jonathan-gtd/scribe?color=41BDF5)](https://github.com/jonathan-gtd/scribe/releases/latest) [![Downloads](https://img.shields.io/github/downloads/jonathan-gtd/scribe/total?color=41BDF5)](https://github.com/jonathan-gtd/scribe/releases) [![Tests](https://img.shields.io/github/actions/workflow/status/jonathan-gtd/scribe/tests.yaml?branch=master&label=tests)](https://github.com/jonathan-gtd/scribe/actions/workflows/tests.yaml) [![License](https://img.shields.io/github/license/jonathan-gtd/scribe?color=lightgrey)](LICENSE)
 
-Aquí encontrarás una explicación de la estructura de datos y de cómo consultarla: [Estructura de datos](docs/data-structure.md)
+[![lang en](https://img.shields.io/badge/lang-en-lightgrey)](README.md) [![lang fr](https://img.shields.io/badge/lang-fr-lightgrey)](README.fr.md) [![lang es](https://img.shields.io/badge/lang-es-41BDF5)](README.es.md) [![lang de](https://img.shields.io/badge/lang-de-lightgrey)](README.de.md)
 
-## Índice
+</div>
 
-- [Características](#características)
-- [Instalación](#instalación)
-- [Configuración](#configuración)
-- [Ajuste del almacenamiento](#ajuste-del-almacenamiento)
-- [Retención](#retención)
-- [Resúmenes](#resúmenes)
-- [Esquema de la base de datos](#esquema-de-la-base-de-datos)
-- [Migración](#migración)
-- [Sensores de estadísticas](#sensores-de-estadísticas)
-- [Servicios](#servicios)
-- [Panel / Vista](#panel--vista)
-- [Ecosistema / Proyectos relacionados](#ecosistema--proyectos-relacionados)
-- [Solución de problemas](#solución-de-problemas)
-- [Licencia](#licencia)
+---
 
-## Características
+El recorder de Home Assistant guarda unas semanas de historial en SQLite y se ralentiza a medida que crece. Scribe escribe los mismos estados y eventos en **TimescaleDB**, donde los años siguen siendo rápidos y ocupan una fracción del espacio.
 
-- 🚀 **Arquitectura asíncrona ante todo**: construida sobre `asyncpg` para escrituras no bloqueantes y de alto rendimiento.
-- 📦 **TimescaleDB nativo**: gestiona automáticamente las hypertables y las políticas de compresión.
-- 📊 **Estadísticas detalladas**: sensores opcionales para vigilar el número de chunks, los ratios de compresión (¡hasta un 97 % de ahorro!) y el rendimiento de escritura.
-- 🔒 **Seguro**: compatibilidad completa con SSL/TLS.
-- 📈 **Estados y eventos**: registra todos los cambios de estado y los eventos en las tablas `states` y `events`.
-- 👥 **Contexto de usuario**: sincroniza automáticamente los usuarios de Home Assistant en la base de datos para dar más contexto.
-- 🧩 **Metadatos de entidades**: sincroniza automáticamente el registro de entidades (nombres, plataformas, etc.) en la tabla `entities`.
-- 🏠 **Contexto de áreas y dispositivos**: sincroniza automáticamente áreas y dispositivos en las tablas `areas` y `devices`.
-- 🔌 **Información de integraciones**: sincroniza automáticamente las entradas de configuración en la tabla `integrations`.
-- 🎯 **Filtrado preciso**: incluir o excluir por dominio, entidad, patrón de entidad o atributo.
-- ✅ **Probado contra una base de datos real**: ~90 % de cobertura de líneas, y una suite de extremo a extremo que ejecuta la integración contra una TimescaleDB real en lugar de mocks.
+- 🚀 **Asíncrono de extremo a extremo** — `asyncpg` y `COPY` por lotes: el registro nunca bloquea Home Assistant.
+- 🗜️ **Comprimido automáticamente** — el historial antiguo se divide en chunks y se comprime, normalmente 10× más pequeño.
+- 🛟 **Nada se pierde** — una base de datos caída se almacena en búfer y se escribe cuando vuelve.
+- 🧩 **Con su contexto** — entidades, dispositivos, áreas, usuarios e integraciones, no solo valores.
+- 🩺 **Avisa cuando algo va mal**, en Reparaciones en lugar de en un registro que nadie lee.
 
 ## Instalación
 
-### 1. Instalar el componente
+**1. Una base de datos TimescaleDB.** La extensión es obligatoria — vea *Instalar TimescaleDB* más abajo.
 
-**HACS (recomendado)**
+**2. Scribe, mediante HACS:**
 
-[![Abre tu instancia de Home Assistant y abre un repositorio en la Home Assistant Community Store.](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=jonathan-gtd&repository=scribe&category=integration)
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=jonathan-gtd&repository=scribe&category=integration)
 
-1. Añade este repositorio como repositorio personalizado en HACS.
-2. Busca «Scribe» e instálalo.
-3. Reinicia Home Assistant.
+*O a mano:* copie `custom_components/scribe` en su carpeta `custom_components`. En ambos casos, reinicie Home Assistant.
 
-**Manual**
-1. Copia la carpeta `custom_components/scribe` en el directorio `custom_components` de tu Home Assistant.
-2. Reinicia Home Assistant.
+**3. La URL de la base de datos**, en `configuration.yaml`:
 
-### 2. Preparar la base de datos
+```yaml
+scribe:
+  db_url: "postgresql://scribe:password@192.168.1.10:5432/scribe"
+```
+
+Listo — los estados se registran, se dividen en chunks y se comprimen, con su contexto de entidad, dispositivo y área. Todo lo que sigue es opcional.
+
+<details>
+<summary><b>🗄️ Instalar TimescaleDB</b></summary>
+<br>
+
+### Preparar la base de datos
 
 Necesitas una instancia de TimescaleDB en funcionamiento. Recomiendo PostgreSQL 17 o 18.
 
@@ -100,19 +90,15 @@ CREATE EXTENSION IF NOT EXISTS timescaledb;
 GRANT ALL ON SCHEMA public TO scribe;
 ```
 
-## Configuración
+</details>
 
-### Configuración mínima
-
-```yaml
-scribe:
-  db_url: postgresql://scribe:password@192.168.1.10:5432/scribe
-```
+<details>
+<summary><b>⚙️ Todas las opciones, con sus valores por defecto</b></summary>
+<br>
 
 ### Configuración completa (valores por defecto)
 
-<details>
-<summary><b>Mostrar la configuración YAML completa</b></summary>
+#### Mostrar la configuración YAML completa
 
 ```yaml
 scribe:
@@ -156,12 +142,14 @@ scribe:
   enable_table_users: true
   enable_rollups: false
 ```
+
 </details>
 
-### Parámetros de configuración
-
 <details>
-<summary><b>Mostrar la referencia de parámetros</b></summary>
+<summary><b>📋 Referencia de parámetros</b></summary>
+<br>
+
+#### Mostrar la referencia de parámetros
 
 | Parámetro | Descripción |
 | :--- | :--- |
@@ -203,9 +191,12 @@ scribe:
 | `enable_table_integrations` | Activar la creación y sincronización de la tabla `integrations`. |
 | `enable_table_users` | Activar la creación y sincronización de la tabla `users`. |
 | `enable_rollups` | Mantener resúmenes por hora y por día precalculados de los estados (`states_hourly`, `states_daily`). Desactivado por defecto. |
+
 </details>
 
-## Ajuste del almacenamiento
+<details>
+<summary><b>🗜️ Ajuste del almacenamiento — chunks y compresión</b></summary>
+<br>
 
 Scribe guarda el historial en **hypertables** de TimescaleDB: una tabla que se
 usa y se consulta como cualquier otra, pero que está físicamente dividida en
@@ -278,7 +269,11 @@ Si los sensores de tamaño y de chunks están activados (`enable_stats_size`,
 `enable_stats_chunk`), informan exactamente de lo que producen estos ajustes:
 número de chunks, tamaños comprimido y sin comprimir, y ratio de compresión.
 
-## Retención
+</details>
+
+<details>
+<summary><b>🧹 Retención — eliminar el historial antiguo automáticamente</b></summary>
+<br>
 
 Por defecto, Scribe lo conserva todo, para siempre. Si solo quieres almacenar
 una ventana acotada —porque agregas el historial en bruto en otro sitio, o
@@ -330,7 +325,11 @@ Conviene saber:
   `1 year`. Cualquier otra cosa se rechaza con un error en vez de enviarse a la
   base de datos.
 
-## Resúmenes
+</details>
+
+<details>
+<summary><b>📈 Resúmenes — agregados por hora y por día</b></summary>
+<br>
 
 Un año de un sensor que informa cada 30 segundos son cerca de un millón de filas. Un gráfico de ese año las lee todas, cada vez que se dibuja.
 
@@ -360,7 +359,11 @@ Solo se resumen los estados numéricos —la media de `on` y `off` no significa 
 
 **Son datos derivados.** No se duplica nada que vaya a echar de menos: desactivar la opción elimina ambas vistas, reactivarla las reconstruye a partir del historial, y sus estados no se tocan en ningún caso. TimescaleDB las mantiene por sí mismo; Scribe solo las crea.
 
-## Esquema de la base de datos
+</details>
+
+<details>
+<summary><b>🗃️ Esquema de la base — tablas, vistas y cómo consultarlas</b></summary>
+<br>
 
 De forma predeterminada, Scribe registra en el esquema al que ya apunta su
 conexión — normalmente `public`. Indique `db_schema` y creará ese esquema y
@@ -413,172 +416,11 @@ Conviene saber:
   `?options=-csearch_path%3Dmiesquema` en la URL, que Scribe respeta y no
   sustituye.
 
-## Migración
-
-### Actualizar desde Scribe 2.x
-
-Scribe 3.0 sustituyó la tabla `states` por `states_raw` más una vista de
-compatibilidad, y dio a `entities` una clave primaria numérica. La conversión de
-una base antigua la hacían las versiones 3.x y se **eliminó en la 3.9**.
-
-Si tu base de datos todavía tiene una *tabla* `states` (en lugar de una vista),
-una tabla `states_legacy`, o una tabla `entities` sin columna `id`, Scribe se
-detiene al arrancar, no registra nada y genera un problema en Reparaciones, sin
-renombrar, crear ni eliminar nada. Instala **Scribe 3.8**, deja Home Assistant
-en marcha hasta que los registros indiquen que la migración ha terminado (unos
-quince minutos en una base grande) y actualiza de nuevo.
-
-Las instalaciones nuevas y cualquier base creada por una versión 3.x no se ven
-afectadas.
-
-### Importar datos desde otras fuentes
-
-Scribe incluye scripts para importar datos desde varias fuentes.
-
-### Migración desde InfluxDB
-
-<details>
-<summary><b>Mostrar la guía de migración de InfluxDB</b></summary>
-
-1. Sitúate en el directorio `migration`:
-   ```bash
-   cd migration
-   ```
-
-2. Instala las dependencias:
-   ```bash
-   pip install influxdb-client psycopg2-binary python-dotenv
-   ```
-
-3. Configura la migración:
-   ```bash
-   cp .env.example .env
-   nano .env
-   # Rellena [InfluxDB Configuration], [Scribe Configuration] y [Migration Settings]
-   ```
-
-4. Ejecuta la migración:
-   ```bash
-   python3 influx2scribe.py
-   ```
 </details>
 
-### Migración desde LTSS
-
 <details>
-<summary><b>Mostrar la guía de migración de LTSS</b></summary>
-
-1. Sitúate en el directorio `migration`:
-   ```bash
-   cd migration
-   ```
-
-2. Instala las dependencias:
-   ```bash
-   pip install psycopg2-binary python-dotenv
-   ```
-
-3. Configura la migración:
-   ```bash
-   cp .env.example .env
-   nano .env
-   # Rellena [LTSS Configuration], [Scribe Configuration] y [Migration Settings]
-   ```
-
-4. Ejecuta la migración:
-   ```bash
-   python3 ltss2scribe.py
-   ```
-</details>
-
-### Migración desde Recorder
-
-<details>
-<summary><b>Mostrar la guía de migración de Recorder</b></summary>
-
-1. Sitúate en el directorio `migration`:
-   ```bash
-   cd migration
-   ```
-
-2. Instala las dependencias:
-   ```bash
-   pip install psycopg2-binary python-dotenv
-   ```
-
-3. Configura la migración:
-   ```bash
-   cp .env.example .env
-   nano .env
-   # Rellena [Recorder Configuration], [Scribe Configuration] y [Migration Settings]
-   ```
-
-4. Ejecuta la migración:
-   ```bash
-   python3 recorder2scribe.py
-   ```
-</details>
-
-## Sensores de estadísticas
-
-Activa los sensores estableciendo sus opciones en la configuración.
-
-### Estadísticas de escritura (`enable_stats_io: true`)
-
-<details>
-<summary><b>Mostrar los sensores de escritura</b></summary>
-
-Métricas en tiempo real del escritor (sin consultas a la base de datos).
-
-| Sensor | Descripción |
-| :--- | :--- |
-| <img src="https://api.iconify.design/mdi:database-plus.svg?color=%232196F3" width="15" /> `sensor.scribe_states_written` | Número total de cambios de estado escritos en la base. |
-| <img src="https://api.iconify.design/mdi:database-plus.svg?color=%232196F3" width="15" /> `sensor.scribe_events_written` | Número total de eventos escritos en la base. |
-| <img src="https://api.iconify.design/mdi:buffer.svg?color=%232196F3" width="15" /> `sensor.scribe_buffer_size` | Elementos que esperan actualmente en el búfer de memoria. |
-| <img src="https://api.iconify.design/mdi:timer-sand.svg?color=%232196F3" width="15" /> `sensor.scribe_write_duration` | Tiempo (en ms) de la última escritura en la base. |
-| <img src="https://api.iconify.design/mdi:speedometer.svg?color=%232196F3" width="15" /> `sensor.scribe_states_rate` | Ritmo de estados escritos (por minuto). |
-| <img src="https://api.iconify.design/mdi:speedometer.svg?color=%232196F3" width="15" /> `sensor.scribe_events_rate` | Ritmo de eventos escritos (por minuto). |
-</details>
-
-### Estadísticas de chunks (`enable_stats_chunk: true`)
-
-<details>
-<summary><b>Mostrar los sensores de chunks</b></summary>
-
-Número de chunks (actualizado cada `stats_chunk_interval` minutos).
-
-| Sensor | Descripción |
-| :--- | :--- |
-| <img src="https://api.iconify.design/mdi:cube-outline.svg?color=%232196F3" width="15" /> `sensor.scribe_states_total_chunks` | Número total de chunks de la tabla de estados. |
-| <img src="https://api.iconify.design/mdi:package-down.svg?color=%232196F3" width="15" /> `sensor.scribe_states_compressed_chunks` | Número de chunks ya comprimidos. |
-| <img src="https://api.iconify.design/mdi:package-up.svg?color=%232196F3" width="15" /> `sensor.scribe_states_uncompressed_chunks` | Número de chunks pendientes de comprimir. |
-| <img src="https://api.iconify.design/mdi:cube-outline.svg?color=%232196F3" width="15" /> `sensor.scribe_events_total_chunks` | Número total de chunks de la tabla de eventos. |
-| <img src="https://api.iconify.design/mdi:package-down.svg?color=%232196F3" width="15" /> `sensor.scribe_events_compressed_chunks` | Número de chunks de eventos comprimidos. |
-| <img src="https://api.iconify.design/mdi:package-up.svg?color=%232196F3" width="15" /> `sensor.scribe_events_uncompressed_chunks` | Número de chunks de eventos sin comprimir. |
-</details>
-
-### Estadísticas de tamaño (`enable_stats_size: true`)
-
-<details>
-<summary><b>Mostrar los sensores de tamaño</b></summary>
-
-Espacio ocupado en bytes (actualizado cada `stats_size_interval` minutos).
-
-| Sensor | Descripción |
-| :--- | :--- |
-| <img src="https://api.iconify.design/mdi:database.svg?color=%232196F3" width="15" /> `sensor.scribe_states_total_size` | Tamaño total en disco (datos comprimidos + chunks recientes + índices). |
-| <img src="https://api.iconify.design/mdi:database-search.svg?color=%232196F3" width="15" /> `sensor.scribe_states_original_size` | **Tamaño teórico** si los datos no estuvieran comprimidos (p. ej. 11 GB). |
-| <img src="https://api.iconify.design/mdi:package-variant.svg?color=%232196F3" width="15" /> `sensor.scribe_states_compressed_size` | Tamaño físico de los chunks de datos comprimidos. |
-| <img src="https://api.iconify.design/mdi:package-variant-closed.svg?color=%232196F3" width="15" /> `sensor.scribe_states_uncompressed_size` | Tamaño de los datos recientes aún sin comprimir (o índices pendientes). |
-| <img src="https://api.iconify.design/mdi:percent.svg?color=%232196F3" width="15" /> `sensor.scribe_states_compression_ratio` | Ratio de compresión de los estados (%). |
-| <img src="https://api.iconify.design/mdi:database.svg?color=%232196F3" width="15" /> `sensor.scribe_events_total_size` | Tamaño total en disco de la tabla de eventos. |
-| <img src="https://api.iconify.design/mdi:database-search.svg?color=%232196F3" width="15" /> `sensor.scribe_events_original_size` | Tamaño teórico de los eventos antes de comprimir. |
-| <img src="https://api.iconify.design/mdi:package-variant.svg?color=%232196F3" width="15" /> `sensor.scribe_events_compressed_size` | Tamaño de los datos de eventos comprimidos. |
-| <img src="https://api.iconify.design/mdi:package-variant-closed.svg?color=%232196F3" width="15" /> `sensor.scribe_events_uncompressed_size` | Tamaño de los datos de eventos sin comprimir. |
-| <img src="https://api.iconify.design/mdi:percent.svg?color=%232196F3" width="15" /> `sensor.scribe_events_compression_ratio` | Ratio de compresión de los eventos (%). |
-</details>
-
-## Servicios
+<summary><b>🛠️ Servicios — flush, query, purge</b></summary>
+<br>
 
 ### `scribe.flush`
 Fuerza el volcado inmediato a la base de datos de los datos en búfer.
@@ -633,7 +475,208 @@ response_variable: purged
 
 El historial comprimido también se purga: TimescaleDB se encarga y los chunks siguen comprimidos. Para una ventana deslizante que se aplique continuamente, use los ajustes de [retención](#retención): una purga es puntual.
 
-## Solución de problemas
+</details>
+
+<details>
+<summary><b>📊 Sensores de estadísticas</b></summary>
+<br>
+
+Activa los sensores estableciendo sus opciones en la configuración.
+
+### Estadísticas de escritura (`enable_stats_io: true`)
+
+#### Mostrar los sensores de escritura
+
+Métricas en tiempo real del escritor (sin consultas a la base de datos).
+
+| Sensor | Descripción |
+| :--- | :--- |
+| <img src="https://api.iconify.design/mdi:database-plus.svg?color=%232196F3" width="15" /> `sensor.scribe_states_written` | Número total de cambios de estado escritos en la base. |
+| <img src="https://api.iconify.design/mdi:database-plus.svg?color=%232196F3" width="15" /> `sensor.scribe_events_written` | Número total de eventos escritos en la base. |
+| <img src="https://api.iconify.design/mdi:buffer.svg?color=%232196F3" width="15" /> `sensor.scribe_buffer_size` | Elementos que esperan actualmente en el búfer de memoria. |
+| <img src="https://api.iconify.design/mdi:timer-sand.svg?color=%232196F3" width="15" /> `sensor.scribe_write_duration` | Tiempo (en ms) de la última escritura en la base. |
+| <img src="https://api.iconify.design/mdi:speedometer.svg?color=%232196F3" width="15" /> `sensor.scribe_states_rate` | Ritmo de estados escritos (por minuto). |
+| <img src="https://api.iconify.design/mdi:speedometer.svg?color=%232196F3" width="15" /> `sensor.scribe_events_rate` | Ritmo de eventos escritos (por minuto). |
+
+
+### Estadísticas de chunks (`enable_stats_chunk: true`)
+
+#### Mostrar los sensores de chunks
+
+Número de chunks (actualizado cada `stats_chunk_interval` minutos).
+
+| Sensor | Descripción |
+| :--- | :--- |
+| <img src="https://api.iconify.design/mdi:cube-outline.svg?color=%232196F3" width="15" /> `sensor.scribe_states_total_chunks` | Número total de chunks de la tabla de estados. |
+| <img src="https://api.iconify.design/mdi:package-down.svg?color=%232196F3" width="15" /> `sensor.scribe_states_compressed_chunks` | Número de chunks ya comprimidos. |
+| <img src="https://api.iconify.design/mdi:package-up.svg?color=%232196F3" width="15" /> `sensor.scribe_states_uncompressed_chunks` | Número de chunks pendientes de comprimir. |
+| <img src="https://api.iconify.design/mdi:cube-outline.svg?color=%232196F3" width="15" /> `sensor.scribe_events_total_chunks` | Número total de chunks de la tabla de eventos. |
+| <img src="https://api.iconify.design/mdi:package-down.svg?color=%232196F3" width="15" /> `sensor.scribe_events_compressed_chunks` | Número de chunks de eventos comprimidos. |
+| <img src="https://api.iconify.design/mdi:package-up.svg?color=%232196F3" width="15" /> `sensor.scribe_events_uncompressed_chunks` | Número de chunks de eventos sin comprimir. |
+
+
+### Estadísticas de tamaño (`enable_stats_size: true`)
+
+#### Mostrar los sensores de tamaño
+
+Espacio ocupado en bytes (actualizado cada `stats_size_interval` minutos).
+
+| Sensor | Descripción |
+| :--- | :--- |
+| <img src="https://api.iconify.design/mdi:database.svg?color=%232196F3" width="15" /> `sensor.scribe_states_total_size` | Tamaño total en disco (datos comprimidos + chunks recientes + índices). |
+| <img src="https://api.iconify.design/mdi:database-search.svg?color=%232196F3" width="15" /> `sensor.scribe_states_original_size` | **Tamaño teórico** si los datos no estuvieran comprimidos (p. ej. 11 GB). |
+| <img src="https://api.iconify.design/mdi:package-variant.svg?color=%232196F3" width="15" /> `sensor.scribe_states_compressed_size` | Tamaño físico de los chunks de datos comprimidos. |
+| <img src="https://api.iconify.design/mdi:package-variant-closed.svg?color=%232196F3" width="15" /> `sensor.scribe_states_uncompressed_size` | Tamaño de los datos recientes aún sin comprimir (o índices pendientes). |
+| <img src="https://api.iconify.design/mdi:percent.svg?color=%232196F3" width="15" /> `sensor.scribe_states_compression_ratio` | Ratio de compresión de los estados (%). |
+| <img src="https://api.iconify.design/mdi:database.svg?color=%232196F3" width="15" /> `sensor.scribe_events_total_size` | Tamaño total en disco de la tabla de eventos. |
+| <img src="https://api.iconify.design/mdi:database-search.svg?color=%232196F3" width="15" /> `sensor.scribe_events_original_size` | Tamaño teórico de los eventos antes de comprimir. |
+| <img src="https://api.iconify.design/mdi:package-variant.svg?color=%232196F3" width="15" /> `sensor.scribe_events_compressed_size` | Tamaño de los datos de eventos comprimidos. |
+| <img src="https://api.iconify.design/mdi:package-variant-closed.svg?color=%232196F3" width="15" /> `sensor.scribe_events_uncompressed_size` | Tamaño de los datos de eventos sin comprimir. |
+| <img src="https://api.iconify.design/mdi:percent.svg?color=%232196F3" width="15" /> `sensor.scribe_events_compression_ratio` | Ratio de compresión de los eventos (%). |
+
+</details>
+
+<details>
+<summary><b>🖼️ Panel</b></summary>
+<br>
+
+En este repositorio hay una disposición Lovelace lista para usar con todos los
+sensores útiles de Scribe (estadísticas de la base, ratios de compresión,
+rendimiento de escritura), en dos variantes:
+
+| Archivo | Qué es | Dónde pegarlo |
+| --- | --- | --- |
+| [`lovelace_scribe_card.yaml`](lovelace_scribe_card.yaml) | Una **sola tarjeta** (`type: vertical-stack`) | El editor YAML de tarjeta («Añadir tarjeta» → «Manual») |
+| [`lovelace_scribe_view.yaml`](lovelace_scribe_view.yaml) | Una **vista completa** (`title` / `icon` / `cards`) | El editor YAML de vista |
+
+> ⚠️ No son intercambiables. Pegar el archivo de *vista* en un editor de
+> *tarjeta* falla con **«No card type configured»**, porque la configuración de
+> una tarjeta debe empezar por una clave `type:`.
+
+**Opción A — añadirla como tarjeta (lo más fácil, funciona en cualquier tipo de vista):**
+
+1.  Abre tu panel y pulsa «Editar panel» (icono del lápiz).
+2.  Pulsa **+ Añadir tarjeta** y baja hasta el final del selector para elegir **Manual**.
+3.  Copia el contenido de [`lovelace_scribe_card.yaml`](lovelace_scribe_card.yaml), sustituye todo lo que haya en el editor y pulsa **Guardar**.
+
+**Opción B — añadirla como vista dedicada:**
+
+1.  Abre tu panel y pulsa «Editar panel» (icono del lápiz).
+2.  Pulsa el botón **+** *en la barra de pestañas superior* (junto a los nombres de tus vistas) para añadir una vista, no el botón «Añadir tarjeta».
+3.  En el diálogo de la vista, abre el menú ⋮ (o el botón «Mostrar editor de código») y elige **Editar en YAML**.
+4.  Copia el contenido de [`lovelace_scribe_view.yaml`](lovelace_scribe_view.yaml), sustituye todo lo que haya en el editor y pulsa **Guardar**.
+
+</details>
+
+<details>
+<summary><b>📦 Migrar desde InfluxDB, LTSS, el recorder o Scribe 2.x</b></summary>
+<br>
+
+### Actualizar desde Scribe 2.x
+
+Scribe 3.0 sustituyó la tabla `states` por `states_raw` más una vista de
+compatibilidad, y dio a `entities` una clave primaria numérica. La conversión de
+una base antigua la hacían las versiones 3.x y se **eliminó en la 3.9**.
+
+Si tu base de datos todavía tiene una *tabla* `states` (en lugar de una vista),
+una tabla `states_legacy`, o una tabla `entities` sin columna `id`, Scribe se
+detiene al arrancar, no registra nada y genera un problema en Reparaciones, sin
+renombrar, crear ni eliminar nada. Instala **Scribe 3.8**, deja Home Assistant
+en marcha hasta que los registros indiquen que la migración ha terminado (unos
+quince minutos en una base grande) y actualiza de nuevo.
+
+Las instalaciones nuevas y cualquier base creada por una versión 3.x no se ven
+afectadas.
+
+### Importar datos desde otras fuentes
+
+Scribe incluye scripts para importar datos desde varias fuentes.
+
+### Migración desde InfluxDB
+
+#### Mostrar la guía de migración de InfluxDB
+
+1. Sitúate en el directorio `migration`:
+   ```bash
+   cd migration
+   ```
+
+2. Instala las dependencias:
+   ```bash
+   pip install influxdb-client psycopg2-binary python-dotenv
+   ```
+
+3. Configura la migración:
+   ```bash
+   cp .env.example .env
+   nano .env
+   # Rellena [InfluxDB Configuration], [Scribe Configuration] y [Migration Settings]
+   ```
+
+4. Ejecuta la migración:
+   ```bash
+   python3 influx2scribe.py
+   ```
+
+
+### Migración desde LTSS
+
+#### Mostrar la guía de migración de LTSS
+
+1. Sitúate en el directorio `migration`:
+   ```bash
+   cd migration
+   ```
+
+2. Instala las dependencias:
+   ```bash
+   pip install psycopg2-binary python-dotenv
+   ```
+
+3. Configura la migración:
+   ```bash
+   cp .env.example .env
+   nano .env
+   # Rellena [LTSS Configuration], [Scribe Configuration] y [Migration Settings]
+   ```
+
+4. Ejecuta la migración:
+   ```bash
+   python3 ltss2scribe.py
+   ```
+
+
+### Migración desde Recorder
+
+#### Mostrar la guía de migración de Recorder
+
+1. Sitúate en el directorio `migration`:
+   ```bash
+   cd migration
+   ```
+
+2. Instala las dependencias:
+   ```bash
+   pip install psycopg2-binary python-dotenv
+   ```
+
+3. Configura la migración:
+   ```bash
+   cp .env.example .env
+   nano .env
+   # Rellena [Recorder Configuration], [Scribe Configuration] y [Migration Settings]
+   ```
+
+4. Ejecuta la migración:
+   ```bash
+   python3 recorder2scribe.py
+   ```
+
+</details>
+
+<details>
+<summary><b>🩺 Solución de problemas</b></summary>
+<br>
 
 ### Lo primero que hay que mirar
 
@@ -701,40 +744,18 @@ Loops), esenciales para el rendimiento de Scribe con grandes volúmenes.
 ### ¿Sigues con problemas?
 [Abre una incidencia](https://github.com/jonathan-gtd/scribe/issues) en GitHub con tus registros y tu configuración. ¡Estaré encantado de ayudar!
 
-## Panel / Vista
+</details>
 
-En este repositorio hay una disposición Lovelace lista para usar con todos los
-sensores útiles de Scribe (estadísticas de la base, ratios de compresión,
-rendimiento de escritura), en dos variantes:
-
-| Archivo | Qué es | Dónde pegarlo |
-| --- | --- | --- |
-| [`lovelace_scribe_card.yaml`](lovelace_scribe_card.yaml) | Una **sola tarjeta** (`type: vertical-stack`) | El editor YAML de tarjeta («Añadir tarjeta» → «Manual») |
-| [`lovelace_scribe_view.yaml`](lovelace_scribe_view.yaml) | Una **vista completa** (`title` / `icon` / `cards`) | El editor YAML de vista |
-
-> ⚠️ No son intercambiables. Pegar el archivo de *vista* en un editor de
-> *tarjeta* falla con **«No card type configured»**, porque la configuración de
-> una tarjeta debe empezar por una clave `type:`.
-
-**Opción A — añadirla como tarjeta (lo más fácil, funciona en cualquier tipo de vista):**
-
-1.  Abre tu panel y pulsa «Editar panel» (icono del lápiz).
-2.  Pulsa **+ Añadir tarjeta** y baja hasta el final del selector para elegir **Manual**.
-3.  Copia el contenido de [`lovelace_scribe_card.yaml`](lovelace_scribe_card.yaml), sustituye todo lo que haya en el editor y pulsa **Guardar**.
-
-**Opción B — añadirla como vista dedicada:**
-
-1.  Abre tu panel y pulsa «Editar panel» (icono del lápiz).
-2.  Pulsa el botón **+** *en la barra de pestañas superior* (junto a los nombres de tus vistas) para añadir una vista, no el botón «Añadir tarjeta».
-3.  En el diálogo de la vista, abre el menú ⋮ (o el botón «Mostrar editor de código») y elige **Editar en YAML**.
-4.  Copia el contenido de [`lovelace_scribe_view.yaml`](lovelace_scribe_view.yaml), sustituye todo lo que haya en el editor y pulsa **Guardar**.
-
-## Ecosistema / Proyectos relacionados
+<details>
+<summary><b>🔗 Proyectos relacionados</b></summary>
+<br>
 
 Estos proyectos funcionan muy bien con Scribe:
 
 - [timescale_database_reader](https://github.com/remmob/timescale_database_reader): un componente personalizado para volver a leer datos de TimescaleDB en sensores de Home Assistant.
 - [timescale-plotly-card](https://github.com/remmob/timescale-plotly-card): una tarjeta basada en Plotly, muy personalizable, capaz de consultar TimescaleDB directamente.
+
+</details>
 
 ## Licencia
 
