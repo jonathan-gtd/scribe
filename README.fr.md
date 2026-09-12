@@ -18,6 +18,7 @@ Une explication de la structure des données et de la façon de l'interroger se 
 - [Configuration](#configuration)
 - [Réglage du stockage](#réglage-du-stockage)
 - [Rétention](#rétention)
+- [Résumés](#résumés)
 - [Schéma de la base de données](#schéma-de-la-base-de-données)
 - [Migration](#migration)
 - [Capteurs de statistiques](#capteurs-de-statistiques)
@@ -150,6 +151,7 @@ scribe:
   enable_table_devices: true
   enable_table_integrations: true
   enable_table_users: true
+  enable_rollups: false
 ```
 </details>
 
@@ -194,6 +196,7 @@ scribe:
 | `enable_table_devices` | Activer la création et la synchronisation de la table `devices`. |
 | `enable_table_integrations` | Activer la création et la synchronisation de la table `integrations`. |
 | `enable_table_users` | Activer la création et la synchronisation de la table `users`. |
+| `enable_rollups` | Conserver des résumés horaires et journaliers pré-calculés des états (`states_hourly`, `states_daily`). Désactivé par défaut. |
 </details>
 
 ## Réglage du stockage
@@ -322,6 +325,36 @@ Ce qu'il faut savoir :
 - Les valeurs acceptées sont des intervalles simples : `30 days`, `6 months`,
   `1 year`. Toute autre valeur est refusée avec une erreur plutôt qu'envoyée à
   la base.
+
+## Résumés
+
+Un an d'un capteur qui remonte une valeur toutes les 30 secondes, c'est environ un million de lignes. Un graphique sur cette année les lit toutes, à chaque affichage.
+
+Avec `enable_rollups: true`, TimescaleDB tient à jour deux résumés de vos états au fil de l'écriture — horaire et journalier — et un graphique sur plusieurs années lit des milliers de lignes au lieu de millions.
+
+```yaml
+scribe:
+  enable_rollups: true
+```
+
+Cela ajoute deux vues :
+
+| Vue | Une ligne par | Colonnes |
+| --- | --- | --- |
+| `states_hourly` | entité et heure | `entity_id`, `bucket`, `value_avg`, `value_min`, `value_max`, `samples` |
+| `states_daily` | entité et jour | les mêmes |
+
+```sql
+SELECT bucket, value_avg, value_min, value_max
+FROM states_daily
+WHERE entity_id = 'sensor.temperature_exterieure'
+  AND bucket > now() - interval '2 years'
+ORDER BY bucket;
+```
+
+Seuls les états numériques sont résumés — la moyenne de `on` et `off` n'a aucun sens — et `samples` indique combien d'états chaque ligne représente.
+
+**Ce sont des données dérivées.** Rien de ce qui compte n'est dupliqué : désactiver l'option supprime les deux vues, la réactiver les reconstruit depuis l'historique, et vos états ne sont jamais touchés. TimescaleDB les maintient lui-même ; Scribe se contente de les créer.
 
 ## Schéma de la base de données
 

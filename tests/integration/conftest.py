@@ -43,6 +43,12 @@ BASE_TIME = datetime(2026, 8, 1, 12, 0, 0, tzinfo=timezone.utc)
 # so the kind is read from the catalog rather than assumed — DROP VIEW on a
 # table (and vice versa) is an error, not a no-op.
 _SCRIBE_RELATIONS = (
+    # The summaries come first: the views depend on the aggregates, and the
+    # aggregates on states_raw.
+    "states_hourly",
+    "states_hourly_raw",
+    "states_daily",
+    "states_daily_raw",
     "states",
     "states_legacy",
     "states_raw",
@@ -59,6 +65,21 @@ _RELKIND_KEYWORD = {"r": "TABLE", "p": "TABLE", "v": "VIEW", "m": "MATERIALIZED 
 
 async def drop_scribe_relations(conn):
     """Remove every Scribe relation from the public schema, whatever its kind."""
+    # Continuous aggregates look like plain views in pg_class, but TimescaleDB
+    # refuses to drop one with DROP VIEW. They go first, and take the refresh
+    # policies with them.
+    try:
+        aggregates = await conn.fetch(
+            "SELECT view_name FROM timescaledb_information.continuous_aggregates "
+            "WHERE view_schema = 'public'"
+        )
+    except Exception:  # plain PostgreSQL has no such catalog
+        aggregates = []
+    for row in aggregates:
+        await conn.execute(
+            f'DROP MATERIALIZED VIEW IF EXISTS "{row["view_name"]}" CASCADE'
+        )
+
     rows = await conn.fetch(
         """
         -- relkind is Postgres' "char" type, which asyncpg hands back as bytes;

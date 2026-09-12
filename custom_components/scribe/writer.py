@@ -44,6 +44,7 @@ from .const import (
     DEFAULT_ENABLE_DEVICES,
     DEFAULT_ENABLE_INTEGRATIONS,
     DEFAULT_ENABLE_STATS_IO,
+    DEFAULT_ENABLE_ROLLUPS,
     DEFAULT_ENABLE_USERS,
     DEFAULT_FLUSH_INTERVAL,
     DEFAULT_MAX_QUEUE_SIZE,
@@ -201,6 +202,7 @@ ISSUE_SSL_DEGRADED = "ssl_degraded"
 ISSUE_VIEW_FAILED = "view_failed"
 ISSUE_LEGACY_SCHEMA = "legacy_schema"
 ISSUE_SCHEMA_UNAVAILABLE = "schema_unavailable"
+ISSUE_ROLLUPS_FAILED = "rollups_failed"
 # Per-table: states and events can degrade independently.
 ISSUE_NO_HYPERTABLE = "no_hypertable_{table}"
 ISSUE_NO_COMPRESSION = "no_compression_{table}"
@@ -364,6 +366,25 @@ async def ensure_timescaledb(conn) -> bool:
     return True
 
 
+@dataclass(frozen=True)
+class _Rollup:
+    """One summary of `states_raw`: what it buckets by, and how it is kept."""
+
+    aggregate: str
+    view: str
+    bucket: str
+    #: How far back a refresh looks, so a late batch still lands in it.
+    start_offset: str
+    schedule: str
+
+
+# Hourly for the last weeks of a chart, daily for the years behind it.
+_ROLLUPS = (
+    _Rollup("states_hourly_raw", "states_hourly", "1 hour", "3 days", "30 minutes"),
+    _Rollup("states_daily_raw", "states_daily", "1 day", "30 days", "1 hour"),
+)
+
+
 _ENTITY_COLUMNS = (
     "entity_id",
     "unique_id",
@@ -477,6 +498,7 @@ class WriterConfig:
     enable_table_integrations: bool = DEFAULT_ENABLE_INTEGRATIONS
     enable_table_users: bool = DEFAULT_ENABLE_USERS
     enable_stats_io: bool = DEFAULT_ENABLE_STATS_IO
+    enable_rollups: bool = DEFAULT_ENABLE_ROLLUPS
 
 
 class ScribeWriter:
@@ -530,6 +552,7 @@ class ScribeWriter:
         self.enable_table_integrations = config.enable_table_integrations
         self.enable_table_users = config.enable_table_users
         self.enable_stats_io = config.enable_stats_io
+        self.enable_rollups = config.enable_rollups
 
         # Stats for sensors
         self._states_written = 0
@@ -1298,6 +1321,9 @@ class ScribeWriter:
             self._has_timescaledb = await self._check_timescaledb_available()
 
             await self._init_hypertables()
+
+            # After the hypertables: a continuous aggregate needs one.
+            await self._init_rollups()
 
             _LOGGER.info("[writer.init_db] Database initialized successfully")
             self._connected = True
@@ -2947,6 +2973,143 @@ class ScribeWriter:
                 old_entity_id,
             )
         return merge_reason, merged_orphan_rows, dropped_duplicate_rows
+
+    # ------------------------------------------------------------------
+    # Rollups
+    # ------------------------------------------------------------------
+
+    async def _init_rollups(self):
+        """Keep the hourly and daily summaries of `states_raw` in step.
+
+        A year of a chatty sensor is millions of rows, and a chart of it reads
+        every one of them. These are TimescaleDB continuous aggregates: the
+        database maintains them itself, incrementally, from what was just
+        written, so a query over years touches thousands of rows instead.
+
+        Scribe owns them the way it owns its retention policy: turning the
+        option off removes them. They are derived data — dropping them loses
+        nothing, and turning it back on rebuilds them from the history.
+        """
+        if not self.record_states:
+            return
+
+        if not self.enable_rollups:
+            await self._drop_rollups()
+            self._clear_issue(ISSUE_ROLLUPS_FAILED)
+            return
+
+        if not self._has_timescaledb:
+            # `no_timescaledb` already tells that story; a second card about
+            # one feature of the extension would be the same news twice.
+            _LOGGER.debug(
+                "[writer._init_rollups] No TimescaleDB: no continuous aggregates."
+            )
+            return
+
+        try:
+            for rollup in _ROLLUPS:
+                await self._create_rollup(rollup)
+            self._clear_issue(ISSUE_ROLLUPS_FAILED)
+            _LOGGER.info(
+                "[writer._init_rollups] Summaries in place: %s",
+                ", ".join(rollup.view for rollup in _ROLLUPS),
+            )
+        except Exception as e:
+            _LOGGER.error(
+                "[writer._init_rollups] Could not build the summaries: %s (%s)",
+                e,
+                type(e).__name__,
+                exc_info=True,
+            )
+            # Recording is unaffected — this is a read-side convenience — but
+            # someone turned it on and is waiting for views that are not there.
+            self._report_issue(
+                ISSUE_ROLLUPS_FAILED,
+                "rollups_failed",
+                {"error": f"{e} ({type(e).__name__})"},
+                severity=ir.IssueSeverity.WARNING,
+            )
+
+    async def _create_rollup(self, rollup: "_Rollup"):
+        """One continuous aggregate, its refresh policy, and the view over it.
+
+        Every interval here is Scribe's own constant, never user input, so
+        they can be written into the statement. `CREATE MATERIALIZED VIEW …
+        WITH (timescaledb.continuous)` also refuses to run inside a
+        transaction block, which is why each statement goes on its own.
+        """
+        async with self._pool.acquire() as conn:
+            await conn.execute(f"""
+                CREATE MATERIALIZED VIEW IF NOT EXISTS {rollup.aggregate}
+                WITH (timescaledb.continuous) AS
+                SELECT
+                    metadata_id,
+                    time_bucket(INTERVAL '{rollup.bucket}', time) AS bucket,
+                    avg(value) AS value_avg,
+                    min(value) AS value_min,
+                    max(value) AS value_max,
+                    count(*) AS samples
+                FROM states_raw
+                GROUP BY metadata_id, 2
+                WITH NO DATA
+            """)
+
+            # The policy is what fills it as states arrive. `start_offset` is
+            # how far back each run looks: far enough to catch a batch that
+            # arrived late, not so far that it rereads the history every time.
+            await conn.execute(
+                "SELECT add_continuous_aggregate_policy($1::regclass, "
+                "start_offset => $2::text::interval, "
+                "end_offset => $3::text::interval, "
+                "schedule_interval => $4::text::interval, "
+                "if_not_exists => TRUE)",
+                rollup.aggregate,
+                rollup.start_offset,
+                rollup.bucket,
+                rollup.schedule,
+            )
+
+            # What people query is entity_id, not metadata_id — the same
+            # reason `states` exists over `states_raw`.
+            await conn.execute(f"""
+                CREATE OR REPLACE VIEW {rollup.view} AS
+                SELECT e.entity_id, r.bucket, r.value_avg, r.value_min,
+                       r.value_max, r.samples
+                FROM {rollup.aggregate} r
+                JOIN entities e ON e.id = r.metadata_id
+            """)
+
+    async def _drop_rollups(self):
+        """Remove the summaries, if this database has any.
+
+        Only ever reached with the option off. The view goes first, since it
+        depends on the aggregate, and dropping the aggregate takes its refresh
+        policy with it.
+        """
+        try:
+            for rollup in _ROLLUPS:
+                if not await self._fetchval(
+                    "SELECT to_regclass($1) IS NOT NULL",
+                    self._qualified(rollup.aggregate),
+                ):
+                    continue
+                _LOGGER.info(
+                    "[writer._drop_rollups] Removing %s: summaries are turned off",
+                    rollup.view,
+                )
+                await self._execute(
+                    f"DROP VIEW IF EXISTS {self._qualified(rollup.view)}"
+                )
+                await self._execute(
+                    "DROP MATERIALIZED VIEW IF EXISTS "
+                    f"{self._qualified(rollup.aggregate)}"
+                )
+        except Exception as e:
+            _LOGGER.debug(
+                "[writer._drop_rollups] Could not remove the summaries: %s (%s)",
+                e,
+                type(e).__name__,
+            )
 
     # ------------------------------------------------------------------
     # Purge
