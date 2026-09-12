@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Dutch**: `README.nl.md` joins the four existing translations, and `nl.json` — which existed but covered barely half of `strings.json`, so a Dutch user read every Repairs issue in English — is now complete and checked by the same tests as the other documented languages.
+
 ## [4.4.0] - 2026-09-12
 
 ### Changed

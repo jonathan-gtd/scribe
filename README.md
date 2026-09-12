@@ -11,7 +11,7 @@ Every state and every event, through `asyncpg` — without blocking the event lo
 
 [![Release](https://img.shields.io/github/v/release/jonathan-gtd/scribe?color=41BDF5)](https://github.com/jonathan-gtd/scribe/releases/latest) [![Downloads](https://img.shields.io/github/downloads/jonathan-gtd/scribe/total?color=41BDF5)](https://github.com/jonathan-gtd/scribe/releases) [![Tests](https://img.shields.io/github/actions/workflow/status/jonathan-gtd/scribe/tests.yaml?branch=master&label=tests)](https://github.com/jonathan-gtd/scribe/actions/workflows/tests.yaml) [![License](https://img.shields.io/github/license/jonathan-gtd/scribe?color=lightgrey)](LICENSE)
 
-[![lang en](https://img.shields.io/badge/lang-en-41BDF5)](README.md) [![lang fr](https://img.shields.io/badge/lang-fr-lightgrey)](README.fr.md) [![lang es](https://img.shields.io/badge/lang-es-lightgrey)](README.es.md) [![lang de](https://img.shields.io/badge/lang-de-lightgrey)](README.de.md)
+[![lang en](https://img.shields.io/badge/lang-en-41BDF5)](README.md) [![lang fr](https://img.shields.io/badge/lang-fr-lightgrey)](README.fr.md) [![lang es](https://img.shields.io/badge/lang-es-lightgrey)](README.es.md) [![lang de](https://img.shields.io/badge/lang-de-lightgrey)](README.de.md) [![lang nl](https://img.shields.io/badge/lang-nl-lightgrey)](README.nl.md)
 
 </div>
 
@@ -232,7 +232,7 @@ Scribe stores history in TimescaleDB **hypertables**: a table that looks and
 queries like any other, but is physically split into **chunks**, each covering a
 slice of time. Almost everything about Scribe's disk usage and query speed comes
 down to that split — a query for last week reads only the chunks that overlap
-last week, compression works one chunk at a time, and *retention* below
+last week, compression works one chunk at a time, and *Retention* below
 deletes whole chunks rather than individual rows.
 
 Two settings control it, both in YAML and in the UI under **Configure →
@@ -460,7 +460,7 @@ data:
 response_variable: purged
 ```
 
-Compressed history is purged as well; TimescaleDB handles it, and the chunks stay compressed. For a rolling window you want to keep applying, use the *retention* below settings instead: a purge is a one-off.
+Compressed history is purged as well; TimescaleDB handles it, and the chunks stay compressed. For a rolling window you want to keep applying, use the *Retention* settings below instead: a purge is a one-off.
 
 </details>
 

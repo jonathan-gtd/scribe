@@ -11,7 +11,7 @@ Cada estado y cada evento, mediante `asyncpg` — sin bloquear el bucle de event
 
 [![Release](https://img.shields.io/github/v/release/jonathan-gtd/scribe?color=41BDF5)](https://github.com/jonathan-gtd/scribe/releases/latest) [![Downloads](https://img.shields.io/github/downloads/jonathan-gtd/scribe/total?color=41BDF5)](https://github.com/jonathan-gtd/scribe/releases) [![Tests](https://img.shields.io/github/actions/workflow/status/jonathan-gtd/scribe/tests.yaml?branch=master&label=tests)](https://github.com/jonathan-gtd/scribe/actions/workflows/tests.yaml) [![License](https://img.shields.io/github/license/jonathan-gtd/scribe?color=lightgrey)](LICENSE)
 
-[![lang en](https://img.shields.io/badge/lang-en-lightgrey)](README.md) [![lang fr](https://img.shields.io/badge/lang-fr-lightgrey)](README.fr.md) [![lang es](https://img.shields.io/badge/lang-es-41BDF5)](README.es.md) [![lang de](https://img.shields.io/badge/lang-de-lightgrey)](README.de.md)
+[![lang en](https://img.shields.io/badge/lang-en-lightgrey)](README.md) [![lang fr](https://img.shields.io/badge/lang-fr-lightgrey)](README.fr.md) [![lang es](https://img.shields.io/badge/lang-es-41BDF5)](README.es.md) [![lang de](https://img.shields.io/badge/lang-de-lightgrey)](README.de.md) [![lang nl](https://img.shields.io/badge/lang-nl-lightgrey)](README.nl.md)
 
 </div>
 
@@ -474,7 +474,7 @@ data:
 response_variable: purged
 ```
 
-El historial comprimido también se purga: TimescaleDB se encarga y los chunks siguen comprimidos. Para una ventana deslizante que se aplique continuamente, use los ajustes de *retención* más abajo: una purga es puntual.
+El historial comprimido también se purga: TimescaleDB se encarga y los chunks siguen comprimidos. Para una ventana deslizante que se aplique continuamente, use los ajustes de *Retención* más abajo: una purga es puntual.
 
 </details>
 
