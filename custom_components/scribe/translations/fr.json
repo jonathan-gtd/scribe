@@ -75,14 +75,16 @@
           "enable_stats_chunk": "Activer les capteurs de statistiques de chunks",
           "stats_chunk_interval": "Intervalle de rafraîchissement des stats chunks",
           "enable_stats_size": "Activer les capteurs de taille",
-          "stats_size_interval": "Intervalle de rafraîchissement des stats de taille"
+          "stats_size_interval": "Intervalle de rafraîchissement des stats de taille",
+          "stats_io_interval": "Fréquence de publication des capteurs d'E/S"
         },
         "data_description": {
           "enable_stats_io": "Expose les compteurs d'écriture, la taille du tampon et la durée d'écriture comme capteurs",
           "enable_stats_chunk": "Expose le nombre de chunks par table (total / compressés / non compressés) comme capteurs",
           "stats_chunk_interval": "Fréquence (en minutes) de rafraîchissement des stats de chunks depuis la base",
           "enable_stats_size": "Expose les tailles par table et les ratios de compression comme capteurs",
-          "stats_size_interval": "Fréquence (en minutes) de rafraîchissement des stats de taille depuis la base"
+          "stats_size_interval": "Fréquence (en minutes) de rafraîchissement des stats de taille depuis la base",
+          "stats_io_interval": "Secondes entre deux valeurs des capteurs d'E/S. Chaque changement est une ligne que Scribe enregistre sur lui-même : un intervalle court remplit votre historique des compteurs de Scribe. 60 secondes par défaut."
         }
       },
       "metadata": {

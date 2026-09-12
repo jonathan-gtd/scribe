@@ -59,6 +59,8 @@ from .const import (
     CONF_ENABLE_STATS_IO,
     CONF_ENABLE_STATS_CHUNK,
     CONF_ENABLE_STATS_SIZE,
+    CONF_STATS_IO_INTERVAL,
+    DEFAULT_STATS_IO_INTERVAL,
     CONF_STATS_CHUNK_INTERVAL,
     CONF_STATS_SIZE_INTERVAL,
     DEFAULT_CHUNK_TIME_INTERVAL,
@@ -119,6 +121,7 @@ CONFIG_SCHEMA = vol.Schema(
                 vol.Optional(CONF_ENABLE_STATS_IO): cv.boolean,
                 vol.Optional(CONF_ENABLE_STATS_CHUNK): cv.boolean,
                 vol.Optional(CONF_ENABLE_STATS_SIZE): cv.boolean,
+                vol.Optional(CONF_STATS_IO_INTERVAL): cv.positive_int,
                 vol.Optional(CONF_STATS_CHUNK_INTERVAL): cv.positive_int,
                 vol.Optional(CONF_STATS_SIZE_INTERVAL): cv.positive_int,
                 vol.Optional(CONF_INCLUDE_DOMAINS): vol.All(
@@ -822,6 +825,7 @@ class _Settings:
     """Everything setup needs, already resolved from its four sources."""
 
     writer: WriterConfig
+    stats_io_seconds: int
     stats_chunk_minutes: int | None
     stats_size_minutes: int | None
     entity_filter: Callable[[str], bool]
@@ -970,6 +974,9 @@ def _resolve_settings(hass: HomeAssistant, entry: ConfigEntry) -> "_Settings | N
             enable_stats_io=get_config(CONF_ENABLE_STATS_IO, DEFAULT_ENABLE_STATS_IO),
             enable_rollups=get_config(CONF_ENABLE_ROLLUPS, DEFAULT_ENABLE_ROLLUPS),
         ),
+        stats_io_seconds=max(
+            1, int(get_config(CONF_STATS_IO_INTERVAL, DEFAULT_STATS_IO_INTERVAL))
+        ),
         stats_chunk_minutes=int(
             get_config(CONF_STATS_CHUNK_INTERVAL, DEFAULT_STATS_CHUNK_INTERVAL)
         )
@@ -1003,7 +1010,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         return False
 
     # Read back by sensor.py when it decides which entities to create.
-    hass.data[DOMAIN][entry.entry_id] = {"enable_stats_io": cfg.enable_stats_io}
+    hass.data[DOMAIN][entry.entry_id] = {
+        "enable_stats_io": cfg.enable_stats_io,
+        "stats_io_seconds": cfg.stats_io_seconds,
+    }
 
     try:
         # Initialize Writer

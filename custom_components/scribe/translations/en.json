@@ -75,14 +75,16 @@
           "enable_stats_chunk": "Enable chunk statistics sensors",
           "stats_chunk_interval": "Chunk stats refresh interval",
           "enable_stats_size": "Enable size statistics sensors",
-          "stats_size_interval": "Size stats refresh interval"
+          "stats_size_interval": "Size stats refresh interval",
+          "stats_io_interval": "How often the I/O sensors publish"
         },
         "data_description": {
           "enable_stats_io": "Expose real-time write counters, buffer size and write duration as sensors",
           "enable_stats_chunk": "Expose per-table chunk counts (total / compressed / uncompressed) as sensors",
           "stats_chunk_interval": "How often (in minutes) chunk stats are refreshed from the database",
           "enable_stats_size": "Expose per-table sizes and compression ratios as sensors",
-          "stats_size_interval": "How often (in minutes) size stats are refreshed from the database"
+          "stats_size_interval": "How often (in minutes) size stats are refreshed from the database",
+          "stats_io_interval": "Seconds between two values of the I/O sensors. Every change is a row Scribe records about itself, so a short interval fills your history with Scribe's own counters. 60 seconds by default."
         }
       },
       "metadata": {

@@ -34,6 +34,10 @@ CONF_MAX_QUEUE_SIZE = "max_queue_size"
 CONF_ENABLE_STATS_CHUNK = "enable_stats_chunk"
 CONF_ENABLE_STATS_SIZE = "enable_stats_size"
 CONF_ENABLE_STATS_IO = "enable_stats_io"
+# How often the I/O sensors publish a value, in seconds. They are read from
+# the writer's counters, so this costs nothing to compute — but every change
+# is a row Scribe records about itself, which is why it is not 30 seconds.
+CONF_STATS_IO_INTERVAL = "stats_io_interval"
 CONF_STATS_CHUNK_INTERVAL = "stats_chunk_interval"
 CONF_STATS_SIZE_INTERVAL = "stats_size_interval"
 
@@ -64,6 +68,7 @@ DEFAULT_TABLE_NAME_EVENTS = "events"
 DEFAULT_ENABLE_STATS_CHUNK = False
 DEFAULT_ENABLE_STATS_SIZE = False
 DEFAULT_ENABLE_STATS_IO = False
+DEFAULT_STATS_IO_INTERVAL = 60  # seconds
 DEFAULT_STATS_CHUNK_INTERVAL = 60  # minutes
 DEFAULT_STATS_SIZE_INTERVAL = 60  # minutes
 

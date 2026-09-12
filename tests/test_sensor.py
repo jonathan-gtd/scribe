@@ -208,3 +208,58 @@ async def test_async_setup_entry_statistics(hass):
     # 2 Original Size - Enabled
     # Total = 22
     assert len(entities) == 22
+
+    # The I/O sensors publish on a schedule of their own, and that schedule
+    # must be cancelled when the entry unloads: unloading is what this mock
+    # entry stands in for, so it is called here.
+    unsubscribe = entry.async_on_unload.call_args[0][0]
+    unsubscribe()
+
+
+async def test_the_io_sensors_publish_on_their_own_interval(hass):
+    """Home Assistant polls a sensor every 30 seconds; these must not be polled.
+
+    Their values move on almost every read, and each change is a row Scribe
+    records about itself — on one real installation, its own counters were the
+    three busiest entities in the database.
+    """
+    from datetime import timedelta
+    from unittest.mock import patch
+
+    from custom_components.scribe.const import DOMAIN
+    from custom_components.scribe.sensor import ScribeSensor, async_setup_entry
+
+    entry = MagicMock()
+    entry.entry_id = "test_entry"
+    entry.options = {}
+    entry.data = {}
+    hass.data = {
+        DOMAIN: {
+            entry.entry_id: {
+                "writer": MagicMock(),
+                "chunk_coordinator": None,
+                "size_coordinator": None,
+                "enable_stats_io": True,
+                "stats_io_seconds": 300,
+            }
+        }
+    }
+    async_add_entities = MagicMock()
+
+    with patch(
+        "custom_components.scribe.sensor.async_track_time_interval"
+    ) as track_interval:
+        await async_setup_entry(hass, entry, async_add_entities)
+
+    entities = async_add_entities.call_args[0][0]
+    assert entities, "no sensors were created"
+    assert all(
+        not entity.should_poll
+        for entity in entities
+        if isinstance(entity, ScribeSensor)
+    )
+
+    track_interval.assert_called_once()
+    assert track_interval.call_args[0][2] == timedelta(seconds=300), (
+        "the configured interval is what schedules them"
+    )
