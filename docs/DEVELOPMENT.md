@@ -85,8 +85,8 @@ Ignored by git and safe to delete: `venv/`, `.pytest_cache/`, `.ruff_cache/`, `_
    2. A `ScribeWriter` is built and `writer.start()` is awaited. `start()` **never fails because the database is down**. It starts the writer loop either way, and the loop reconnects in the background (see [3.4](#34-connection-and-reconnection)).
    3. The statistics coordinators are created, only for the sensor groups that are enabled.
    4. `_async_late_setup` is started as a background task. It pushes every registry into the database (`_sync_metadata`) and primes the coordinators. It runs in the background so a large registry cannot hit Home Assistant's bootstrap timeout.
-   5. The `sensor` and `binary_sensor` platforms are set up.
-   6. The listeners are registered: state changes (if `record_states`), events (if `record_events`), and the entity, device, area and user registries.
+   5. The listeners are registered: state changes (if `record_states`), events (if `record_events`), and the entity, device, area and user registries. **Before the platforms**, so a state set while they load is recorded as it changes rather than only in its final form.
+   6. With `record_states`, `_record_current_states` queues the state of everything Home Assistant has already set ([3.7](#37-the-states-already-set-at-startup)), then the `sensor` and `binary_sensor` platforms are set up.
    7. The writer is set to stop on `homeassistant_final_write`, **not** `homeassistant_stop`. Home Assistant runs the specific listeners of an event before the `MATCH_ALL` ones, so stopping on `homeassistant_stop` flushed before Scribe had recorded the stop event and everything emitted during shutdown.
    8. The `scribe.flush` and `scribe.query` services are registered.
    9. An update listener is added: **any change in the options flow unloads and sets up the entry again**. So every check done at startup is also done after each options change.
@@ -176,7 +176,15 @@ The names `states` and `events` come from `DEFAULT_TABLE_NAME_STATES` / `DEFAULT
   - that row belongs to an entity that is **provably gone** (its `unique_id`/`domain`/`platform` resolve to nothing in Home Assistant's registry) → its history is merged into the renamed entity and the row is deleted;
   - otherwise → the rename is **refused**, nothing is modified, and `rename_refused_live` or `rename_refused_unprovable` is raised.
 
-### 3.7 Services, sensors, diagnostics
+### 3.7 The states already set at startup
+
+The listener only ever sees what changes *after* it is registered, and Scribe is set up well into a Home Assistant start. An entity that changed while Home Assistant was down and does not change again would never be recorded: the history shows the previous value carrying on across the gap.
+
+So `_record_current_states` walks `hass.states.async_all()` at setup and queues each state that passes the filter, through the same `_state_row` the listener uses — **same `last_updated`**, which is what makes it free: the row is the one already in `states_raw` for everything that did not change, the primary key on `(metadata_id, time)` refuses it, and only what really changed is added.
+
+That key is therefore the condition. A database created by Scribe 3.1 to 3.5 has none, and no release ever added it ([6.6](#66-upgrade-tests)), so writing a state twice would store it twice: `writer.deduplicates_states` is false there, the snapshot is skipped, and a warning says why. `_states_have_primary_key` settles it once per start, in `init_db`.
+
+### 3.8 Services, sensors, diagnostics
 
 - `scribe.flush` runs a flush immediately.
 - `scribe.query` runs one SQL statement in a `READ ONLY` transaction with `statement_timeout = 120000` ms (`QUERY_TIMEOUT_MS`). The rows go through the same sanitizer as the write path, so `Decimal` and `timedelta` come back as numbers.

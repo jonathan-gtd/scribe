@@ -29,12 +29,23 @@ async def _flush(hass, writer):
     await writer._flush()
 
 
-async def _recorded_entities(pool):
+async def _recorded_entities(pool, *, include_scribes_own=False):
+    """The entity ids recorded, Scribe's own entities left out by default.
+
+    Scribe registers its listener before its platforms, so its own sensors are
+    recorded like any other entity. A test about filtering should not have to
+    name them.
+    """
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             "SELECT DISTINCT entity_id FROM states ORDER BY entity_id"
         )
-    return [r["entity_id"] for r in rows]
+    return [
+        r["entity_id"]
+        for r in rows
+        if include_scribes_own
+        or not r["entity_id"].startswith(("sensor.scribe_", "binary_sensor.scribe_"))
+    ]
 
 
 @pytest.mark.asyncio
@@ -355,3 +366,71 @@ async def test_everything_fired_during_shutdown_is_written(hass, scribe_entry):
         )
     finally:
         await conn.close()
+
+
+async def _rows_for(pool, entity_id):
+    async with pool.acquire() as conn:
+        return await conn.fetch(
+            "SELECT time, state, value FROM states WHERE entity_id = $1 ORDER BY time",
+            entity_id,
+        )
+
+
+@pytest.mark.asyncio
+async def test_states_already_set_are_recorded_at_startup(hass, scribe_entry):
+    """The listener only sees what changes after it exists.
+
+    Home Assistant is well into its start by the time Scribe is set up, so an
+    entity that does not change again would never be recorded at all.
+    """
+    hass.states.async_set("sensor.already_there", "21.5")
+
+    entry, writer = await scribe_entry()
+    await _flush(hass, writer)
+
+    rows = await _rows_for(writer._pool, "sensor.already_there")
+    assert [r["value"] for r in rows] == [21.5]
+
+
+@pytest.mark.asyncio
+async def test_a_restart_does_not_record_the_same_state_twice(hass, scribe_entry):
+    """The snapshot re-offers states already recorded; the key must drop them.
+
+    Every row it queues carries the state's own `last_updated`, so a state that
+    did not change is the row already in `states_raw` — same (metadata_id,
+    time) — and writing it again is a no-op. Without that, every restart would
+    duplicate the whole state of the installation.
+    """
+    hass.states.async_set("sensor.unchanged", "21.5")
+    entry, writer = await scribe_entry()
+    await _flush(hass, writer)
+    assert writer.deduplicates_states
+
+    # A restart: unload, set up again on the same database, same states.
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    entry, writer = await scribe_entry()
+    await _flush(hass, writer)
+
+    rows = await _rows_for(writer._pool, "sensor.unchanged")
+    assert [r["value"] for r in rows] == [21.5], "the state was recorded twice"
+
+
+@pytest.mark.asyncio
+async def test_a_state_that_changed_while_scribe_was_down_is_recovered(
+    hass, scribe_entry
+):
+    """The whole point of the snapshot: the gap an outage leaves in a history."""
+    hass.states.async_set("sensor.moved", "1")
+    entry, writer = await scribe_entry()
+    await _flush(hass, writer)
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    hass.states.async_set("sensor.moved", "2")  # nobody is listening
+
+    entry, writer = await scribe_entry()
+    await _flush(hass, writer)
+
+    rows = await _rows_for(writer._pool, "sensor.moved")
+    assert [r["value"] for r in rows] == [1.0, 2.0]

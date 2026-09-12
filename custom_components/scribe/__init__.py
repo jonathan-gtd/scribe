@@ -395,6 +395,80 @@ async def _refresh_coordinators(*coordinators):
             )
 
 
+def _state_row(state, exclude_attributes) -> dict:
+    """One Home Assistant state, as a queued row.
+
+    Shared by the listener and the startup snapshot so a state recorded at
+    startup is byte for byte the one the listener would have recorded — same
+    `last_updated`, which is what lets the database drop the duplicate.
+    """
+    try:
+        state_val = float(state.state)
+        state_str = None
+    except (ValueError, TypeError):
+        # Not numeric: keep the text and leave `value` NULL.
+        state_val = None
+        state_str = state.state
+
+    return {
+        "type": "state",
+        "time": state.last_updated,
+        "entity_id": state.entity_id,
+        "state": state_str,
+        "value": state_val,
+        "attributes": {
+            k: v for k, v in state.attributes.items() if k not in exclude_attributes
+        },
+    }
+
+
+def _record_current_states(hass, writer, entity_filter, exclude_attributes) -> int:
+    """Queue the state of everything Home Assistant has already set.
+
+    The listener only ever sees what changes *after* it is registered, and
+    Home Assistant is well into its start by the time Scribe is set up. An
+    entity whose state changed while Home Assistant was down, and which does
+    not change again afterwards, would never be recorded: the history would
+    show the previous value carrying on across the gap.
+
+    Almost every row this queues is already in the database — same entity,
+    same `last_updated` — and the primary key on `(metadata_id, time)` drops
+    it. Only what actually changed while Home Assistant was down survives,
+    which is the point. Without that key the writes cannot be deduplicated,
+    so the snapshot is skipped rather than duplicating the history at every
+    restart (databases created by Scribe 3.1 to 3.5).
+    """
+    if not writer.deduplicates_states:
+        _LOGGER.warning(
+            "[__init__._record_current_states] Not recording the states already "
+            "set: this database has no primary key on states_raw, so they could "
+            "not be deduplicated against what is already recorded. States are "
+            "recorded from now on, as before."
+        )
+        return 0
+
+    recorded = 0
+    for state in hass.states.async_all():
+        if not entity_filter(state.entity_id):
+            continue
+        try:
+            writer.enqueue(_state_row(state, exclude_attributes))
+            recorded += 1
+        except Exception as e:
+            _LOGGER.error(
+                "[__init__._record_current_states] Error enqueuing the current state of %s: %s (%s)",
+                state.entity_id,
+                e,
+                type(e).__name__,
+                exc_info=True,
+            )
+    _LOGGER.debug(
+        "[__init__._record_current_states] Queued %d state(s) already set at startup",
+        recorded,
+    )
+    return recorded
+
+
 def _make_state_listener(writer, entity_filter, exclude_attributes):
     """Build the state-change callback.
 
@@ -415,28 +489,7 @@ def _make_state_listener(writer, entity_filter, exclude_attributes):
             return
 
         try:
-            state_val = float(new_state.state)
-            state_str = None
-        except (ValueError, TypeError):
-            # Not numeric: keep the text and leave `value` NULL.
-            state_val = None
-            state_str = new_state.state
-
-        try:
-            writer.enqueue(
-                {
-                    "type": "state",
-                    "time": new_state.last_updated,
-                    "entity_id": entity_id,
-                    "state": state_str,
-                    "value": state_val,
-                    "attributes": {
-                        k: v
-                        for k, v in new_state.attributes.items()
-                        if k not in exclude_attributes
-                    },
-                }
-            )
+            writer.enqueue(_state_row(new_state, exclude_attributes))
         except Exception as e:
             _LOGGER.error(
                 "[__init__.handle_event] Error enqueuing state for %s (state=%r): %s (%s)",
@@ -934,13 +987,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # Launch background metadata sync and coordinator refreshes
         hass.async_create_task(_async_late_setup())
 
-        # Forward setup to platforms (Sensor, Binary Sensor)
-        await hass.config_entries.async_forward_entry_setups(
-            entry, ["sensor", "binary_sensor"]
-        )
-
-        # Event listeners. Both are built outside this function: they are the
-        # hot path, and reading them here would mean reading setup as well.
+        # Event listeners first, then the platforms. Both are built outside
+        # this function: they are the hot path, and reading them here would
+        # mean reading setup as well. Forwarding the platforms first cost
+        # Scribe every state set while it waited — its own entities included,
+        # which is why the connectivity sensor was never recorded at a start.
         _LOGGER.debug(
             "[__init__.async_setup_entry] Registering event listener (record_states=%s, record_events=%s)",
             cfg.record_states,
@@ -956,11 +1007,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     ),
                 )
             )
+            # What Home Assistant had already set before this listener existed.
+            # Ordering the listener first narrows that window; it cannot close
+            # it, since Scribe is set up well into a start.
+            _record_current_states(
+                hass, writer, cfg.entity_filter, cfg.exclude_attributes
+            )
 
         if cfg.record_events:
             _register_event_listeners(
                 hass, entry, writer, cfg.include_events, cfg.exclude_events
             )
+
+        # Forward setup to platforms (Sensor, Binary Sensor)
+        await hass.config_entries.async_forward_entry_setups(
+            entry, ["sensor", "binary_sensor"]
+        )
 
         # Real-time metadata sync: keep each registry's table current as
         # Home Assistant changes it, rather than only at startup.
