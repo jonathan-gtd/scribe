@@ -573,6 +573,35 @@ data:
 response_variable: query_result
 ```
 
+### `scribe.purge`
+Löscht aufgezeichnete Historie. **Das lässt sich nicht rückgängig machen.**
+
+**Parameter** (mindestens einer der ersten beiden ist erforderlich):
+- `entity_id`: die zu löschenden Entitäten. Ohne `keep_days` werden ihre gesamte Historie *und* ihre Zeile in der Tabelle `entities` gelöscht — zeichnet man sie erneut auf, beginnt alles von vorn.
+- `keep_days`: löscht alles, was älter ist als diese Anzahl Tage.
+- `events` (Standard `false`): löscht auch Ereignisse, die älter sind als `keep_days`. Ohne diese Angabe wird die Option ignoriert.
+
+**Gibt zurück:** wie viele Zustände, Ereignisse und Entitätszeilen gelöscht wurden.
+
+**Beispiele:**
+```yaml
+# Eine Entität vollständig aus der Datenbank entfernen
+action: scribe.purge
+data:
+  entity_id: sensor.sensor_den_ich_nicht_mehr_will
+```
+
+```yaml
+# Alles älter als zwei Jahre entfernen, Ereignisse eingeschlossen
+action: scribe.purge
+data:
+  keep_days: 730
+  events: true
+response_variable: purged
+```
+
+Komprimierte Historie wird ebenfalls gelöscht: TimescaleDB erledigt das, und die Chunks bleiben komprimiert. Für ein gleitendes Fenster, das dauerhaft gilt, nutzen Sie stattdessen die [Aufbewahrung](#aufbewahrung): eine Purge ist einmalig.
+
 ## Fehlerbehebung
 
 ### Was man zuerst ansieht

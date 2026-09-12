@@ -565,6 +565,35 @@ data:
 response_variable: query_result
 ```
 
+### `scribe.purge`
+Elimina el historial registrado. **Esto no se puede deshacer.**
+
+**Parámetros** (se requiere al menos uno de los dos primeros):
+- `entity_id`: las entidades a purgar. Sin `keep_days`, se elimina todo su historial *y* su fila en la tabla `entities`; volver a registrarlas empieza de cero.
+- `keep_days`: elimina todo lo más antiguo que este número de días.
+- `events` (por defecto `false`): elimina también los eventos más antiguos que `keep_days`. Sin esa duración, se ignora.
+
+**Devuelve:** cuántos estados, eventos y filas de entidades se eliminaron.
+
+**Ejemplos:**
+```yaml
+# Retirar por completo una entidad de la base de datos
+action: scribe.purge
+data:
+  entity_id: sensor.sensor_que_ya_no_quiero
+```
+
+```yaml
+# Recortar todo lo que tenga más de dos años, eventos incluidos
+action: scribe.purge
+data:
+  keep_days: 730
+  events: true
+response_variable: purged
+```
+
+El historial comprimido también se purga: TimescaleDB se encarga y los chunks siguen comprimidos. Para una ventana deslizante que se aplique continuamente, use los ajustes de [retención](#retención): una purga es puntual.
+
 ## Solución de problemas
 
 ### Lo primero que hay que mirar
