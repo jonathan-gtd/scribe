@@ -63,7 +63,7 @@
         },
         "data_description": {
           "batch_size": "Number of rows accumulated before a flush is triggered",
-          "flush_interval": "Maximum seconds between automatic flushes",
+          "flush_interval": "Maximaal aantal seconden tussen twee automatische schrijfacties (standaard 30). Elke schrijfactie is één transactie: een kort interval schrijft telkens een handvol rijen in plaats van ze te bundelen. Een lang interval riskeert alleen het laatste interval aan historie, en alleen als Home Assistant wordt afgeschoten — bij een normale afsluiting wordt alles weggeschreven.",
           "max_queue_size": "Maximum pending writes before oldest are dropped",
           "buffer_on_failure": "Gebeurtenissen in geheugen houden en opnieuw proberen zodra de database weer beschikbaar is"
         }

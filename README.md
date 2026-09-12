@@ -152,7 +152,7 @@ scribe:
 
   # How it writes
   batch_size: 500               # rows buffered before a write
-  flush_interval: 5             # seconds before an incomplete batch is written anyway
+  flush_interval: 30            # seconds before an incomplete batch is written anyway
   max_queue_size: 10000         # rows held in memory before new ones are dropped
   buffer_on_failure: true       # keep buffering while the database is unreachable
 
@@ -196,7 +196,7 @@ scribe:
 | `record_states` | Whether to record state changes. |
 | `record_events` | Whether to record events. |
 | `batch_size` | Number of items to buffer before writing to the database. |
-| `flush_interval` | Maximum time (in seconds) to wait before flushing the buffer. |
+| `flush_interval` | Seconds before an incomplete batch is written anyway (default `30`). Each flush is one transaction: a short interval writes a handful of rows at a time instead of batching them, and a long one risks only the last interval of history, and only if Home Assistant is killed. |
 | `max_queue_size` | Maximum number of items to hold in memory before dropping new ones. |
 | `query_timeout` | Seconds a `scribe.query` call may run before the database stops it (default `60`). |
 | `query_max_rows` | Rows a `scribe.query` call may return before it is refused (default `20000`). |
@@ -625,7 +625,7 @@ Scribe reports problems it cannot fix on its own in **Settings → System → Re
 
 ### High memory usage
 - Reduce `max_queue_size`
-- Reduce `flush_interval` for faster writes
+- Reduce `flush_interval` so the buffer is emptied more often
 - Check `sensor.scribe_buffer_size`
 
 ### Performance tuning

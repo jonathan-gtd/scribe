@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **`flush_interval` defaults to 30 seconds instead of 5.** Each flush is one transaction, and on a typical instance the 500-row batch trigger never fires: a measured installation at 0.76 states per second wrote a median of **4 rows** per flush, about 11 000 transactions a day, each dirtying whole 8 KB pages and writing its own WAL record. Thirty seconds batches roughly six times more rows into the same transaction. What a longer interval risks is the last interval of history, and only if Home Assistant is killed — a normal shutdown still flushes everything on `EVENT_HOMEASSISTANT_FINAL_WRITE`, so a restart or an update loses nothing at any setting. Existing installations that set `flush_interval` themselves keep their value.
+
 ### Added
 - **The migration scripts are tested**: `influx2scribe`, `ltss2scribe`, `recorder2scribe` and their shared preflight write straight into `entities` and `states_raw` with psycopg2, bypassing the writer, and nothing checked they still matched the schema Scribe creates. Twelve tests now run them against a real TimescaleDB — a real SQLite recorder database for the path the documentation never mentioned, a real LTSS table, and stand-in InfluxDB records — covering the backfill itself, that re-running does not duplicate history, that the configured window is a filter, and that a recorder still mid-migration is refused.
 - **Dutch**: `README.nl.md` joins the four existing translations, and `nl.json` — which existed but covered barely half of `strings.json`, so a Dutch user read every Repairs issue in English — is now complete and checked by the same tests as the other documented languages.

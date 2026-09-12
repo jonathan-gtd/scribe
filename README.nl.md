@@ -152,7 +152,7 @@ scribe:
 
   # Hoe het schrijft
   batch_size: 500               # rijen in de buffer vóór een schrijfactie
-  flush_interval: 5             # seconden voordat een onvolledige batch toch wordt geschreven
+  flush_interval: 30            # seconden voordat een onvolledige batch toch wordt geschreven
   max_queue_size: 10000         # rijen in geheugen voordat nieuwe worden weggegooid
   buffer_on_failure: true       # blijven bufferen zolang de database onbereikbaar is
 
@@ -196,7 +196,7 @@ scribe:
 | `record_states` | Of toestandswijzigingen worden opgenomen. |
 | `record_events` | Of gebeurtenissen worden opgenomen. |
 | `batch_size` | Aantal items dat wordt gebufferd voordat naar de database wordt geschreven. |
-| `flush_interval` | Maximale tijd (in seconden) om te wachten voordat de buffer wordt weggeschreven. |
+| `flush_interval` | Seconden voordat een onvolledige batch toch wordt geschreven (standaard `30`). Elke schrijfactie is één transactie: een kort interval schrijft telkens een handvol rijen in plaats van ze te bundelen, en een lang interval riskeert alleen het laatste interval aan historie, en alleen als Home Assistant wordt afgeschoten. |
 | `max_queue_size` | Maximaal aantal items in geheugen voordat nieuwe worden weggegooid. |
 | `query_timeout` | Seconden dat een `scribe.query`-aanroep mag draaien voordat de database hem stopt (standaard `60`). |
 | `query_max_rows` | Rijen die een `scribe.query`-aanroep mag teruggeven voordat hij wordt geweigerd (standaard `20000`). |
@@ -621,7 +621,7 @@ Scribe meldt problemen die het niet zelf kan oplossen in **Instellingen → Syst
 
 ### Hoog geheugengebruik
 - Verlaag `max_queue_size`
-- Verlaag `flush_interval` voor sneller schrijven
+- Verlaag `flush_interval` zodat de buffer vaker wordt weggeschreven
 - Controleer `sensor.scribe_buffer_size`
 
 ### Prestatieafstemming
