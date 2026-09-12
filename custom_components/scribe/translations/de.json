@@ -75,14 +75,16 @@
           "enable_stats_chunk": "Chunk-Statistiksensoren aktivieren",
           "stats_chunk_interval": "Refresh interval",
           "enable_stats_size": "Größen-Statistiksensoren aktivieren",
-          "stats_size_interval": "Refresh interval"
+          "stats_size_interval": "Refresh interval",
+          "stats_io_interval": "Wie oft die E/A-Sensoren veröffentlichen"
         },
         "data_description": {
           "enable_stats_io": "Expose write counters, buffer size and duration as sensors",
           "enable_stats_chunk": "Expose per-table chunk counts",
           "stats_chunk_interval": "How often stats are refreshed from the database",
           "enable_stats_size": "Expose per-table sizes and compression ratios",
-          "stats_size_interval": "How often stats are refreshed from the database"
+          "stats_size_interval": "How often stats are refreshed from the database",
+          "stats_io_interval": "Sekunden zwischen zwei Werten der E/A-Sensoren. Jede Änderung ist eine Zeile, die Scribe über sich selbst aufzeichnet: ein kurzes Intervall füllt Ihre Historie mit Scribes eigenen Zählern. Standard 60 Sekunden."
         }
       },
       "metadata": {
