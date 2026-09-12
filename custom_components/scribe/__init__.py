@@ -87,6 +87,8 @@ from .const import (
     DEFAULT_ENABLE_INTEGRATIONS,
     CONF_ENABLE_USERS,
     DEFAULT_ENABLE_USERS,
+    CONF_ENABLE_ROLLUPS,
+    DEFAULT_ENABLE_ROLLUPS,
 )
 from .writer import ScribeWriter, WriterConfig
 
@@ -146,6 +148,7 @@ CONFIG_SCHEMA = vol.Schema(
                 vol.Optional(CONF_ENABLE_DEVICES): cv.boolean,
                 vol.Optional(CONF_ENABLE_INTEGRATIONS): cv.boolean,
                 vol.Optional(CONF_ENABLE_USERS): cv.boolean,
+                vol.Optional(CONF_ENABLE_ROLLUPS): cv.boolean,
             },
             extra=vol.ALLOW_EXTRA,
         )
@@ -965,6 +968,7 @@ def _resolve_settings(hass: HomeAssistant, entry: ConfigEntry) -> "_Settings | N
             ),
             enable_table_users=get_config(CONF_ENABLE_USERS, DEFAULT_ENABLE_USERS),
             enable_stats_io=get_config(CONF_ENABLE_STATS_IO, DEFAULT_ENABLE_STATS_IO),
+            enable_rollups=get_config(CONF_ENABLE_ROLLUPS, DEFAULT_ENABLE_ROLLUPS),
         ),
         stats_chunk_minutes=int(
             get_config(CONF_STATS_CHUNK_INTERVAL, DEFAULT_STATS_CHUNK_INTERVAL)

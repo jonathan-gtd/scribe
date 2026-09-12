@@ -18,6 +18,7 @@ Eine Erklärung der Datenstruktur und wie man sie abfragt, findest du hier: [Dat
 - [Konfiguration](#konfiguration)
 - [Speicher-Feinabstimmung](#speicher-feinabstimmung)
 - [Aufbewahrung](#aufbewahrung)
+- [Zusammenfassungen](#zusammenfassungen)
 - [Datenbankschema](#datenbankschema)
 - [Migration](#migration)
 - [Statistik-Sensoren](#statistik-sensoren)
@@ -150,6 +151,7 @@ scribe:
   enable_table_devices: true
   enable_table_integrations: true
   enable_table_users: true
+  enable_rollups: false
 ```
 </details>
 
@@ -194,6 +196,7 @@ scribe:
 | `enable_table_devices` | Anlegen und Synchronisieren der Tabelle `devices` aktivieren. |
 | `enable_table_integrations` | Anlegen und Synchronisieren der Tabelle `integrations` aktivieren. |
 | `enable_table_users` | Anlegen und Synchronisieren der Tabelle `users` aktivieren. |
+| `enable_rollups` | Vorberechnete stündliche und tägliche Zusammenfassungen der Zustände vorhalten (`states_hourly`, `states_daily`). Standardmäßig aus. |
 </details>
 
 ## Speicher-Feinabstimmung
@@ -324,6 +327,36 @@ Wissenswertes:
 - Zulässig sind einfache Intervalle: `30 days`, `6 months`, `1 year`. Alles
   andere wird mit einem Fehler abgelehnt, statt an die Datenbank geschickt zu
   werden.
+
+## Zusammenfassungen
+
+Ein Jahr eines Sensors, der alle 30 Sekunden meldet, sind rund eine Million Zeilen. Ein Diagramm dieses Jahres liest sie alle — jedes Mal, wenn es gezeichnet wird.
+
+Mit `enable_rollups: true` hält TimescaleDB zwei Zusammenfassungen Ihrer Zustände laufend aktuell — stündlich und täglich — und ein Diagramm über Jahre liest Tausende Zeilen statt Millionen.
+
+```yaml
+scribe:
+  enable_rollups: true
+```
+
+Das ergänzt zwei Sichten:
+
+| Sicht | Eine Zeile je | Spalten |
+| --- | --- | --- |
+| `states_hourly` | Entität und Stunde | `entity_id`, `bucket`, `value_avg`, `value_min`, `value_max`, `samples` |
+| `states_daily` | Entität und Tag | dieselben |
+
+```sql
+SELECT bucket, value_avg, value_min, value_max
+FROM states_daily
+WHERE entity_id = 'sensor.aussentemperatur'
+  AND bucket > now() - interval '2 years'
+ORDER BY bucket;
+```
+
+Zusammengefasst werden nur numerische Zustände — der Mittelwert von `on` und `off` bedeutet nichts — und `samples` sagt, für wie viele Zustände eine Zeile steht.
+
+**Es sind abgeleitete Daten.** Nichts, was Sie vermissen würden, wird doppelt gehalten: Ausschalten löscht beide Sichten, Wiedereinschalten baut sie aus der Historie neu auf, und Ihre Zustände bleiben in beiden Fällen unberührt. TimescaleDB hält sie selbst aktuell; Scribe legt sie nur an.
 
 ## Datenbankschema
 

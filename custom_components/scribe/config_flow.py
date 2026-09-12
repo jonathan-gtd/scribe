@@ -78,6 +78,8 @@ from .const import (
     DEFAULT_ENABLE_INTEGRATIONS,
     CONF_ENABLE_USERS,
     DEFAULT_ENABLE_USERS,
+    CONF_ENABLE_ROLLUPS,
+    DEFAULT_ENABLE_ROLLUPS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -484,6 +486,10 @@ class ScribeOptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional(
                     CONF_ENABLE_USERS,
                     default=g(CONF_ENABLE_USERS, DEFAULT_ENABLE_USERS),
+                ): selector.BooleanSelector(),
+                vol.Optional(
+                    CONF_ENABLE_ROLLUPS,
+                    default=g(CONF_ENABLE_ROLLUPS, DEFAULT_ENABLE_ROLLUPS),
                 ): selector.BooleanSelector(),
             }
         )

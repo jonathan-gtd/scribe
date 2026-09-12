@@ -18,6 +18,7 @@ An explanation of the data structure how to query can be found here: [Data struc
 - [Configuration](#configuration)
 - [Storage tuning](#storage-tuning)
 - [Retention](#retention)
+- [Summaries](#summaries)
 - [Database schema](#database-schema)
 - [Migration](#migration)
 - [Statistics Sensors](#statistics-sensors)
@@ -149,6 +150,7 @@ scribe:
   enable_table_devices: true
   enable_table_integrations: true
   enable_table_users: true
+  enable_rollups: false
 ```
 </details>
 
@@ -193,6 +195,7 @@ scribe:
 | `enable_table_devices` | Enable creation and sync of the `devices` table. |
 | `enable_table_integrations` | Enable creation and sync of the `integrations` table. |
 | `enable_table_users` | Enable creation and sync of the `users` table. |
+| `enable_rollups` | Keep pre-computed hourly and daily summaries of states (`states_hourly`, `states_daily`). Off by default. |
 </details>
 
 ## Storage tuning
@@ -308,6 +311,36 @@ Details worth knowing:
   of silently doing nothing.
 - Accepted values are plain intervals: `30 days`, `6 months`, `1 year`.
   Anything else is refused with an error rather than sent to the database.
+
+## Summaries
+
+A year of a sensor that reports every 30 seconds is about a million rows. A chart of that year reads every one of them, every time it is drawn.
+
+With `enable_rollups: true`, TimescaleDB keeps two summaries of your states up to date as they are written — hourly and daily — and a chart over years reads thousands of rows instead of millions.
+
+```yaml
+scribe:
+  enable_rollups: true
+```
+
+That adds two views:
+
+| View | One row per | Columns |
+| --- | --- | --- |
+| `states_hourly` | entity and hour | `entity_id`, `bucket`, `value_avg`, `value_min`, `value_max`, `samples` |
+| `states_daily` | entity and day | the same |
+
+```sql
+SELECT bucket, value_avg, value_min, value_max
+FROM states_daily
+WHERE entity_id = 'sensor.outside_temperature'
+  AND bucket > now() - interval '2 years'
+ORDER BY bucket;
+```
+
+Only numeric states are summarised — the average of `on` and `off` means nothing — and `samples` tells you how many states each row stands for.
+
+**They are derived data.** Nothing is duplicated that you would miss: turning the option off deletes both views, turning it back on rebuilds them from the history, and your states are never touched either way. TimescaleDB keeps them current itself; Scribe only creates them.
 
 ## Database schema
 
