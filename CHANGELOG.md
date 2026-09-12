@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- **`scribe.query` cannot take Home Assistant down with it**: the ceiling on a query was two minutes, and there was no ceiling at all on what it could return — `SELECT * FROM states` over a year is tens of millions of rows, loaded into Home Assistant's memory before anything could be done with them. A query now has **60 seconds** and **10 000 rows**; past either, it is refused, and the message says what to do about it (narrow it, group it with `time_bucket()`, add a `LIMIT`). The rows are streamed and counted as they arrive, so a runaway query is stopped rather than held in full and then rejected. Writing is still refused by the read-only transaction the query runs in, which is now covered by tests: `UPDATE`, `DELETE`, `TRUNCATE`, `DROP`, `INSERT`, `CREATE`, `ALTER`, `GRANT`, and two statements in one string.
+
 ## [4.3.0] - 2026-09-12
 
 ### Added

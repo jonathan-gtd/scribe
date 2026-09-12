@@ -32,6 +32,24 @@ def mock_db_connection():
     mock_conn.fetchrow = AsyncMock()
     mock_conn.fetch = AsyncMock()
 
+    # `scribe.query` streams its rows through a cursor rather than fetching
+    # them all, so the mock has to be iterable with `async for`. Tests set the
+    # rows through `mock_conn.fetch.return_value`, as they always did.
+    class _Cursor:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def __aiter__(self):
+            async def rows():
+                for row in self._rows or []:
+                    yield row
+
+            return rows()
+
+    mock_conn.cursor = MagicMock(
+        side_effect=lambda *args, **kwargs: _Cursor(mock_conn.fetch.return_value)
+    )
+
     # transaction() returns an async context manager
     tx_mock = AsyncMock()
     mock_conn.transaction = MagicMock(return_value=tx_mock)
