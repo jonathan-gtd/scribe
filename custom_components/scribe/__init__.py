@@ -79,6 +79,10 @@ from .const import (
     DEFAULT_ENABLE_STATS_SIZE,
     DEFAULT_STATS_CHUNK_INTERVAL,
     DEFAULT_STATS_SIZE_INTERVAL,
+    CONF_QUERY_TIMEOUT,
+    DEFAULT_QUERY_TIMEOUT,
+    CONF_QUERY_MAX_ROWS,
+    DEFAULT_QUERY_MAX_ROWS,
     CONF_BUFFER_ON_FAILURE,
     DEFAULT_BUFFER_ON_FAILURE,
     CONF_ENABLE_AREAS,
@@ -118,6 +122,8 @@ CONFIG_SCHEMA = vol.Schema(
                 vol.Optional(CONF_FLUSH_INTERVAL): cv.positive_int,
                 vol.Optional(CONF_MAX_QUEUE_SIZE): cv.positive_int,
                 vol.Optional(CONF_BUFFER_ON_FAILURE): cv.boolean,
+                vol.Optional(CONF_QUERY_TIMEOUT): cv.positive_int,
+                vol.Optional(CONF_QUERY_MAX_ROWS): cv.positive_int,
                 vol.Optional(CONF_ENABLE_STATS_IO): cv.boolean,
                 vol.Optional(CONF_ENABLE_STATS_CHUNK): cv.boolean,
                 vol.Optional(CONF_ENABLE_STATS_SIZE): cv.boolean,
@@ -973,6 +979,12 @@ def _resolve_settings(hass: HomeAssistant, entry: ConfigEntry) -> "_Settings | N
             enable_table_users=get_config(CONF_ENABLE_USERS, DEFAULT_ENABLE_USERS),
             enable_stats_io=get_config(CONF_ENABLE_STATS_IO, DEFAULT_ENABLE_STATS_IO),
             enable_rollups=get_config(CONF_ENABLE_ROLLUPS, DEFAULT_ENABLE_ROLLUPS),
+            query_timeout=max(
+                1, int(get_config(CONF_QUERY_TIMEOUT, DEFAULT_QUERY_TIMEOUT))
+            ),
+            query_max_rows=max(
+                1, int(get_config(CONF_QUERY_MAX_ROWS, DEFAULT_QUERY_MAX_ROWS))
+            ),
         ),
         stats_io_seconds=max(
             1, int(get_config(CONF_STATS_IO_INTERVAL, DEFAULT_STATS_IO_INTERVAL))

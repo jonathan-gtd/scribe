@@ -115,7 +115,9 @@
           "db_ssl": "Activer SSL",
           "ssl_root_cert": "Chemin du certificat racine SSL",
           "ssl_cert_file": "Chemin du certificat client SSL",
-          "ssl_key_file": "Chemin de la clé privée client SSL"
+          "ssl_key_file": "Chemin de la clé privée client SSL",
+          "query_timeout": "Délai maximal d'une requête",
+          "query_max_rows": "Lignes maximales par requête"
         },
         "data_description": {
           "db_schema": "Laissez vide pour utiliser ce que la connexion désigne déjà (normalement `public`). Indiquez un nom et Scribe crée ce schéma et y enregistre — ses tables, ses hypertables, ses politiques. Seules les nouvelles données y vont : l'historique déjà écrit ailleurs n'est pas déplacé, et Scribe n'enregistre plus rien si le schéma est inaccessible.",
@@ -126,7 +128,9 @@
           "db_ssl": "Exiger une connexion SSL/TLS vers PostgreSQL",
           "ssl_root_cert": "Chemin vers le fichier CA (ex. /ssl/ca.crt)",
           "ssl_cert_file": "Chemin vers le certificat client pour mTLS",
-          "ssl_key_file": "Chemin vers la clé privée client pour mTLS"
+          "ssl_key_file": "Chemin vers la clé privée client pour mTLS",
+          "query_timeout": "Secondes pendant lesquelles un appel à `scribe.query` peut tourner avant que la base ne l'arrête. 60 par défaut.",
+          "query_max_rows": "Lignes qu'un appel à `scribe.query` peut renvoyer avant d'être refusé. Elles passent en mémoire de Home Assistant : c'est ce qui empêche une requête imprudente de le faire tomber. 20000 par défaut."
         }
       }
     },

@@ -60,14 +60,20 @@ async def test_reading_is_allowed(writer):
 
 
 @pytest.mark.asyncio
-async def test_a_query_cannot_hold_a_connection_for_ever(writer, monkeypatch):
-    """The server ends it, not the caller giving up."""
-    import custom_components.scribe.writer as writer_module
+async def test_a_query_cannot_hold_a_connection_for_ever(hass, clean_db):
+    """The server ends it, not the caller giving up.
 
-    monkeypatch.setattr(writer_module, "QUERY_TIMEOUT_MS", 300)
+    One second rather than the configured sixty, so the test is quick; what is
+    checked is that the configured value is the one that applies.
+    """
+    from .conftest import make_writer
+
+    writer = make_writer(hass, query_timeout=1)
+    await writer.start()
 
     with pytest.raises(asyncpg.PostgresError) as raised:
         await writer.query("SELECT pg_sleep(30)")
+    await writer.stop()
 
     assert "statement timeout" in str(raised.value).lower()
 
@@ -97,15 +103,16 @@ async def test_two_statements_in_one_query_are_refused(writer):
 
 
 @pytest.mark.asyncio
-async def test_a_query_returning_too_much_is_refused(writer, monkeypatch):
+async def test_a_query_returning_too_much_is_refused(hass, clean_db):
     """Millions of rows would reach Home Assistant's memory, not a chart.
 
     The refusal says what to do about it, and the query is stopped while it
     streams rather than after everything has been loaded.
     """
-    import custom_components.scribe.writer as writer_module
+    from .conftest import make_writer
 
-    monkeypatch.setattr(writer_module, "QUERY_MAX_ROWS", 50)
+    writer = make_writer(hass, query_max_rows=50)
+    await writer.start()
 
     with pytest.raises(ValueError) as raised:
         await writer.query("SELECT generate_series(1, 5000) AS n")
@@ -117,3 +124,21 @@ async def test_a_query_returning_too_much_is_refused(writer, monkeypatch):
     # And what fits still comes back.
     rows = await writer.query("SELECT generate_series(1, 10) AS n")
     assert len(rows) == 10
+    await writer.stop()
+
+
+@pytest.mark.asyncio
+async def test_the_defaults_are_what_the_documentation_says(hass, clean_db):
+    """60 seconds and 20 000 rows, unless the configuration says otherwise."""
+    from custom_components.scribe.const import (
+        DEFAULT_QUERY_MAX_ROWS,
+        DEFAULT_QUERY_TIMEOUT,
+    )
+
+    from .conftest import make_writer
+
+    writer = make_writer(hass)
+
+    assert (writer.query_timeout, writer.query_max_rows) == (60, 20_000)
+    assert DEFAULT_QUERY_TIMEOUT == 60
+    assert DEFAULT_QUERY_MAX_ROWS == 20_000
