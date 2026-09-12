@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [4.3.0] - 2026-09-12
 
 ### Added
 - **Hourly and daily summaries, kept up to date by TimescaleDB (`enable_rollups`)**: a year of a sensor reporting every 30 seconds is about a million rows, and a chart of that year reads every one of them, every time it is drawn. Turning this on adds two views — `states_hourly` and `states_daily`, each with the average, minimum, maximum and number of states per entity and per bucket — maintained incrementally by the database as states arrive, so a chart over years reads thousands of rows instead of millions. They are derived data and Scribe owns them: turning the option off deletes both, turning it back on rebuilds them from the history, and the history itself is never touched. Off by default. Only numeric states are summarised. If the database refuses to create them, a Repairs notification says so and recording carries on regardless.
