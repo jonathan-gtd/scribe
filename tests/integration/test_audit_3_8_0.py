@@ -17,13 +17,13 @@ from custom_components.scribe.const import (
     CONF_INCLUDE_EVENTS,
     DOMAIN,
 )
-from custom_components.scribe.writer import QUERY_TIMEOUT_MS
+from custom_components.scribe.const import DEFAULT_QUERY_TIMEOUT
 
 from .conftest import make_writer, write_states
 
 
 @pytest.mark.asyncio
-async def test_query_service_is_stopped_by_the_server(hass, scribe_entry, monkeypatch):
+async def test_query_service_is_stopped_by_the_server(hass, clean_db):
     """`scribe.query` takes arbitrary SQL from the UI; it must be bounded.
 
     Without a statement_timeout one careless aggregate pins a pooled
@@ -32,10 +32,12 @@ async def test_query_service_is_stopped_by_the_server(hass, scribe_entry, monkey
     stays quick; what is asserted is that the *server* ends the query, not the
     caller giving up.
     """
-    _, writer = await scribe_entry()
-    assert QUERY_TIMEOUT_MS <= 300_000, "the ceiling must stay a ceiling"
+    assert DEFAULT_QUERY_TIMEOUT <= 300, "the default must stay a ceiling"
 
-    monkeypatch.setattr("custom_components.scribe.writer.QUERY_TIMEOUT_MS", 500)
+    # One second rather than the default sixty, so the test stays quick: the
+    # ceiling is a setting now, and this is how a user lowers it.
+    writer = make_writer(hass, query_timeout=1)
+    await writer.start()
 
     # A server-side cancellation, not asyncio giving up: anything else means
     # nothing bounds the query on the database side.
@@ -49,6 +51,7 @@ async def test_query_service_is_stopped_by_the_server(hass, scribe_entry, monkey
         "cancel" in str(excinfo.value).lower()
         or "timeout" in str(excinfo.value).lower()
     ), f"unexpected failure: {excinfo.value!r}"
+    await writer.stop()
 
 
 @pytest.mark.asyncio
