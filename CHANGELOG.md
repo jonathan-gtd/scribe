@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [4.4.1] - 2026-10-07
 
 ### Fixed
 - **Home Assistant 2026.10 logged a deprecation warning about Scribe**: since 2026.8 a device belongs to a single config entry, and 2026.10 started reporting every integration that still reads the old set of entries — `accesses DeviceEntry.config_entries, which is deprecated`, to stop working in 2027.10. Scribe read it to fill `devices.primary_config_entry`. It now reads the single entry on 2026.8 and later, and exactly as before on older versions. The value stored is the same.
