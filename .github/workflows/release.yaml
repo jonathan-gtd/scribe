@@ -54,7 +54,7 @@ jobs:
         # Ties the published zip to this workflow, on this commit, so anyone
         # can check the file they downloaded is the one this repository built:
         #   gh attestation verify scribe.zip --repo jonathan-gtd/scribe
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: custom_components/scribe.zip
 
