@@ -173,6 +173,7 @@ The names `states` and `events` come from `DEFAULT_TABLE_NAME_STATES` / `DEFAULT
 
 - **At startup**, `_sync_metadata` writes each enabled registry in full. Each table is synced in its own `try`, so a failure on one does not stop the others. `entities` is always synced: every state write depends on it.
 - **Afterwards**, listeners on `entity_registry_updated`, `device_registry_updated`, `area_registry_updated` and `user_added` / `user_updated` / `user_removed` keep the tables current.
+- **An entity update is only synced when it changes a stored column.** The event's `changes` names the registry fields that changed; `_ENTITY_ROW_FIELDS` lists the ones `_entity_row` reads, and an update touching none of them returns before the database. Some entities rewrite their `supported_features` every few seconds (#92). When adding a column to `entities`, add its registry field to that set.
 - `write_entities` inserts new rows and updates changed ones, and skips identical ones. `INSERT ... ON CONFLICT DO UPDATE` would use up a SERIAL id on every row at each resync.
 - **A rename** (`rename_entity`) is a single `UPDATE entities SET entity_id = ...`. The history in `states_raw` points at `metadata_id` and does not move. If the new name is already taken by another row:
   - that row belongs to the **same** entity (same `unique_id`) → it is merged;

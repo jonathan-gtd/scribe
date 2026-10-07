@@ -257,6 +257,23 @@ def _entity_row(entity) -> dict:
     }
 
 
+# The registry fields `_entity_row` reads. Home Assistant lists what each
+# registry update changed; one that touches none of these leaves the row in
+# `entities` exactly as it is.
+_ENTITY_ROW_FIELDS = frozenset(
+    {
+        "entity_id",
+        "unique_id",
+        "platform",
+        "name",
+        "original_name",
+        "device_id",
+        "area_id",
+        "capabilities",
+    }
+)
+
+
 def _area_row(area) -> dict:
     """One area, as a row for the `areas` table."""
     return {"area_id": area.id, "name": area.name, "picture": area.picture}
@@ -604,6 +621,15 @@ def _make_entity_registry_listener(hass, writer):
                     entity_id,
                 )
                 await writer.rename_entity(old_entity_id, entity_id)
+
+            # Most updates change nothing Scribe stores. An entity rewrites its
+            # registry entry whenever its supported features change, which
+            # some media players do every few seconds, and every one of those
+            # cost a transaction to find the row identical (#92). An event
+            # that does not say what changed is synced.
+            changes = event.data.get("changes")
+            if changes is not None and _ENTITY_ROW_FIELDS.isdisjoint(changes):
+                return
 
         if action not in ("create", "update"):
             return

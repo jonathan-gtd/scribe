@@ -12,8 +12,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from homeassistant.core import Event
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.scribe import (
+    _entity_row,
     _make_entity_registry_listener,
     _make_registry_listener,
     _make_user_listener,
@@ -78,6 +82,92 @@ async def test_an_update_without_a_rename_is_not_a_rename(hass, writer):
     )
 
     writer.rename_entity.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_an_update_to_something_scribe_does_not_store_is_ignored(hass, writer):
+    """A media player changes its supported features every few seconds (#92).
+
+    Run against the real registry: what matters is the name Home Assistant
+    gives each field in `changes`, which a hand-written event would only echo.
+    """
+    registry = er.async_get(hass)
+    entry = registry.async_get_or_create("media_player", "demo", "tv")
+    hass.bus.async_listen(
+        "entity_registry_updated", _make_entity_registry_listener(hass, writer)
+    )
+
+    registry.async_update_entity(entry.entity_id, supported_features=4)
+    registry.async_update_entity(entry.entity_id, original_device_class="tv")
+    registry.async_update_entity(entry.entity_id, original_icon="mdi:television")
+    await hass.async_block_till_done()
+
+    writer.write_entities.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ("column", "update"),
+    [
+        ("name", {"name": "Television"}),
+        ("name", {"original_name": "TV"}),
+        ("area_id", {"area_id": "living_room"}),
+        ("capabilities", {"capabilities": {"source_list": ["HDMI 1"]}}),
+        ("unique_id", {"new_unique_id": "tv-2"}),
+        ("entity_id", {"new_entity_id": "media_player.television"}),
+    ],
+)
+@pytest.mark.asyncio
+async def test_an_update_to_a_stored_column_reaches_the_database(
+    hass, writer, column, update
+):
+    """Every column of `entities` that can change must still be synced."""
+    registry = er.async_get(hass)
+    entry = registry.async_get_or_create("media_player", "demo", "tv")
+    before = _entity_row(entry)[column]
+    hass.bus.async_listen(
+        "entity_registry_updated", _make_entity_registry_listener(hass, writer)
+    )
+
+    registry.async_update_entity(entry.entity_id, **update)
+    await hass.async_block_till_done()
+
+    writer.write_entities.assert_awaited_once()
+    (rows,) = writer.write_entities.await_args.args
+    assert rows[0][column] != before
+
+
+@pytest.mark.asyncio
+async def test_moving_an_entity_to_a_device_reaches_the_database(hass, writer):
+    """Apart from the cases above: the registry refuses a device it has not got."""
+    config_entry = MockConfigEntry(domain="demo")
+    config_entry.add_to_hass(hass)
+    device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=config_entry.entry_id, identifiers={("demo", "tv")}
+    )
+    registry = er.async_get(hass)
+    entry = registry.async_get_or_create("media_player", "demo", "tv")
+    hass.bus.async_listen(
+        "entity_registry_updated", _make_entity_registry_listener(hass, writer)
+    )
+
+    registry.async_update_entity(entry.entity_id, device_id=device.id)
+    await hass.async_block_till_done()
+
+    writer.write_entities.assert_awaited_once()
+    (rows,) = writer.write_entities.await_args.args
+    assert rows[0]["device_id"] == device.id
+
+
+@pytest.mark.asyncio
+async def test_an_update_that_does_not_say_what_changed_is_synced(hass, writer):
+    """Dropping it would leave the row stale; syncing it costs one lookup."""
+    registry = er.async_get(hass)
+    entry = registry.async_get_or_create("sensor", "demo", "s1")
+    listener = _make_entity_registry_listener(hass, writer)
+
+    await listener(_event({"action": "update", "entity_id": entry.entity_id}))
+
+    writer.write_entities.assert_awaited_once()
 
 
 @pytest.mark.asyncio
