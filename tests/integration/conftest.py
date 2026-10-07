@@ -265,16 +265,20 @@ async def sync_metadata(writer, hass, entity_id):
     )
 
 
-async def write_states(writer, entity_id, count, start=0, **overrides):
-    """Enqueue and flush `count` states, one per second from BASE_TIME+start.
+async def write_states(writer, entity_id, count, start=0, base=BASE_TIME, **overrides):
+    """Enqueue and flush `count` states, one per second from base+start.
 
     `start` separates entities in time; passing the same value to two entities
     makes their rows collide on states_raw's (metadata_id, time) primary key.
+
+    `base` is BASE_TIME unless the test measures something from *now* — a
+    purge horizon, a retention window. A fixed date walks out of any such
+    window as the calendar moves on, and the test then fails on its own.
     """
     for i in range(count):
         item = {
             "type": "state",
-            "time": BASE_TIME + timedelta(seconds=start + i),
+            "time": base + timedelta(seconds=start + i),
             "entity_id": entity_id,
             "state": f"s{i}",
             "value": float(i),
