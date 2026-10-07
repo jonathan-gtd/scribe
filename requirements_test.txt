@@ -24,5 +24,5 @@ psycopg2-binary
 # integration tests import those scripts.
 python-dotenv
 asyncpg
-ruff==0.16.5
+ruff==0.16.10
 pycares
