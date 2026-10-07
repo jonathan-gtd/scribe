@@ -8,6 +8,7 @@ whichever Home Assistant the suite is pinned to, so the same test covers the
 mapping before 2026.9 and the collection after it.
 """
 
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -41,6 +42,33 @@ async def test_every_device_is_read_without_a_deprecation(hass, caplog):
     assert "deprecated" not in caplog.text
 
 
+def _old_device(**fields):
+    """A device as Home Assistant described it before 2026.8: a set of entries."""
+    return SimpleNamespace(
+        id="old_1",
+        name="Thermostat",
+        name_by_user=None,
+        model="T1",
+        manufacturer="Acme",
+        sw_version="1.0",
+        area_id=None,
+        **fields,
+    )
+
+
+def test_a_device_from_before_2026_8_still_gets_its_config_entry():
+    """No `config_entry_id` there: the set is the only place to read it from."""
+    row = _device_row(_old_device(config_entries={"entry_1"}))
+
+    assert row["primary_config_entry"] == "entry_1"
+
+
+def test_a_device_from_before_2026_8_with_no_config_entry():
+    row = _device_row(_old_device(config_entries=set()))
+
+    assert row["primary_config_entry"] is None
+
+
 class _ChildDevice:
     """A 2026.9 child device: the DeviceEntry-only fields are not there.
 
@@ -53,7 +81,7 @@ class _ChildDevice:
     name = "Outlet 2"
     name_by_user = None
     area_id = "kitchen"
-    config_entries = {"entry_1"}
+    config_entry_id = "entry_1"
 
     def __init__(self):
         self.missing_reads = []

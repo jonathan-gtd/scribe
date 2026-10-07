@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- **Home Assistant 2026.10 logged a deprecation warning about Scribe**: since 2026.8 a device belongs to a single config entry, and 2026.10 started reporting every integration that still reads the old set of entries — `accesses DeviceEntry.config_entries, which is deprecated`, to stop working in 2027.10. Scribe read it to fill `devices.primary_config_entry`. It now reads the single entry on 2026.8 and later, and exactly as before on older versions. The value stored is the same.
+
 ### Changed
 - **`flush_interval` defaults to 30 seconds instead of 5.** Each flush is one transaction, and on a typical instance the 500-row batch trigger never fires: a measured installation at 0.76 states per second wrote a median of **4 rows** per flush, about 11 000 transactions a day, each dirtying whole 8 KB pages and writing its own WAL record. Thirty seconds batches roughly six times more rows into the same transaction. What a longer interval risks is the last interval of history, and only if Home Assistant is killed — a normal shutdown still flushes everything on `EVENT_HOMEASSISTANT_FINAL_WRITE`, so a restart or an update loses nothing at any setting. Existing installations that set `flush_interval` themselves keep their value.
 
