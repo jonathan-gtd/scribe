@@ -60,30 +60,16 @@ async def test_purging_an_entity_leaves_the_cache_consistent(
 @pytest.mark.asyncio
 async def test_an_age_trims_the_old_and_keeps_the_rest(hass, writer: ScribeWriter):
     """`keep_days` is a horizon, not a list: everything older goes."""
-    from datetime import timedelta
+    from datetime import datetime, timedelta, timezone
 
-    from .conftest import DSN
-    import asyncpg
-
-    await write_states(writer, "sensor.long_lived", 3)
-    # The helper writes around BASE_TIME, which is itself weeks in the past, so
-    # the horizon below has to clear it: 60 days keeps those three and drops the
-    # three written 40 days before them.
-    conn = await asyncpg.connect(DSN)
-    try:
-        metadata_id = writer._entity_id_map["sensor.long_lived"]
-        await conn.executemany(
-            "INSERT INTO states_raw (time, metadata_id, state) VALUES ($1, $2, 'old')",
-            [
-                (
-                    BASE_TIME - timedelta(days=40 + i),
-                    metadata_id,
-                )
-                for i in range(3)
-            ],
-        )
-    finally:
-        await conn.close()
+    # The horizon is measured from *now*, so both sides of it are anchored to
+    # the clock rather than to BASE_TIME. The rows meant to survive used to sit
+    # at BASE_TIME, a fixed date: sixty days after it they were past the
+    # horizon too, the purge took all six, and this test failed on every
+    # branch without a line of code having changed.
+    now = datetime.now(timezone.utc)
+    await write_states(writer, "sensor.long_lived", 3, base=now - timedelta(days=90))
+    await write_states(writer, "sensor.long_lived", 3, base=now - timedelta(days=1))
     assert await _entity_rows(writer._pool, "sensor.long_lived") == 6
 
     purged = await writer.purge(keep_days=60)
