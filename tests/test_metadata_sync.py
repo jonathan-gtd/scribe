@@ -45,7 +45,7 @@ def mock_registries():
     device1.manufacturer = "Philips"
     device1.sw_version = "1.0.0"
     device1.area_id = "area_1"
-    device1.config_entries = {"entry_1"}
+    device1.config_entry_id = "entry_1"
     dr.devices = {"device_1": device1}
 
     return er, ar, dr
@@ -201,7 +201,7 @@ async def test_realtime_metadata_sync(
         new_device.manufacturer = "Acme"
         new_device.sw_version = "2.0"
         new_device.area_id = "area_1"
-        new_device.config_entries = {"entry_1"}
+        new_device.config_entry_id = "entry_1"
         mock_dr.async_get.return_value = new_device
 
         hass.bus.async_fire(

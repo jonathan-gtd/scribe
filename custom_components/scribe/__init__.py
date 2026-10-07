@@ -286,6 +286,20 @@ def _area_row(area) -> dict:
 _CHILD_DEVICE_ENTRY = getattr(dr, "ChildDeviceEntry", ())
 
 
+def _device_config_entry(device):
+    """The config entry a device belongs to.
+
+    Since Home Assistant 2026.8 a device belongs to a single config entry,
+    `config_entry_id`. The set it replaced, `config_entries`, is still there,
+    but from 2026.10 every read of it logs a deprecation, and it stops working
+    in 2027.10. Before 2026.8 the set is all there is. Compatibility shim: see
+    DEVELOPMENT.md.
+    """
+    if hasattr(device, "config_entry_id"):
+        return device.config_entry_id
+    return next(iter(device.config_entries), None) if device.config_entries else None
+
+
 def _device_row(device) -> dict:
     """One device, as a row for the `devices` table."""
     child = isinstance(device, _CHILD_DEVICE_ENTRY)
@@ -297,9 +311,7 @@ def _device_row(device) -> dict:
         "manufacturer": None if child else device.manufacturer,
         "sw_version": None if child else device.sw_version,
         "area_id": device.area_id,
-        "primary_config_entry": next(iter(device.config_entries), None)
-        if device.config_entries
-        else None,
+        "primary_config_entry": _device_config_entry(device),
     }
 
 
