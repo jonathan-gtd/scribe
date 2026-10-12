@@ -630,6 +630,17 @@ Scribe reports problems it cannot fix on its own in **Settings → System → Re
 
 ### Performance tuning
 
+**A query about one entity that returns few rows — the latest value, the value at a given moment — belongs in `states_for()` rather than in the view.** `states` has to resolve `entity_id` for every row it returns, which puts the filter on the entity *above* the join: `ORDER BY time DESC LIMIT 1` then reads and sorts the whole history of every entity before the `LIMIT` throws it away. Measured on two years of history, 4.2 s against 20 ms.
+
+```sql
+SELECT * FROM states_for('sensor.outside_temperature')
+WHERE time <= '2026-10-10 00:00:00' AND value IS NOT NULL
+ORDER BY time DESC
+LIMIT 1;
+```
+
+Scribe creates that function next to the view, with the same five columns. [`docs/data-structure.md`](docs/data-structure.md) covers when to reach for which.
+
 If the `states` view is slow (several seconds per query), it is likely due to the PostgreSQL query planner choosing a **Hash Join** instead of a **Nested Loop**, which prevents TimescaleDB from pruning chunks effectively.
 
 The most common cause is a high `random_page_cost` (the default is `4.0`, optimized for HDDs). If you are using modern storage (SSD, NVMe) or have a well-cached database, you should reduce this value:

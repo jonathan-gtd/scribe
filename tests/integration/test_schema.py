@@ -3,7 +3,7 @@
 import asyncpg
 import pytest
 
-from .conftest import make_writer, table_exists
+from .conftest import DSN, make_writer, table_exists
 
 
 @pytest.mark.asyncio
@@ -216,5 +216,143 @@ async def test_an_index_left_by_an_earlier_version_is_dropped(hass, clean_db):
                 "WHERE metadata_id = 1 ORDER BY time DESC LIMIT 1"
             )
         assert newest == 1.0
+    finally:
+        await w.stop()
+
+
+@pytest.mark.asyncio
+async def test_the_states_function_answers_like_the_view(writer, db):
+    """`states_for('x')` returns exactly the view's rows for that entity."""
+    async with db.acquire() as conn:
+        for entity_id in ("sensor.looked_up", "sensor.other"):
+            mid = await conn.fetchval(
+                "INSERT INTO entities (entity_id) VALUES ($1) RETURNING id",
+                entity_id,
+            )
+            await conn.execute(
+                "INSERT INTO states_raw (time, metadata_id, state, value, attributes) "
+                "SELECT now() - (s || ' seconds')::interval, $1, 'on', s, "
+                "jsonb_build_object('n', s) "
+                "FROM generate_series(1, 3) s",
+                mid,
+            )
+
+        through_function = await conn.fetch(
+            "SELECT time, entity_id, state, value, attributes "
+            "FROM states_for('sensor.looked_up') ORDER BY time"
+        )
+        through_view = await conn.fetch(
+            "SELECT time, entity_id, state, value, attributes "
+            "FROM states WHERE entity_id = 'sensor.looked_up' ORDER BY time"
+        )
+
+    assert [dict(r) for r in through_function] == [dict(r) for r in through_view]
+    assert len(through_function) == 3
+    assert all(r["entity_id"] == "sensor.looked_up" for r in through_function)
+
+
+@pytest.mark.asyncio
+async def test_an_unknown_entity_returns_no_rows(writer, db):
+    """The entity lookup inside the function yields NULL, which matches nothing."""
+    async with db.acquire() as conn:
+        assert (
+            await conn.fetch("SELECT * FROM states_for('sensor.never_recorded')") == []
+        )
+        assert await conn.fetch("SELECT * FROM states_for(NULL)") == []
+
+
+@pytest.mark.asyncio
+async def test_the_states_function_is_inlined_into_the_calling_query(writer, db):
+    """What makes it fast: the filter and the LIMIT must reach `states_raw`.
+
+    PostgreSQL inlines a one-statement SQL function, and only then can the
+    planner push `ORDER BY time DESC LIMIT 1` down to the hypertable instead
+    of sorting every entity's history above the join — which is exactly what
+    the view cannot avoid (#97). A plan containing `Function Scan` means the
+    inlining did not happen and the whole point is lost.
+    """
+    async with db.acquire() as conn:
+        mid = await conn.fetchval(
+            "INSERT INTO entities (entity_id) VALUES ('sensor.planned') RETURNING id"
+        )
+        await conn.execute(
+            "INSERT INTO states_raw (time, metadata_id, state, value) "
+            "SELECT now() - (s || ' seconds')::interval, $1, 'on', s "
+            "FROM generate_series(1, 2000) s",
+            mid,
+        )
+        await conn.execute("ANALYZE states_raw")
+        plan = "\n".join(
+            r["QUERY PLAN"]
+            for r in await conn.fetch(
+                "EXPLAIN SELECT * FROM states_for('sensor.planned') "
+                "WHERE time <= now() AND value IS NOT NULL "
+                "ORDER BY time DESC LIMIT 1"
+            )
+        )
+
+    assert "Function Scan" not in plan, plan
+    # The entity was resolved underneath, against the column states_raw is
+    # keyed and segmented by.
+    assert "metadata_id" in plan, plan
+
+
+@pytest.mark.asyncio
+async def test_the_states_function_is_named_after_the_view(hass, clean_db):
+    """A renamed states view gets a matching `<name>_for`."""
+    w = make_writer(hass, table_name_states="history")
+    await w.start()
+    try:
+        async with w._pool.acquire() as conn:
+            mid = await conn.fetchval(
+                "INSERT INTO entities (entity_id) VALUES ('sensor.renamed') RETURNING id"
+            )
+            await conn.execute(
+                "INSERT INTO states_raw (time, metadata_id, state) "
+                "VALUES (now(), $1, 'on')",
+                mid,
+            )
+            assert await conn.fetchval("SELECT to_regclass('states_for') IS NULL")
+            row = await conn.fetchrow("SELECT * FROM history_for('sensor.renamed')")
+        assert row["entity_id"] == "sensor.renamed"
+        assert row["state"] == "on"
+    finally:
+        await w.stop()
+
+
+@pytest.mark.asyncio
+async def test_a_function_whose_columns_differ_is_replaced(hass, clean_db):
+    """CREATE OR REPLACE cannot change output columns; startup drops and recreates.
+
+    An installation carrying a `states_for` from a version that returned
+    something else must end up with this one, not with an error.
+    """
+    conn = await asyncpg.connect(DSN)
+    try:
+        await conn.execute(
+            """
+            CREATE FUNCTION states_for(p_entity_id TEXT)
+            RETURNS TABLE ("time" TIMESTAMPTZ, entity_id TEXT)
+            LANGUAGE sql STABLE AS $fn$ SELECT now(), p_entity_id $fn$
+            """
+        )
+    finally:
+        await conn.close()
+
+    w = make_writer(hass)
+    await w.start()
+    try:
+        async with w._pool.acquire() as conn:
+            mid = await conn.fetchval(
+                "INSERT INTO entities (entity_id) VALUES ('sensor.replaced') RETURNING id"
+            )
+            await conn.execute(
+                "INSERT INTO states_raw (time, metadata_id, state, value) "
+                "VALUES (now(), $1, 'on', 2.0)",
+                mid,
+            )
+            row = await conn.fetchrow("SELECT * FROM states_for('sensor.replaced')")
+        assert dict(row).keys() == {"time", "entity_id", "state", "value", "attributes"}
+        assert row["value"] == 2.0
     finally:
         await w.stop()

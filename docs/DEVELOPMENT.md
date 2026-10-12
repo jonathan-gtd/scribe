@@ -145,7 +145,8 @@ Runs after every successful connection, in this order:
 
 1. **Schema** (`_ensure_schema`). If `db_schema` is set: `CREATE SCHEMA IF NOT EXISTS`, then check that `current_schema()` really is that schema. PostgreSQL silently skips a `search_path` entry that does not exist, so without this check the history would go to `public`. If the check fails, recording is refused and `schema_unavailable` is raised.
 2. **Pre-3.0 database check** (`_detect_legacy_schema`). A `states` *table*, a `states_legacy` table, or an `entities` table without an `id` column means a database from before 3.0. Scribe then records nothing, changes nothing and raises `legacy_schema`, which points at 3.8, the last version able to convert it.
-3. **Tables** (`_create_tables`), in one transaction: `entities` first, then `users`, `areas`, `devices`, `integrations` (each only if enabled), then `states_raw` + the `states` view (if `record_states`) and `events` (if `record_events`). All use `CREATE ... IF NOT EXISTS`.
+3. **Tables** (`_create_tables`), in one transaction: `entities` first, then `users`, `areas`, `devices`, `integrations` (each only if enabled), then `states_raw` + the `states` view + the `states_for()` function (if `record_states`) and `events` (if `record_events`). All use `CREATE ... IF NOT EXISTS`.
+   One transaction means a failed statement aborts every statement after it, so anything in there that is *allowed* to fail takes a savepoint of its own — `async with conn.transaction()`, as `_init_states_function` does. Without it a function the database refuses would leave `events` uncreated.
 4. **TimescaleDB** (`ensure_timescaledb`). If the extension is missing but available, Scribe runs `CREATE EXTENSION`. If it still is not there, `no_timescaledb` is raised and the hypertable steps are skipped.
 5. **Hypertables**, separately for `states_raw` (segmented by `metadata_id`) and `events` (segmented by `event_type`):
    `create_hypertable` → enable compression → `_apply_chunk_interval` → `_apply_compression_policy` → `_verify_storage_features` → `_apply_retention_policy`.
@@ -158,6 +159,7 @@ The tables:
 |---|---|---|
 | `states_raw` | `(metadata_id, time)` | `time`, `metadata_id` → `entities.id`, `state`, `value`, `attributes` (jsonb). Hypertable. |
 | `states` (view) | — | `states_raw` joined to `entities`: `time`, `entity_id`, `state`, `value`, `attributes`. What users query. |
+| `states_for(text)` (function) | — | The same five columns for one entity. Inlined into the calling query, so `ORDER BY time DESC LIMIT n` reaches `states_raw` instead of sorting every entity's history above the join (#97). |
 | `states_hourly_raw`, `states_daily_raw` | — | Continuous aggregates of `states_raw` (average, minimum, maximum, count per `metadata_id` and bucket). Only with `enable_rollups`. |
 | `states_hourly`, `states_daily` (views) | — | The same, by `entity_id` — what `states` is to `states_raw`. |
 | `events` | none | `time`, `event_type`, `event_data` (jsonb), `origin`, `context_id`, `context_user_id`, `context_parent_id`. Hypertable. |
