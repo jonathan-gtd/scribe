@@ -626,6 +626,17 @@ Scribe meldt problemen die het niet zelf kan oplossen in **Instellingen → Syst
 
 ### Prestatieafstemming
 
+**Een query over één entiteit die maar een paar rijen nodig heeft — de laatste waarde, de waarde op een bepaald moment — hoort in `states_for()` en niet in de view.** `states` moet `entity_id` oplossen voor elke rij die hij teruggeeft, waardoor het filter op de entiteit *boven* de join terechtkomt: `ORDER BY time DESC LIMIT 1` leest en sorteert dan de volledige geschiedenis van alle entiteiten voordat de `LIMIT` die weggooit. Gemeten op twee jaar geschiedenis: 4,2 s tegenover 20 ms.
+
+```sql
+SELECT * FROM states_for('sensor.outside_temperature')
+WHERE time <= '2026-10-10 00:00:00' AND value IS NOT NULL
+ORDER BY time DESC
+LIMIT 1;
+```
+
+Scribe maakt die functie naast de view aan, met dezelfde vijf kolommen. [`docs/data-structure.md`](docs/data-structure.md) legt uit wanneer u welke gebruikt.
+
 Is de view `states` traag (meerdere seconden per query), dan komt dat waarschijnlijk doordat de queryplanner van PostgreSQL een **Hash Join** kiest in plaats van een **Nested Loop**, waardoor TimescaleDB chunks niet effectief kan wegsnoeien.
 
 De meest voorkomende oorzaak is een hoge `random_page_cost` (standaard `4.0`, geoptimaliseerd voor harde schijven). Gebruikt u moderne opslag (SSD, NVMe) of is uw database goed gecachet, verlaag die waarde dan:

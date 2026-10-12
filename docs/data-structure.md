@@ -15,6 +15,7 @@ Scribe is a long-term storage integration for Home Assistant. It stores entity s
 | `integrations` | Table | HA integrations (platforms) |
 | `users` | Table | HA user accounts |
 | `states` | View | Convenience join of `states_raw` + `entities` |
+| `states_for(entity_id)` | Function | The same five columns for one entity — what to use for `ORDER BY … LIMIT` |
 | `states_hourly` | View | Hourly summary per entity — only with `enable_rollups` |
 | `states_daily` | View | Daily summary per entity — only with `enable_rollups` |
 
@@ -118,6 +119,34 @@ JOIN entities e ON e.id = s.metadata_id
 
 ---
 
+### `states_for(entity_id)` — The view, for one entity
+
+A function returning the same five columns as `states`, for the entity you name:
+
+```sql
+SELECT * FROM states_for('sensor.outside_temperature')
+WHERE time <= '2026-10-10 00:00:00' AND value IS NOT NULL
+ORDER BY time DESC
+LIMIT 1;
+```
+
+**Use it for any query about one entity that wants few rows** — the latest value, the value at a point in time, the last ten readings. The `states` view cannot answer those quickly: it has to resolve `entity_id` for every row it returns, which puts the filter on `entity_id` *above* the join, so `ORDER BY time DESC LIMIT 1` reads and sorts the whole history of every entity before the `LIMIT` throws it away. Measured on two years of history: **4.2 s through the view, 20 ms through the function.**
+
+PostgreSQL inlines a one-statement SQL function into the query that calls it, so your `WHERE` and your `LIMIT` reach `states_raw` itself: TimescaleDB walks the chunks newest-first and stops at the first row that matches. It is the hand-written `metadata_id` lookup below, without the hand-writing.
+
+A query already written against the view only needs its `FROM` changed — the returned `entity_id` is the argument, so an `entity_id = '…'` left in the `WHERE` still holds:
+
+```sql
+SELECT * FROM states_for('sensor.outside_temperature')
+WHERE entity_id = 'sensor.outside_temperature'   -- still true, costs nothing
+  AND time <= '2026-10-10 00:00:00'
+ORDER BY time DESC LIMIT 1;
+```
+
+It is created next to the view, whenever Scribe records states. An unknown entity returns no rows.
+
+---
+
 ### `states_hourly` and `states_daily` — Summaries
 
 Created only when `enable_rollups` is on. They are views over two TimescaleDB **continuous aggregates**, which the database keeps up to date as states arrive. A chart over years reads thousands of rows here instead of millions in `states_raw`.
@@ -204,6 +233,20 @@ ORDER BY s.time DESC
 LIMIT 100;
 ```
 
+### The latest value at or before a point in time
+
+The one query the view is bad at, and what `states_for()` is there for:
+
+```sql
+SELECT time, value
+FROM states_for('sensor.ping_de_jitter')
+WHERE time <= '2026-10-10 00:00:00' AND value IS NOT NULL
+ORDER BY time DESC
+LIMIT 1;
+```
+
+The same shape serves "the last state before the house was armed", "the meter reading at midnight" and every `LAST_VALUE`-style lookup. Through the `states` view this takes seconds and gets slower as the database grows; here it reads one row.
+
 ### Grafana query (with time filter)
 
 ```sql
@@ -272,4 +315,4 @@ ORDER BY s.time DESC;
 
 - **`state` vs `value`**: Numeric sensors populate `value`; non-numeric states (e.g. `on`/`off`, `unavailable`) are stored in `state`. Both can be set simultaneously.
 - **`attributes`**: Contains the full HA attribute dict as JSONB at time of recording (unit, device class, friendly name, etc.). Query example: `attributes->>'unit_of_measurement'`.
-- **Performance**: For Grafana dashboards covering large time ranges, always use `states_raw` + explicit JOIN rather than the `states` view, and make sure the `$__timeFilter` is on `s.time` so TimescaleDB can prune chunks effectively.
+- **Performance**: For Grafana dashboards covering large time ranges, always use `states_raw` + explicit JOIN rather than the `states` view, and make sure the `$__timeFilter` is on `s.time` so TimescaleDB can prune chunks effectively. For a query about a single entity that returns few rows — `ORDER BY time DESC LIMIT …` — use `states_for('…')`, which the planner can push the `LIMIT` through.

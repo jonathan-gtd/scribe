@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **`states_for('sensor.x')`, for the questions the `states` view answers slowly (#97)**: "what did this entity read at that moment" is a `WHERE time <= … ORDER BY time DESC LIMIT 1`, and through the view that is one of the most expensive queries you can write — 4.2 s for a single row on two years of history, and getting slower as the database grows. The reason is the view's own shape: it resolves `entity_id` for every row it returns, which is the only join that lets TimescaleDB prune compressed chunks, but it also puts the filter on the entity *above* the join, so the whole history of every entity is read and sorted before the `LIMIT` throws all of it away. Scribe now creates a function beside the view, returning the same five columns for the entity you name. PostgreSQL inlines it into your query, so the entity lookup and the `LIMIT` reach `states_raw` itself and the database stops at the first row that matches: the same query, the same database, **20 ms**. An existing query only needs its `FROM` swapped — the `entity_id` it returns is the argument, so a filter on it still holds. Suggested, with the function, by @sithmein.
+
 ## [4.4.1] - 2026-10-07
 
 ### Fixed

@@ -85,6 +85,17 @@ async def test_writer_init_db(writer, mock_pool, mock_db_connection):
     # unqualified one could drop another schema's `states` view.
     assert any('CREATE VIEW "public"."states"' in c for c in calls)
     assert any('DROP VIEW IF EXISTS "public"."states"' in c for c in calls)
+    # The per-entity lookup function next to the view, qualified for the same
+    # reason, and reading a qualified `states_raw`: a SQL function resolves
+    # the names in its body against the caller's search_path.
+    assert any(
+        'CREATE OR REPLACE FUNCTION "public"."states_for"(p_entity_id TEXT)' in c
+        for c in calls
+    )
+    assert any(
+        'FROM "public"."states_raw" s' in c and 'FROM "public"."entities" e' in c
+        for c in calls
+    )
     assert any("CREATE TABLE IF NOT EXISTS events" in c for c in calls)
 
     # Hypertable is on states_raw now. The table and the chunk interval are
@@ -102,6 +113,46 @@ async def test_writer_init_db(writer, mock_pool, mock_db_connection):
     # Initial row counts are only fetched when the I/O statistics sensors are
     # enabled; this writer leaves them off, so nothing must have been counted.
     assert not any("count(*)" in c.lower() for c in calls)
+
+
+@pytest.mark.asyncio
+async def test_a_refused_states_function_does_not_stop_the_schema(
+    writer, mock_db_connection, caplog
+):
+    """The tables are created in one transaction, which the function must not abort.
+
+    A statement that fails inside a transaction makes every statement after it
+    fail too, so a `states_for` the database refuses — no privileges, most
+    often — would take the `events` table down with it. It is created inside a
+    savepoint, and its own failure is a warning and nothing else.
+    """
+
+    class _Denied(Exception):
+        sqlstate = "42501"  # insufficient_privilege
+
+    async def fetchval_side_effect(sql, *args):
+        if "information_schema" in sql:
+            return False
+        if "pg_extension" in sql or "timescaledb_information" in sql:
+            return True
+        return 0
+
+    mock_db_connection.fetchval.side_effect = fetchval_side_effect
+
+    async def execute_side_effect(sql, *args):
+        if "CREATE OR REPLACE FUNCTION" in str(sql):
+            raise _Denied("permission denied for schema public")
+
+    mock_db_connection.execute.side_effect = execute_side_effect
+
+    await writer.start()
+    await asyncio.sleep(0.1)
+
+    calls = [str(c.args[0]) for c in mock_db_connection.execute.mock_calls if c.args]
+    assert any("CREATE TABLE IF NOT EXISTS events" in c for c in calls)
+    # And only one attempt: a privilege error is not a reason to drop anything.
+    assert not any("DROP FUNCTION" in c for c in calls)
+    assert "Could not create the 'states_for' function" in caplog.text
 
 
 @pytest.mark.asyncio

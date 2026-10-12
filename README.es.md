@@ -651,6 +651,24 @@ registros. Cada uno desaparece solo en cuanto se corrige la causa.
 
 ### Ajuste del rendimiento
 
+**Una consulta sobre una sola entidad que solo quiere unas pocas filas —el
+último valor, el valor en un momento dado— va por `states_for()` y no por la
+vista.** `states` tiene que resolver `entity_id` para cada fila que devuelve, lo
+que coloca el filtro sobre la entidad *por encima* del join: `ORDER BY time DESC
+LIMIT 1` lee y ordena entonces todo el historial de todas las entidades antes de
+que el `LIMIT` lo deseche. Medido sobre dos años de historial: 4,2 s frente a
+20 ms.
+
+```sql
+SELECT * FROM states_for('sensor.outside_temperature')
+WHERE time <= '2026-10-10 00:00:00' AND value IS NOT NULL
+ORDER BY time DESC
+LIMIT 1;
+```
+
+Scribe crea esa función junto a la vista, con las mismas cinco columnas.
+[`docs/data-structure.md`](docs/data-structure.md) explica cuándo usar cada una.
+
 Si la vista `states` va lenta (varios segundos por consulta), suele deberse a
 que el planificador de PostgreSQL elige un **Hash Join** en lugar de un **Nested
 Loop**, lo que impide a TimescaleDB podar chunks de forma eficaz.

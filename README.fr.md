@@ -654,6 +654,25 @@ Chacun disparaît de lui-même une fois la cause corrigée.
 
 ### Réglage des performances
 
+**Une requête portant sur une seule entité et qui ne veut que quelques lignes
+— la dernière valeur, la valeur à un instant donné — passe par `states_for()`
+plutôt que par la vue.** `states` doit résoudre `entity_id` pour chaque ligne
+qu'elle renvoie, ce qui place le filtre sur l'entité *au-dessus* de la
+jointure : `ORDER BY time DESC LIMIT 1` lit et trie alors tout l'historique de
+toutes les entités avant que le `LIMIT` ne le jette. Mesuré sur deux ans
+d'historique : 4,2 s contre 20 ms.
+
+```sql
+SELECT * FROM states_for('sensor.outside_temperature')
+WHERE time <= '2026-10-10 00:00:00' AND value IS NOT NULL
+ORDER BY time DESC
+LIMIT 1;
+```
+
+Scribe crée cette fonction à côté de la vue, avec les mêmes cinq colonnes.
+[`docs/data-structure.md`](docs/data-structure.md) explique quand utiliser
+laquelle.
+
 Si la vue `states` est lente (plusieurs secondes par requête), c'est
 généralement que le planificateur PostgreSQL choisit un **Hash Join** au lieu
 d'un **Nested Loop**, ce qui empêche TimescaleDB d'élaguer efficacement les

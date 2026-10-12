@@ -657,6 +657,24 @@ behoben ist.
 
 ### Leistungsoptimierung
 
+**Eine Abfrage zu einer einzelnen Entität, die nur wenige Zeilen braucht —
+der letzte Wert, der Wert zu einem bestimmten Zeitpunkt — gehört in
+`states_for()` und nicht in die Sicht.** `states` muss `entity_id` für jede
+zurückgegebene Zeile auflösen, wodurch der Filter auf die Entität *über* der
+Verknüpfung landet: `ORDER BY time DESC LIMIT 1` liest und sortiert dann die
+gesamte Historie aller Entitäten, bevor das `LIMIT` sie wegwirft. Gemessen an
+zwei Jahren Historie: 4,2 s gegenüber 20 ms.
+
+```sql
+SELECT * FROM states_for('sensor.outside_temperature')
+WHERE time <= '2026-10-10 00:00:00' AND value IS NOT NULL
+ORDER BY time DESC
+LIMIT 1;
+```
+
+Scribe erstellt diese Funktion neben der Sicht, mit denselben fünf Spalten.
+[`docs/data-structure.md`](docs/data-structure.md) erklärt, wann welche passt.
+
 Ist die Sicht `states` langsam (mehrere Sekunden pro Abfrage), wählt der
 PostgreSQL-Planer meist einen **Hash Join** statt eines **Nested Loop**, was
 TimescaleDB daran hindert, Chunks wirksam auszuschließen.

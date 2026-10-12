@@ -96,6 +96,20 @@ async def drop_scribe_relations(conn):
         if keyword:
             await conn.execute(f'DROP {keyword} IF EXISTS "{row["relname"]}" CASCADE')
 
+    # The per-entity lookup function Scribe creates beside the view is not a
+    # relation, so the sweep above never sees it. It is named after the
+    # configured view name (`states_for` by default), hence the pattern.
+    functions = await conn.fetch(
+        r"""
+        SELECT p.oid::regprocedure::text AS identity
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.proname LIKE '%\_for'
+        """
+    )
+    for row in functions:
+        await conn.execute(f"DROP FUNCTION IF EXISTS {row['identity']} CASCADE")
+
 
 async def dsn_reachable() -> bool:
     """True when a database answers at DSN within a short timeout."""

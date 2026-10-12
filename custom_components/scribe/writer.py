@@ -1505,6 +1505,10 @@ class ScribeWriter:
         # replace a *table* that happens to carry the configured name.
         await self._init_states_view(conn)
 
+        # 3. And the per-entity function next to it, for the queries the view
+        # cannot answer quickly.
+        await self._init_states_function(conn)
+
     async def _init_states_view(self, conn):
         """Create the backward-compatible states view, if the name isn't taken by a table."""
         try:
@@ -1569,6 +1573,102 @@ class ScribeWriter:
                     "error": f"{e} ({type(e).__name__})",
                 },
                 severity=ir.IssueSeverity.ERROR,
+            )
+
+    async def _init_states_function(self, conn):
+        """Create `<states>_for(entity_id)`, for the queries the view cannot make fast.
+
+        `states` resolves `entity_id` through a materialized lateral join, the
+        only shape that keeps segment pruning alive (see `_init_states_view`).
+        What that shape costs is where the filter on `entity_id` ends up: above
+        the join. "The last value this entity had before that moment" —
+        `ORDER BY time DESC LIMIT 1` — then reads and sorts the whole history
+        of every entity before the LIMIT throws all of it away. Measured on two
+        years of history (48 M rows, 101 chunks): 4.2 s for one row, and it
+        grows with the database.
+
+        PostgreSQL inlines a one-statement SQL function into the query that
+        calls it, so `states_for('sensor.x')` plans as if the `metadata_id` had
+        been written out by hand: the filter and the LIMIT reach `states_raw`
+        itself, TimescaleDB walks the chunks newest-first and stops at the
+        first row that matches. The same query, same database: 20 ms.
+
+        Suggested in #97 by @sithmein, who wrote the function.
+
+        Table names are qualified inside the body: unlike a view, a SQL
+        function stores its body as text and resolves those names against the
+        `search_path` of whoever calls it.
+        """
+        function = self._qualified(f"{self.table_name_states}_for")
+        statement = f"""
+            CREATE OR REPLACE FUNCTION {function}(p_entity_id TEXT)
+            RETURNS TABLE (
+                "time" TIMESTAMPTZ,
+                entity_id TEXT,
+                state TEXT,
+                value DOUBLE PRECISION,
+                attributes JSONB
+            )
+            LANGUAGE sql
+            STABLE
+            PARALLEL SAFE
+            AS $fn$
+                -- Every reference is qualified: the output columns declared
+                -- above are in scope here, and an unqualified `state` or
+                -- `value` would be ambiguous.
+                SELECT s.time, p_entity_id, s.state, s.value, s.attributes
+                FROM {self._qualified("states_raw")} s
+                WHERE s.metadata_id = (
+                    SELECT e.id
+                    FROM {self._qualified("entities")} e
+                    WHERE e.entity_id = p_entity_id
+                )
+            $fn$;
+        """
+        _LOGGER.debug(
+            "[writer._init_states_function] Creating/Replacing function '%s_for'",
+            self.table_name_states,
+        )
+        try:
+            # Every attempt gets a savepoint of its own. `_create_tables` runs
+            # in one transaction, and a statement that fails inside it aborts
+            # the whole thing — a function that cannot be created would then
+            # take the `events` table down with it.
+            try:
+                async with conn.transaction():
+                    await conn.execute(statement)
+            except Exception as e:
+                # 42P13: something already answers to that name and argument
+                # with different output columns — a function an earlier Scribe
+                # created. CREATE OR REPLACE cannot change them; dropping it
+                # first can. Only this one error is worth a second attempt.
+                if getattr(e, "sqlstate", None) != "42P13":
+                    raise
+                _LOGGER.info(
+                    "[writer._init_states_function] Replacing an earlier "
+                    "'%s_for' whose columns differ",
+                    self.table_name_states,
+                )
+                async with conn.transaction():
+                    await conn.execute(
+                        f"DROP FUNCTION IF EXISTS {function}(TEXT) CASCADE"
+                    )
+                    await conn.execute(statement)
+        except Exception as e:
+            # Nothing depends on it: states are recorded as usual, and the
+            # view answers every query it ever did — just slowly for this one
+            # pattern. A Repairs card would be more alarm than the loss is
+            # worth, and the cause (privileges on the schema) already has one
+            # if it stopped the view too.
+            _LOGGER.warning(
+                "[writer._init_states_function] Could not create the '%s_for' "
+                "function: %s (%s). Queries through the '%s' view still work; "
+                "the ones asking for the latest value before a point in time "
+                "will be slow.",
+                self.table_name_states,
+                e,
+                type(e).__name__,
+                self.table_name_states,
             )
 
     async def _init_events_table(self, conn):
