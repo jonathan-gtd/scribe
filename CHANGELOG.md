@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **The README says what to do about the recorder (#100)**: after installing Scribe, states and events are written twice — once by Home Assistant's recorder, once by Scribe — and nothing said whether that was intended, which of the two to shorten, or what stops working if the recorder is reduced or removed. A new section, in the five translations, lays out both setups: keeping the recorder on a short `purge_keep_days` window, which leaves long-term statistics and the Energy dashboard untouched, and dropping it entirely, with what that takes and what it costs. Including the trap: the recorder's `exclude` also gates statistics compilation, so an entity excluded there leaves the Energy dashboard for good. Asked by @johntdyer.
+
 ## [4.5.0] - 2026-10-12
 
 ### Added

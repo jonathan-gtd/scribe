@@ -544,6 +544,75 @@ A pre-configured Lovelace layout containing all useful Scribe sensors (Database 
 </details>
 
 <details>
+<summary><b>🔀 Running alongside the recorder — or instead of it</b></summary>
+<br>
+
+Scribe runs **alongside** Home Assistant's recorder; it does not replace it.
+Nothing in Home Assistant reads from Scribe — the History and Logbook panels,
+the Energy dashboard and every integration that asks for history read the
+recorder's own database. Scribe declares no dependency on the recorder and
+listens to the event bus itself, which is why, out of the box, the two record
+everything in parallel.
+
+That duplication is expected, and there are two ways out of it. Which one
+depends on how much you still want from Home Assistant's own interface.
+
+### Keeping the recorder, on a short window
+
+`purge_keep_days` is the lever. It purges states, events and *short-term*
+statistics; **long-term statistics are not touched by it**, so the Energy
+dashboard and the statistics cards keep their full history on a recorder that
+only holds a few days. The minimum is `1`.
+
+The recorder's `exclude` is the lever to leave alone for anything you may want
+to chart one day. Its entity filter also gates statistics compilation, so an
+excluded entity gets no long-term statistics at all and leaves the Energy
+dashboard for good — not just the History panel. Use it for noise. Scribe's own
+`include_*` and `exclude_*` lists are separate and change nothing on the
+recorder side.
+
+```yaml
+recorder:
+  purge_keep_days: 5          # enough for History and Logbook; statistics stay
+  exclude:
+    domains: [automation, update]
+
+scribe:
+  db_url: postgresql://scribe:password@192.168.1.10:5432/scribe
+  record_events: true
+  retention_states: ""        # keep forever; or e.g. "5 years"
+  retention_events: "365 days"
+  enable_rollups: true        # hourly and daily summaries, for charts over years
+```
+
+### Dropping the recorder entirely
+
+This is how I run it myself: no recorder, Scribe as the only history store, and
+every chart drawn by [Scribe Card](https://github.com/jonathan-gtd/scribe-card),
+which is still under active development.
+
+What it takes, and what it costs: `history` and `logbook` declare the recorder
+as a dependency, `energy` depends on both, and `default_config` pulls all three
+in — so you replace `default_config:` with the integrations you actually want,
+and you lose the History and Logbook panels, the Energy dashboard, long-term
+statistics, and the integrations that read the recorder (`history_stats`,
+`filter`, `statistics`, `sql`, `trend`). Worth it when your dashboards come from
+Scribe; not worth it if you still want the native panels.
+
+### Either way
+
+**Import what the recorder already holds before you shorten its window.**
+`recorder2scribe.py` reads an existing recorder database, SQLite or PostgreSQL —
+see *Migrating* below.
+
+**Scribe's retention is not `purge_keep_days`.** It drops whole chunks, so the
+window you keep is the interval you set plus up to one `chunk_time_interval`,
+and it starts deleting within seconds of the restart that enables it — see
+*Retention* above.
+
+</details>
+
+<details>
 <summary><b>📦 Migrating from InfluxDB, LTSS, the recorder or Scribe 2.x</b></summary>
 <br>
 

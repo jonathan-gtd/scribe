@@ -562,6 +562,76 @@ rendimiento de escritura), en dos variantes:
 </details>
 
 <details>
+<summary><b>🔀 Funcionar junto al recorder — o en su lugar</b></summary>
+<br>
+
+Scribe funciona **junto** al recorder de Home Assistant; no lo sustituye. Nada
+en Home Assistant lee de Scribe: los paneles Historial y Registro, el panel de
+Energía y cada integración que pide historial leen la base del propio recorder.
+Scribe no declara ninguna dependencia del recorder y escucha el bus de eventos
+por su cuenta, y por eso, tal cual, los dos registran todo en paralelo.
+
+Ese duplicado es lo esperado, y hay dos maneras de salir de él. Cuál depende de
+lo que todavía quiera de la interfaz de Home Assistant.
+
+### Mantener el recorder, con una ventana corta
+
+`purge_keep_days` es la palanca. Purga estados, eventos y estadísticas de *corto
+plazo*; **las estadísticas de largo plazo no se tocan**, así que el panel de
+Energía y las tarjetas de estadísticas conservan todo su historial con un
+recorder que solo guarda unos días. El mínimo es `1`.
+
+El `exclude` del recorder es la palanca que conviene dejar quieta para todo lo
+que quizá quiera representar algún día. Su filtro de entidades también
+condiciona el cálculo de estadísticas: una entidad excluida no obtiene ninguna
+estadística de largo plazo y abandona el panel de Energía para siempre, no solo
+el panel Historial. Resérvelo para el ruido. Las listas `include_*` y
+`exclude_*` de Scribe son independientes y no cambian nada en el recorder.
+
+```yaml
+recorder:
+  purge_keep_days: 5          # suficiente para Historial y Registro; las estadísticas se quedan
+  exclude:
+    domains: [automation, update]
+
+scribe:
+  db_url: postgresql://scribe:password@192.168.1.10:5432/scribe
+  record_events: true
+  retention_states: ""        # para siempre; o por ejemplo "5 years"
+  retention_events: "365 days"
+  enable_rollups: true        # resúmenes por hora y por día, para gráficos de varios años
+```
+
+### Quitar el recorder por completo
+
+Así lo uso yo: sin recorder, Scribe como único almacén de historial y todos los
+gráficos dibujados por
+[Scribe Card](https://github.com/jonathan-gtd/scribe-card), que sigue en pleno
+desarrollo.
+
+Lo que exige y lo que cuesta: `history` y `logbook` declaran el recorder como
+dependencia, `energy` depende de ambos y `default_config` arrastra los tres —
+hay que sustituir `default_config:` por las integraciones que realmente quiere, y
+se pierden los paneles Historial y Registro, el panel de Energía, las
+estadísticas de largo plazo y las integraciones que leen el recorder
+(`history_stats`, `filter`, `statistics`, `sql`, `trend`). Vale la pena cuando
+sus paneles vienen de Scribe; no vale la pena si todavía quiere los paneles
+nativos.
+
+### En ambos casos
+
+**Importe lo que el recorder ya contiene antes de acortar su ventana.**
+`recorder2scribe.py` lee una base de recorder existente, SQLite o PostgreSQL —
+vea *Migrar* más abajo.
+
+**La retención de Scribe no es `purge_keep_days`.** Elimina chunks completos: la
+ventana que conserva es el intervalo que fija más hasta un
+`chunk_time_interval`, y empieza a borrar segundos después del reinicio que la
+activa — vea *Retención* más arriba.
+
+</details>
+
+<details>
 <summary><b>📦 Migrar desde InfluxDB, LTSS, el recorder o Scribe 2.x</b></summary>
 <br>
 
