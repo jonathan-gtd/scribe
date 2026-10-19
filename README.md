@@ -20,7 +20,7 @@ Every state and every event, through `asyncpg` — without blocking the event lo
 Home Assistant's recorder keeps a few weeks of history in SQLite and slows down as it grows. Scribe writes the same states and events to **TimescaleDB**, where years stay fast and take a fraction of the space.
 
 - 🚀 **Asynchronous end to end** — `asyncpg` and batched `COPY`: recording never blocks Home Assistant.
-- 🗜️ **Compressed automatically** — old history is chunked and compressed, typically [30× smaller](#compression-measured).
+- 🗜️ **Compressed automatically** — old history is chunked and compressed, typically [30× smaller](docs/compression.md).
 - 🛟 **Nothing is lost** — a database that is down is buffered, then written when it returns.
 - 🧩 **Context included** — entities, devices, areas, users and integrations, not only values.
 - 🩺 **It says when something is wrong**, in Repairs rather than in a log nobody reads.
@@ -273,39 +273,7 @@ backfill, a migration script) land in old chunks.
 > compressed stay compressed — the setting only decides when the *next* ones
 > are.
 
-<a id="compression-measured"></a>
-
-### What compression actually gives
-
-Not a benchmark — the database behind this README, read on 2026-10-19:
-
-| Measured | |
-| :--- | :--- |
-| History | 53 147 521 states over 1 948 entities, since 2024-08-19 |
-| Chunks | 114, of which 112 compressed |
-| Before compression | 18 GB |
-| After compression | 608 MB |
-| **Ratio** | **29.7×** |
-
-The whole hypertable — two years of history, the uncompressed chunks included — takes **733 MB** on disk.
-
-TimescaleDB measures it itself, on any Scribe database:
-
-```sql
-SELECT pg_size_pretty(before_compression_total_bytes) AS before,
-       pg_size_pretty(after_compression_total_bytes)  AS after,
-       round(before_compression_total_bytes::numeric
-             / after_compression_total_bytes, 1)      AS ratio
-FROM hypertable_compression_stats('states_raw');
-```
-
-```
- before | after  | ratio
---------+--------+-------
- 18 GB  | 608 MB |  29.7
-```
-
-Chunk by chunk (`chunk_compression_stats('states_raw')`), the recent ones land between 21× and 24×; the overall figure is higher because the indexes a compressed chunk no longer needs go with them. With `enable_stats_size: true`, the same numbers are sensors.
+Measured on the database behind this README: **18 GB of history down to 608 MB, 29.7×**, the whole hypertable at 733 MB for two years — with the queries that produce those figures, in [Compression, measured](docs/compression.md).
 
 ### How the three settings fit together
 
