@@ -20,7 +20,7 @@ Every state and every event, through `asyncpg` — without blocking the event lo
 Home Assistant's recorder keeps a few weeks of history in SQLite and slows down as it grows. Scribe writes the same states and events to **TimescaleDB**, where years stay fast and take a fraction of the space.
 
 - 🚀 **Asynchronous end to end** — `asyncpg` and batched `COPY`: recording never blocks Home Assistant.
-- 🗜️ **Compressed automatically** — old history is chunked and compressed, typically [30× smaller](docs/compression.md).
+- 🗜️ **Compressed automatically** — old history is chunked and compressed, typically [20× to 30× smaller](docs/compression.md).
 - 🛟 **Nothing is lost** — a database that is down is buffered, then written when it returns.
 - 🧩 **Context included** — entities, devices, areas, users and integrations, not only values.
 - 🩺 **It says when something is wrong**, in Repairs rather than in a log nobody reads.

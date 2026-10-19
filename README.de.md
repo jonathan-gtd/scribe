@@ -20,7 +20,7 @@ Jeder Zustand und jedes Ereignis, über `asyncpg` — ohne die Event-Loop zu blo
 Der Recorder von Home Assistant hält einige Wochen Historie in SQLite und wird langsamer, je größer sie wird. Scribe schreibt dieselben Zustände und Ereignisse nach **TimescaleDB**, wo Jahre schnell bleiben und einen Bruchteil des Platzes brauchen.
 
 - 🚀 **Durchgehend asynchron** — `asyncpg` und gebündelte `COPY`: die Aufzeichnung blockiert Home Assistant nie.
-- 🗜️ **Automatisch komprimiert** — alte Historie wird in Chunks geteilt und komprimiert, typischerweise [30× kleiner](docs/compression.de.md).
+- 🗜️ **Automatisch komprimiert** — alte Historie wird in Chunks geteilt und komprimiert, typischerweise [20× bis 30× kleiner](docs/compression.de.md).
 - 🛟 **Nichts geht verloren** — eine nicht erreichbare Datenbank wird gepuffert und geschrieben, sobald sie zurück ist.
 - 🧩 **Mit Kontext** — Entitäten, Geräte, Bereiche, Benutzer und Integrationen, nicht nur Werte.
 - 🩺 **Es sagt, wenn etwas nicht stimmt**, in Reparaturen statt in einem Log, das niemand liest.
