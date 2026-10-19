@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 - **The README says what to do about the recorder (#100)**: after installing Scribe, states and events are written twice — once by Home Assistant's recorder, once by Scribe — and nothing said whether that was intended, which of the two to shorten, or what stops working if the recorder is reduced or removed. A new section, in the five translations, lays out both setups: keeping the recorder on a short `purge_keep_days` window, which leaves long-term statistics and the Energy dashboard untouched, and dropping it entirely, with what that takes and what it costs. Including the trap: the recorder's `exclude` also gates statistics compilation, so an entity excluded there leaves the Energy dashboard for good. Asked by @johntdyer.
+- **The README proves the compression it claims**: the headline said "typically 10× smaller" with nothing behind it. It now says **30×**, and links to the measurement — the database behind the README, 53 147 521 states over 1 948 entities, 18 GB before compression against 608 MB after, 29.7×, the whole hypertable at 733 MB for two years of history — next to the `hypertable_compression_stats()` query that produces it, so the figure is reproducible on any Scribe database rather than quoted.
 
 ## [4.5.0] - 2026-10-12
 
