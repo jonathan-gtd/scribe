@@ -20,7 +20,7 @@ Elke toestand en elke gebeurtenis, via `asyncpg` — zonder de event loop te blo
 De recorder van Home Assistant bewaart een paar weken historie in SQLite en wordt trager naarmate hij groeit. Scribe schrijft dezelfde toestanden en gebeurtenissen naar **TimescaleDB**, waar jaren snel blijven en een fractie van de ruimte innemen.
 
 - 🚀 **Van begin tot eind asynchroon** — `asyncpg` en gebundelde `COPY`: opnemen blokkeert Home Assistant nooit.
-- 🗜️ **Automatisch gecomprimeerd** — oude historie wordt in chunks gedeeld en gecomprimeerd, doorgaans [30× kleiner](#compression-measured).
+- 🗜️ **Automatisch gecomprimeerd** — oude historie wordt in chunks gedeeld en gecomprimeerd, doorgaans [20× tot 30× kleiner](docs/compression.nl.md).
 - 🛟 **Er gaat niets verloren** — een database die plat ligt wordt gebufferd en geschreven zodra hij terug is.
 - 🧩 **Context inbegrepen** — entiteiten, apparaten, gebieden, gebruikers en integraties, niet alleen waarden.
 - 🩺 **Het zegt wanneer er iets mis is**, in Reparaties in plaats van in een log dat niemand leest.
@@ -272,39 +272,7 @@ migratiescript) landen in oude chunks.
 > **Wijzigen gaat in bij de volgende herstart**, en al gecomprimeerde chunks blijven
 > gecomprimeerd — de instelling bepaalt alleen wanneer de *volgende* dat worden.
 
-<a id="compression-measured"></a>
-
-### Wat compressie werkelijk oplevert
-
-Geen benchmark — de database achter deze README, gelezen op 2026-10-19:
-
-| Meting | |
-| :--- | :--- |
-| Historie | 53 147 521 toestanden van 1 948 entiteiten, sinds 2024-08-19 |
-| Chunks | 114, waarvan 112 gecomprimeerd |
-| Vóór compressie | 18 GB |
-| Na compressie | 608 MB |
-| **Verhouding** | **29,7×** |
-
-De hele hypertable — twee jaar historie, de niet-gecomprimeerde chunks meegerekend — neemt **733 MB** op schijf in beslag.
-
-TimescaleDB meet het zelf, op elke Scribe-database:
-
-```sql
-SELECT pg_size_pretty(before_compression_total_bytes) AS before,
-       pg_size_pretty(after_compression_total_bytes)  AS after,
-       round(before_compression_total_bytes::numeric
-             / after_compression_total_bytes, 1)      AS ratio
-FROM hypertable_compression_stats('states_raw');
-```
-
-```
- before | after  | ratio
---------+--------+-------
- 18 GB  | 608 MB |  29.7
-```
-
-Chunk voor chunk (`chunk_compression_stats('states_raw')`) zitten de recente tussen 21× en 24×; het totaalcijfer ligt hoger omdat de indexen die een gecomprimeerde chunk niet meer nodig heeft mee verdwijnen. Met `enable_stats_size: true` zijn diezelfde waarden sensoren.
+Gemeten op de database achter deze README: **18 GB historie terug naar 608 MB, 29,7×**, de hele hypertable op 733 MB voor twee jaar — met de query's die die cijfers opleveren, in [Compressie, gemeten](docs/compression.nl.md).
 
 ### Hoe de drie instellingen samenhangen
 
