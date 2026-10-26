@@ -356,3 +356,73 @@ async def test_a_function_whose_columns_differ_is_replaced(hass, clean_db):
         assert row["value"] == 2.0
     finally:
         await w.stop()
+
+
+@pytest.mark.asyncio
+async def test_a_restart_keeps_grants_and_views_on_the_states_view(writer, db, hass):
+    """The view is replaced in place, so what users built on it survives a restart.
+
+    Dropping and recreating it gave a new object each start: GRANTs made on the
+    old one were gone, and CASCADE took views built on it along.
+    """
+    role = "scribe_test_reader"
+    async with db.acquire() as conn:
+        await conn.execute(
+            f"DO $$ BEGIN CREATE ROLE {role}; "
+            "EXCEPTION WHEN duplicate_object THEN NULL; END $$"
+        )
+        await conn.execute(f"GRANT SELECT ON states TO {role}")
+        await conn.execute("CREATE VIEW user_states AS SELECT * FROM states")
+
+    second = make_writer(hass)
+    await second.start()
+    try:
+        async with second._pool.acquire() as conn:
+            assert await conn.fetchval(
+                "SELECT has_table_privilege($1, 'states', 'SELECT')", role
+            )
+            assert await conn.fetchval("SELECT to_regclass('user_states') IS NOT NULL")
+    finally:
+        await second.stop()
+        async with db.acquire() as conn:
+            await conn.execute("DROP VIEW IF EXISTS user_states")
+            # Revokes the grant as well, which DROP ROLE would refuse over.
+            await conn.execute(f"DROP OWNED BY {role}")
+            await conn.execute(f"DROP ROLE {role}")
+
+
+@pytest.mark.asyncio
+async def test_a_states_view_with_other_columns_is_recreated(hass, clean_db):
+    """CREATE OR REPLACE cannot drop view columns; startup drops and recreates."""
+    conn = await asyncpg.connect(DSN)
+    try:
+        await conn.execute(
+            "CREATE TABLE states_raw (time TIMESTAMPTZ NOT NULL, "
+            "metadata_id INTEGER NOT NULL, state TEXT, value DOUBLE PRECISION, "
+            "attributes JSONB, PRIMARY KEY (metadata_id, time))"
+        )
+        await conn.execute(
+            "CREATE VIEW states AS SELECT time, metadata_id, state, value, "
+            "attributes, 'extra'::text AS extra FROM states_raw"
+        )
+    finally:
+        await conn.close()
+
+    w = make_writer(hass)
+    await w.start()
+    try:
+        async with w._pool.acquire() as conn:
+            columns = await conn.fetch(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema = 'public' AND table_name = 'states' "
+                "ORDER BY ordinal_position"
+            )
+        assert [c["column_name"] for c in columns] == [
+            "time",
+            "entity_id",
+            "state",
+            "value",
+            "attributes",
+        ]
+    finally:
+        await w.stop()

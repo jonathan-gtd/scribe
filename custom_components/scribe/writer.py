@@ -1531,9 +1531,7 @@ class ScribeWriter:
                 self.table_name_states,
             )
             view = self._qualified(self.table_name_states)
-            await conn.execute(f"DROP VIEW IF EXISTS {view} CASCADE;")
-            await conn.execute(f"""
-                CREATE VIEW {view} AS
+            definition = f"""{view} AS
                 WITH drive AS MATERIALIZED (
                     -- Only the two columns the view projects. `SELECT *`
                     -- materialized every entity's `capabilities` jsonb as well
@@ -1552,7 +1550,31 @@ class ScribeWriter:
                     SELECT * FROM states_raw s
                     WHERE s.metadata_id = e.id
                 ) s;
-            """)
+            """
+            # Replaced in place, not dropped: privileges belong to the view
+            # itself, so a DROP took every GRANT a user had made on it with it
+            # — and, through CASCADE, every view of theirs built on it — on
+            # each restart. Each attempt gets a savepoint, as in
+            # `_init_states_function`.
+            try:
+                async with conn.transaction():
+                    await conn.execute(f"CREATE OR REPLACE VIEW {definition}")
+            except Exception as e:
+                # 42P16: the existing view has other columns than these, which
+                # CREATE OR REPLACE cannot drop, rename or retype. Only then is
+                # it dropped, and its grants with it.
+                if getattr(e, "sqlstate", None) != "42P16":
+                    raise
+                _LOGGER.warning(
+                    "[writer._init_states_view] The existing '%s' view has "
+                    "other columns than Scribe's and is recreated: %s. Grants "
+                    "on it, and views built on it, are lost.",
+                    self.table_name_states,
+                    e,
+                )
+                async with conn.transaction():
+                    await conn.execute(f"DROP VIEW IF EXISTS {view} CASCADE;")
+                    await conn.execute(f"CREATE VIEW {definition}")
             self._clear_issue(ISSUE_VIEW_FAILED)
         except Exception as e:
             _LOGGER.error(
