@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **Filter by label: `include_labels` and `exclude_labels` (#110)**: choosing what Scribe records meant listing entities one by one or relying on their names matching a glob, and both fall apart as an installation grows. You can now put a label on what you want kept, in Home Assistant's own UI, and name that label in Scribe's options. A label on a device counts for every entity of that device, as it does when a label is the target of an action. An included label records the entity whatever the domain rules say; alone, it records labelled entities only; added to other include lists, it adds to them. An excluded label is never recorded, and neither is an entity excluded by id or glob, even when it carries an included label. Labels are read from the registry at each state change, so labelling an entity takes effect on its next state, without reloading Scribe. In YAML, a label is given by its id (`long_term`), not its display name. Suggested by @zeror.
+
 ## [4.5.0] - 2026-10-26
 
 ### Fixed

@@ -142,6 +142,8 @@ scribe:
   exclude_domains: []           # appliqué après les listes d'inclusion
   exclude_entities: []
   exclude_entity_globs: []
+  include_labels: []            # id d'étiquette, sur l'entité ou son appareil
+  exclude_labels: []            # l'emporte sur toute inclusion
   exclude_attributes: []        # attributs retirés de la colonne attributes
   include_events: []            # vide = tous les types d'événements
   exclude_events: []            # appliqué après include_events
@@ -216,6 +218,8 @@ scribe:
 | `exclude_domains` | Liste des domaines à exclure. |
 | `exclude_entities` | Liste des entités précises à exclure. |
 | `exclude_entity_globs` | Liste de motifs d'entités à exclure (ex. `switch.kitchen_*`). |
+| `include_labels` | Liste d'id d'étiquettes : une entité qui en porte une, elle-même ou par son appareil, est enregistrée quelles que soient les règles de domaine. Seule, elle n'enregistre que les entités étiquetées. |
+| `exclude_labels` | Liste d'id d'étiquettes : une entité qui en porte une, elle-même ou par son appareil, n'est jamais enregistrée. |
 | `exclude_attributes` | Liste d'attributs à exclure de la colonne `attributes`. |
 | `include_events` | Liste des types d'événements à enregistrer. Laisser vide pour tous les enregistrer. |
 | `exclude_events` | Liste des types d'événements à ne jamais enregistrer (appliquée après `include_events`). |

@@ -35,6 +35,8 @@
           "exclude_entities": "Excluir entidades",
           "include_entity_globs": "Incluir patrones de entidades",
           "exclude_entity_globs": "Excluir patrones de entidades",
+          "include_labels": "Incluir etiquetas",
+          "exclude_labels": "Excluir etiquetas",
           "exclude_attributes": "Excluir atributos",
           "include_events": "Incluir tipos de eventos",
           "exclude_events": "Excluir eventos"
@@ -48,6 +50,8 @@
           "exclude_entities": "No registrar nunca estas entidades concretas",
           "include_entity_globs": "Only record entities matching these patterns",
           "exclude_entity_globs": "No registrar nunca las entidades que coincidan con estos patrones",
+          "include_labels": "Registrar toda entidad que lleve una de estas etiquetas, ella misma o su dispositivo. Dejar vacío para no tener en cuenta las etiquetas.",
+          "exclude_labels": "No registrar nunca las entidades que lleven una de estas etiquetas, ellas mismas o su dispositivo",
           "exclude_attributes": "Drop these attribute keys before writing",
           "include_events": "Registrar solo estos tipos de evento. Déjalo vacío para registrar todos los eventos.",
           "exclude_events": "Tipos de evento que no se registran nunca. Se aplica después de la lista de inclusión: un tipo presente en ambas queda excluido."

@@ -35,6 +35,8 @@
           "exclude_entities": "Entiteiten uitsluiten",
           "include_entity_globs": "Entiteitspatronen opnemen",
           "exclude_entity_globs": "Entiteitspatronen uitsluiten",
+          "include_labels": "Labels opnemen",
+          "exclude_labels": "Labels uitsluiten",
           "exclude_attributes": "Attributen uitsluiten",
           "include_events": "Gebeurtenistypen opnemen",
           "exclude_events": "Gebeurtenistypen uitsluiten"
@@ -48,6 +50,8 @@
           "exclude_entities": "Deze specifieke entiteiten nooit opnemen",
           "include_entity_globs": "Only record entities matching these patterns",
           "exclude_entity_globs": "Entiteiten die op deze patronen passen nooit opnemen",
+          "include_labels": "Elke entiteit opnemen die een van deze labels draagt, zelf of via haar apparaat. Leeg laten om labels te negeren.",
+          "exclude_labels": "Entiteiten die een van deze labels dragen, zelf of via hun apparaat, nooit opnemen",
           "exclude_attributes": "Drop these attribute keys before writing",
           "include_events": "Alleen deze specifieke gebeurtenistypen opnemen. Leeg laten neemt alle gebeurtenissen op.",
           "exclude_events": "Deze gebeurtenistypen nooit opnemen (na include_events toegepast)."

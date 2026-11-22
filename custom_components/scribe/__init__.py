@@ -5,6 +5,7 @@ writes them to a TimescaleDB (PostgreSQL) database. It uses a dedicated writer t
 to ensure that database operations do not block the main Home Assistant event loop.
 """
 
+import fnmatch
 import logging
 from dataclasses import dataclass
 from inspect import isawaitable
@@ -48,6 +49,8 @@ from .const import (
     CONF_EXCLUDE_DOMAINS,
     CONF_EXCLUDE_ENTITIES,
     CONF_EXCLUDE_ENTITY_GLOBS,
+    CONF_INCLUDE_LABELS,
+    CONF_EXCLUDE_LABELS,
     CONF_EXCLUDE_ATTRIBUTES,
     CONF_INCLUDE_EVENTS,
     CONF_EXCLUDE_EVENTS,
@@ -148,6 +151,8 @@ CONFIG_SCHEMA = vol.Schema(
                 vol.Optional(CONF_EXCLUDE_ENTITY_GLOBS): vol.All(
                     cv.ensure_list, [cv.string]
                 ),
+                vol.Optional(CONF_INCLUDE_LABELS): vol.All(cv.ensure_list, [cv.string]),
+                vol.Optional(CONF_EXCLUDE_LABELS): vol.All(cv.ensure_list, [cv.string]),
                 vol.Optional(CONF_EXCLUDE_ATTRIBUTES): vol.All(
                     cv.ensure_list, [cv.string]
                 ),
@@ -185,8 +190,6 @@ def _build_exclude_priority_filter(
     Home-Assistant filter semantics (domain include/exclude, the
     no-filter pass-through, etc.).
     """
-    import fnmatch
-
     exclude_entities_set = set(exclude_entities or [])
     glob_patterns = list(exclude_entity_globs or [])
 
@@ -921,7 +924,61 @@ def _resolve_db_url(config: dict, yaml_config: dict) -> str | None:
     return None
 
 
-def _build_entity_filter(get_config) -> Callable[[str], bool]:
+def _entity_labels(hass: HomeAssistant, entity_id: str) -> set[str]:
+    """The labels on an entity, and on the device it belongs to.
+
+    Read from the registries at every call rather than cached, so a label
+    added or removed in the UI applies to the very next state change. Both
+    lookups are dictionary reads. A device's labels count for its entities,
+    as they do when a label is the target of an action.
+    """
+    entry = er.async_get(hass).async_get(entity_id)
+    if entry is None:
+        return set()
+    labels = set(entry.labels)
+    if entry.device_id:
+        device = dr.async_get(hass).async_get(entry.device_id)
+        if device is not None:
+            labels |= device.labels
+    return labels
+
+
+def _build_label_filter(
+    hass: HomeAssistant,
+    base_filter: Callable[[str], bool],
+    excluded: Callable[[str], bool],
+    include_labels,
+    exclude_labels,
+    has_other_includes: bool,
+) -> Callable[[str], bool]:
+    """Wrap ``base_filter`` with the label rules (#110).
+
+    - an entity carrying an excluded label is never recorded;
+    - an entity carrying an included label is recorded, whatever the domain
+      and glob rules say — except an exclusion by entity or glob
+      (``excluded``), which wins over every include;
+    - when labels are the only include rule, an entity carrying none of
+      them is not recorded, exactly as with any other include list.
+    """
+    include = set(include_labels or [])
+    exclude = set(exclude_labels or [])
+    if not include and not exclude:
+        return base_filter
+
+    def _filter(entity_id: str) -> bool:
+        labels = _entity_labels(hass, entity_id)
+        if labels & exclude:
+            return False
+        if labels & include:
+            return not excluded(entity_id)
+        if include and not has_other_includes:
+            return False
+        return base_filter(entity_id)
+
+    return _filter
+
+
+def _build_entity_filter(hass: HomeAssistant, get_config) -> Callable[[str], bool]:
     """Build the entity filter, with excludes winning over include globs.
 
     Home Assistant's `generate_filter` (case 4a) lets `include_entity_globs`
@@ -930,19 +987,37 @@ def _build_entity_filter(get_config) -> Callable[[str], bool]:
     opposite, mirroring how `exclude_entities` already takes precedence.
     See https://github.com/jonathan-gtd/scribe/issues/33.
     """
+    include_domains = get_config(CONF_INCLUDE_DOMAINS, [])
+    include_entities = get_config(CONF_INCLUDE_ENTITIES, [])
+    include_entity_globs = get_config(CONF_INCLUDE_ENTITY_GLOBS, [])
     exclude_entities = get_config(CONF_EXCLUDE_ENTITIES, [])
     exclude_entity_globs = get_config(CONF_EXCLUDE_ENTITY_GLOBS, [])
 
     upstream = generate_filter(
-        get_config(CONF_INCLUDE_DOMAINS, []),
-        get_config(CONF_INCLUDE_ENTITIES, []),
+        include_domains,
+        include_entities,
         get_config(CONF_EXCLUDE_DOMAINS, []),
         exclude_entities,
-        get_config(CONF_INCLUDE_ENTITY_GLOBS, []),
+        include_entity_globs,
         exclude_entity_globs,
     )
-    return _build_exclude_priority_filter(
+    entity_filter = _build_exclude_priority_filter(
         upstream, exclude_entities, exclude_entity_globs
+    )
+    exclude_set = set(exclude_entities or [])
+
+    def _excluded(entity_id: str) -> bool:
+        return entity_id in exclude_set or any(
+            fnmatch.fnmatchcase(entity_id, pat) for pat in exclude_entity_globs or []
+        )
+
+    return _build_label_filter(
+        hass,
+        entity_filter,
+        _excluded,
+        get_config(CONF_INCLUDE_LABELS, []),
+        get_config(CONF_EXCLUDE_LABELS, []),
+        bool(include_domains or include_entities or include_entity_globs),
     )
 
 
@@ -1037,7 +1112,7 @@ def _resolve_settings(hass: HomeAssistant, entry: ConfigEntry) -> "_Settings | N
         )
         if enable_stats_size
         else None,
-        entity_filter=_build_entity_filter(get_config),
+        entity_filter=_build_entity_filter(hass, get_config),
         exclude_attributes=set(get_config(CONF_EXCLUDE_ATTRIBUTES, [])),
         include_events=set(get_config(CONF_INCLUDE_EVENTS, [])),
         exclude_events=set(get_config(CONF_EXCLUDE_EVENTS, [])),

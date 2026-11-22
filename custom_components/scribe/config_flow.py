@@ -61,6 +61,8 @@ from .const import (
     CONF_EXCLUDE_DOMAINS,
     CONF_EXCLUDE_ENTITIES,
     CONF_EXCLUDE_ENTITY_GLOBS,
+    CONF_INCLUDE_LABELS,
+    CONF_EXCLUDE_LABELS,
     CONF_EXCLUDE_ATTRIBUTES,
     CONF_INCLUDE_EVENTS,
     CONF_EXCLUDE_EVENTS,
@@ -173,6 +175,8 @@ def _coerce_options(data: dict) -> dict:
         CONF_EXCLUDE_ENTITIES,
         CONF_INCLUDE_ENTITY_GLOBS,
         CONF_EXCLUDE_ENTITY_GLOBS,
+        CONF_INCLUDE_LABELS,
+        CONF_EXCLUDE_LABELS,
         CONF_EXCLUDE_ATTRIBUTES,
         CONF_INCLUDE_EVENTS,
         CONF_EXCLUDE_EVENTS,
@@ -324,6 +328,12 @@ class ScribeOptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional(
                     CONF_EXCLUDE_ENTITY_GLOBS, default=g(CONF_EXCLUDE_ENTITY_GLOBS, [])
                 ): _multi_text_selector(),
+                vol.Optional(
+                    CONF_INCLUDE_LABELS, default=g(CONF_INCLUDE_LABELS, [])
+                ): selector.LabelSelector(selector.LabelSelectorConfig(multiple=True)),
+                vol.Optional(
+                    CONF_EXCLUDE_LABELS, default=g(CONF_EXCLUDE_LABELS, [])
+                ): selector.LabelSelector(selector.LabelSelectorConfig(multiple=True)),
                 vol.Optional(
                     CONF_EXCLUDE_ATTRIBUTES, default=g(CONF_EXCLUDE_ATTRIBUTES, [])
                 ): _multi_text_selector(),

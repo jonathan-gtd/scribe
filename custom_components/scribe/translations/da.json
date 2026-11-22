@@ -33,6 +33,8 @@
                     "exclude_entities": "Ekskluder entiteter",
                     "include_entity_globs": "Inkluder entitetsmønstre",
                     "exclude_entity_globs": "Ekskluder entitetsmønstre",
+                    "include_labels": "Include labels",
+                    "exclude_labels": "Exclude labels",
                     "exclude_attributes": "Ekskluder attributter",
                     "include_events": "Inkluder begivenhedstyper"
                 },
@@ -45,6 +47,8 @@
                     "exclude_entities": "Never record these specific entities",
                     "include_entity_globs": "Only record entities matching these patterns",
                     "exclude_entity_globs": "Never record entities matching these patterns",
+                    "include_labels": "Record every entity carrying one of these labels, on itself or on its device. Leave empty to ignore labels.",
+                    "exclude_labels": "Never record entities carrying one of these labels, on themselves or on their device",
                     "exclude_attributes": "Drop these attribute keys before writing",
                     "include_events": "Only record these specific event types. Leave empty to record all events."
                 }

@@ -35,6 +35,8 @@
           "exclude_entities": "Exclure les entités",
           "include_entity_globs": "Inclure les entités par motif",
           "exclude_entity_globs": "Exclure les entités par motif",
+          "include_labels": "Inclure les étiquettes",
+          "exclude_labels": "Exclure les étiquettes",
           "exclude_attributes": "Exclure les attributs",
           "include_events": "Inclure les types d'événements",
           "exclude_events": "Exclure les types d'événements"
@@ -48,6 +50,8 @@
           "exclude_entities": "Ne jamais enregistrer ces entités spécifiques",
           "include_entity_globs": "N'enregistrer que les entités correspondant à ces motifs (ex. sensor.temp_*)",
           "exclude_entity_globs": "Ne jamais enregistrer les entités correspondant à ces motifs",
+          "include_labels": "Enregistrer toute entité portant l'une de ces étiquettes, elle-même ou par son appareil. Laisser vide pour ignorer les étiquettes.",
+          "exclude_labels": "Ne jamais enregistrer les entités portant l'une de ces étiquettes, elles-mêmes ou par leur appareil",
           "exclude_attributes": "Supprimer ces clés d'attributs avant l'écriture (économise de l'espace)",
           "include_events": "N'enregistrer que ces types d'événements spécifiques. Laisser vide pour tout enregistrer.",
           "exclude_events": "Ne jamais enregistrer ces types d'événements (appliqué après include_events)."

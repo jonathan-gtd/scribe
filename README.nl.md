@@ -139,6 +139,8 @@ scribe:
   exclude_domains: []           # wordt na de include-lijsten toegepast
   exclude_entities: []
   exclude_entity_globs: []
+  include_labels: []            # label-id's, op de entiteit of haar apparaat
+  exclude_labels: []            # wint van elke opname
   exclude_attributes: []        # attributen die uit de kolom attributes worden gehaald
   include_events: []            # leeg = alle gebeurtenistypen
   exclude_events: []            # wordt na include_events toegepast
@@ -213,6 +215,8 @@ scribe:
 | `exclude_domains` | Lijst van domeinen om uit te sluiten. |
 | `exclude_entities` | Lijst van specifieke entiteiten om uit te sluiten. |
 | `exclude_entity_globs` | Lijst van entiteitspatronen om uit te sluiten (bijv. `switch.keuken_*`). |
+| `include_labels` | Lijst van label-id's: een entiteit die er een draagt, zelf of via haar apparaat, wordt opgenomen ongeacht de domeinregels. Alleen ingesteld, worden alleen entiteiten met een label opgenomen. |
+| `exclude_labels` | Lijst van label-id's: een entiteit die er een draagt, zelf of via haar apparaat, wordt nooit opgenomen. |
 | `exclude_attributes` | Lijst van attributen om uit de kolom `attributes` te weren. |
 | `include_events` | Lijst van gebeurtenistypen om op te nemen. Leeg laten neemt alle gebeurtenissen op. |
 | `exclude_events` | Lijst van gebeurtenistypen die nooit worden opgenomen (na `include_events` toegepast). |
