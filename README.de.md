@@ -142,6 +142,8 @@ scribe:
   exclude_domains: []           # wird nach den Include-Listen angewendet
   exclude_entities: []
   exclude_entity_globs: []
+  include_labels: []            # Label-IDs, an der Entität oder ihrem Gerät
+  exclude_labels: []            # schlägt jede Einschließung
   exclude_attributes: []        # Attribute, die aus der Spalte attributes entfernt werden
   include_events: []            # leer = alle Ereignistypen
   exclude_events: []            # wird nach include_events angewendet
@@ -216,6 +218,8 @@ scribe:
 | `exclude_domains` | Liste der auszuschließenden Domains. |
 | `exclude_entities` | Liste einzelner auszuschließender Entitäten. |
 | `exclude_entity_globs` | Liste auszuschließender Entitätsmuster (z. B. `switch.kitchen_*`). |
+| `include_labels` | Liste von Label-IDs: Eine Entität, die eines davon trägt, selbst oder über ihr Gerät, wird unabhängig von den Domain-Regeln aufgezeichnet. Allein gesetzt, werden nur Entitäten mit Label aufgezeichnet. |
+| `exclude_labels` | Liste von Label-IDs: Eine Entität, die eines davon trägt, selbst oder über ihr Gerät, wird nie aufgezeichnet. |
 | `exclude_attributes` | Liste von Attributen, die aus der Spalte `attributes` ausgeschlossen werden. |
 | `include_events` | Liste der aufzuzeichnenden Ereignistypen. Leer lassen, um alle aufzuzeichnen. |
 | `exclude_events` | Liste der nie aufzuzeichnenden Ereignistypen (wird nach `include_events` angewendet). |

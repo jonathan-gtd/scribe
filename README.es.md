@@ -142,6 +142,8 @@ scribe:
   exclude_domains: []           # se aplica después de las listas de inclusión
   exclude_entities: []
   exclude_entity_globs: []
+  include_labels: []            # ids de etiqueta, en la entidad o su dispositivo
+  exclude_labels: []            # gana a toda inclusión
   exclude_attributes: []        # atributos que se quitan de la columna attributes
   include_events: []            # vacío = todos los tipos de evento
   exclude_events: []            # se aplica después de include_events
@@ -216,6 +218,8 @@ scribe:
 | `exclude_domains` | Lista de dominios a excluir. |
 | `exclude_entities` | Lista de entidades concretas a excluir. |
 | `exclude_entity_globs` | Lista de patrones de entidad a excluir (p. ej. `switch.kitchen_*`). |
+| `include_labels` | Lista de ids de etiqueta: una entidad que lleve una de ellas, ella misma o su dispositivo, se registra sean cuales sean las reglas de dominio. Sola, solo registra las entidades etiquetadas. |
+| `exclude_labels` | Lista de ids de etiqueta: una entidad que lleve una de ellas, ella misma o su dispositivo, nunca se registra. |
 | `exclude_attributes` | Lista de atributos a excluir de la columna `attributes`. |
 | `include_events` | Lista de tipos de evento a registrar. Déjala vacía para registrarlos todos. |
 | `exclude_events` | Lista de tipos de evento que nunca se registran (se aplica después de `include_events`). |

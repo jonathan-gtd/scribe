@@ -139,6 +139,8 @@ scribe:
   exclude_domains: []           # applied after the include lists
   exclude_entities: []
   exclude_entity_globs: []
+  include_labels: []            # label ids, on the entity or its device
+  exclude_labels: []            # beats every include
   exclude_attributes: []        # attribute names stripped from the attributes column
   include_events: []            # empty = every event type
   exclude_events: []            # applied after include_events
@@ -213,6 +215,8 @@ scribe:
 | `exclude_domains` | List of domains to exclude. |
 | `exclude_entities` | List of specific entities to exclude. |
 | `exclude_entity_globs` | List of entity patterns to exclude (e.g. `switch.kitchen_*`). |
+| `include_labels` | List of label ids: an entity carrying one of them, itself or through its device, is recorded whatever the domain rules say. Alone, it records only labelled entities. |
+| `exclude_labels` | List of label ids: an entity carrying one of them, itself or through its device, is never recorded. |
 | `exclude_attributes` | List of attributes to exclude from the `attributes` column. |
 | `include_events` | List of event types to record. Leave empty to record all events. |
 | `exclude_events` | List of event types to never record (applied after `include_events`). |

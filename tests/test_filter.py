@@ -5,13 +5,21 @@ import pytest
 
 from homeassistant.const import EVENT_STATE_CHANGED
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.setup import async_setup_component
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.scribe.const import (
     DOMAIN,
     CONF_DB_URL,
+    CONF_EXCLUDE_DOMAINS,
+    CONF_EXCLUDE_ENTITIES,
     CONF_EXCLUDE_ENTITY_GLOBS,
+    CONF_EXCLUDE_LABELS,
+    CONF_INCLUDE_DOMAINS,
+    CONF_INCLUDE_ENTITIES,
     CONF_INCLUDE_ENTITY_GLOBS,
+    CONF_INCLUDE_LABELS,
 )
 
 
@@ -220,3 +228,135 @@ async def test_exclude_entity_globs_overrides_include_entity_globs(
     )
     await hass.async_block_till_done()
     assert mock_writer.enqueue.call_count == 0
+
+
+# ---------------------------------------------------------------------------
+# Label filters (#110)
+# ---------------------------------------------------------------------------
+
+
+async def _setup_with(hass, mock_writer, **options):
+    config = {DOMAIN: {CONF_DB_URL: "postgresql://user:pass@localhost/db", **options}}
+    with patch("custom_components.scribe.ScribeWriter", return_value=mock_writer):
+        assert await async_setup_component(hass, DOMAIN, config)
+        await hass.async_block_till_done()
+
+
+def _register(hass, entity_id, labels=(), device_labels=None):
+    """Put ``entity_id`` in the entity registry with ``labels``.
+
+    With ``device_labels``, the entity also belongs to a device carrying them.
+    """
+    domain, object_id = entity_id.split(".")
+    ent_reg = er.async_get(hass)
+    device_id = None
+    if device_labels is not None:
+        source = MockConfigEntry(domain="test")
+        source.add_to_hass(hass)
+        device = dr.async_get(hass).async_get_or_create(
+            config_entry_id=source.entry_id, identifiers={("test", object_id)}
+        )
+        dr.async_get(hass).async_update_device(device.id, labels=set(device_labels))
+        device_id = device.id
+    entry = ent_reg.async_get_or_create(
+        domain, "test", object_id, suggested_object_id=object_id, device_id=device_id
+    )
+    assert entry.entity_id == entity_id
+    ent_reg.async_update_entity(entity_id, labels=set(labels))
+
+
+async def _recorded(hass, writer, entity_id) -> bool:
+    writer.enqueue.reset_mock()
+    hass.bus.async_fire(
+        EVENT_STATE_CHANGED,
+        {"entity_id": entity_id, "new_state": Mock(state="1", attributes={})},
+    )
+    await hass.async_block_till_done()
+    return writer.enqueue.call_count == 1
+
+
+async def test_include_labels_alone_is_a_whitelist(hass: HomeAssistant, mock_writer):
+    _register(hass, "sensor.kept", labels={"long_term"})
+    _register(hass, "sensor.other", labels={"something_else"})
+    _register(hass, "sensor.on_device", device_labels={"long_term"})
+    await _setup_with(hass, mock_writer, **{CONF_INCLUDE_LABELS: ["long_term"]})
+
+    assert await _recorded(hass, mock_writer, "sensor.kept")
+    assert await _recorded(hass, mock_writer, "sensor.on_device")
+    assert not await _recorded(hass, mock_writer, "sensor.other")
+    # Not in the registry at all: no label, so not recorded.
+    assert not await _recorded(hass, mock_writer, "sensor.unregistered")
+
+
+async def test_include_labels_adds_to_other_includes(hass: HomeAssistant, mock_writer):
+    _register(hass, "light.tagged", labels={"long_term"})
+    await _setup_with(
+        hass,
+        mock_writer,
+        **{CONF_INCLUDE_LABELS: ["long_term"], CONF_INCLUDE_DOMAINS: ["sensor"]},
+    )
+
+    assert await _recorded(hass, mock_writer, "light.tagged")
+    assert await _recorded(hass, mock_writer, "sensor.untagged")
+    assert not await _recorded(hass, mock_writer, "light.untagged")
+
+
+async def test_include_labels_beats_exclude_domain(hass: HomeAssistant, mock_writer):
+    _register(hass, "sensor.tagged", labels={"long_term"})
+    await _setup_with(
+        hass,
+        mock_writer,
+        **{CONF_INCLUDE_LABELS: ["long_term"], CONF_EXCLUDE_DOMAINS: ["sensor"]},
+    )
+
+    assert await _recorded(hass, mock_writer, "sensor.tagged")
+    assert not await _recorded(hass, mock_writer, "sensor.untagged")
+
+
+async def test_entity_and_glob_excludes_beat_include_labels(
+    hass: HomeAssistant, mock_writer
+):
+    _register(hass, "sensor.by_id", labels={"long_term"})
+    _register(hass, "sensor.noisy_one", labels={"long_term"})
+    await _setup_with(
+        hass,
+        mock_writer,
+        **{
+            CONF_INCLUDE_LABELS: ["long_term"],
+            CONF_EXCLUDE_ENTITIES: ["sensor.by_id"],
+            CONF_EXCLUDE_ENTITY_GLOBS: ["sensor.noisy_*"],
+        },
+    )
+
+    assert not await _recorded(hass, mock_writer, "sensor.by_id")
+    assert not await _recorded(hass, mock_writer, "sensor.noisy_one")
+
+
+async def test_exclude_labels(hass: HomeAssistant, mock_writer):
+    _register(hass, "sensor.muted", labels={"no_history"})
+    _register(hass, "sensor.muted_device", device_labels={"no_history"})
+    _register(hass, "sensor.both", labels={"no_history", "long_term"})
+    _register(hass, "sensor.included", labels={"long_term"})
+    await _setup_with(
+        hass,
+        mock_writer,
+        **{
+            CONF_EXCLUDE_LABELS: ["no_history"],
+            CONF_INCLUDE_ENTITIES: ["sensor.muted", "sensor.included"],
+            CONF_INCLUDE_LABELS: ["long_term"],
+        },
+    )
+
+    assert not await _recorded(hass, mock_writer, "sensor.muted")
+    assert not await _recorded(hass, mock_writer, "sensor.both")
+    assert await _recorded(hass, mock_writer, "sensor.included")
+    assert not await _recorded(hass, mock_writer, "sensor.muted_device")
+
+
+async def test_label_change_applies_without_reload(hass: HomeAssistant, mock_writer):
+    _register(hass, "sensor.later")
+    await _setup_with(hass, mock_writer, **{CONF_INCLUDE_LABELS: ["long_term"]})
+
+    assert not await _recorded(hass, mock_writer, "sensor.later")
+    er.async_get(hass).async_update_entity("sensor.later", labels={"long_term"})
+    assert await _recorded(hass, mock_writer, "sensor.later")

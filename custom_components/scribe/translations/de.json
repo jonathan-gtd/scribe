@@ -35,6 +35,8 @@
           "exclude_entities": "Entitäten ausschließen",
           "include_entity_globs": "Entitäts-Globs einschließen",
           "exclude_entity_globs": "Entitäts-Globs ausschließen",
+          "include_labels": "Labels einschließen",
+          "exclude_labels": "Labels ausschließen",
           "exclude_attributes": "Attribute ausschließen",
           "include_events": "Ereignistypen einschränken",
           "exclude_events": "Ereignisse ausschließen"
@@ -48,6 +50,8 @@
           "exclude_entities": "Diese bestimmten Entitäten niemals aufzeichnen",
           "include_entity_globs": "Only record entities matching these patterns",
           "exclude_entity_globs": "Entitäten, die auf diese Muster passen, niemals aufzeichnen",
+          "include_labels": "Jede Entität aufzeichnen, die eines dieser Labels trägt, selbst oder über ihr Gerät. Leer lassen, um Labels nicht zu berücksichtigen.",
+          "exclude_labels": "Entitäten, die eines dieser Labels tragen, selbst oder über ihr Gerät, niemals aufzeichnen",
           "exclude_attributes": "Drop these attribute keys before writing",
           "include_events": "Nur diese Ereignistypen aufzeichnen. Leer lassen, um alle Ereignisse aufzuzeichnen.",
           "exclude_events": "Ereignistypen, die nie aufgezeichnet werden. Wird nach der Einschlussliste angewendet: Ein Typ in beiden Listen wird ausgeschlossen."
