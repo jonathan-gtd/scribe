@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [4.6.1] - 2026-11-23
 
 ### Fixed
 - **A rename onto an old history no longer fails on compressed chunks (#113)**: when a replaced device takes back the name of the one it replaces, Scribe folds the old device's history into the new entity — and an old history lives in compressed chunks. TimescaleDB refuses a transaction that decompresses more than 100 000 rows (`timescaledb.max_tuples_decompressed_per_dml_transaction`), so a sensor with a long history made the rename fail and left it split under two names. That ceiling is now lifted for the merge's own transaction, and only there; the database setting is untouched. Reported by @jaal2001.
