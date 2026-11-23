@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- **A rename onto an old history no longer fails on compressed chunks (#113)**: when a replaced device takes back the name of the one it replaces, Scribe folds the old device's history into the new entity — and an old history lives in compressed chunks. TimescaleDB refuses a transaction that decompresses more than 100 000 rows (`timescaledb.max_tuples_decompressed_per_dml_transaction`), so a sensor with a long history made the rename fail and left it split under two names. That ceiling is now lifted for the merge's own transaction, and only there; the database setting is untouched. Reported by @jaal2001.
+- **A split history no longer goes unnoticed**: when the merge did fail, the repair notice disappeared at the next restart, or as soon as the entity was renamed again, while the history stayed under two names. The notice is now kept across restarts and only goes once the history is one again; Scribe retries the merge after every rename of the entity and at every start, and the notice says when a retry fails too. Its text no longer claims that renaming the entity again retries it. Only the pair a failed rename left behind is merged: two rows of one entity that Scribe did not split itself — a rename from before Scribe followed renames, a sensor moved from one room to another — are left as they are.
+
 ## [4.6.0] - 2026-11-22
 
 ### Added

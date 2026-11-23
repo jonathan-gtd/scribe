@@ -40,6 +40,7 @@ def writer():
     w.write_users = AsyncMock()
     w.write_devices = AsyncMock()
     w.rename_entity = AsyncMock()
+    w.merge_split_history = AsyncMock()
     return w
 
 
@@ -64,6 +65,50 @@ async def test_a_rename_reaches_the_database_as_a_rename(hass, writer):
     )
 
     writer.rename_entity.assert_awaited_once_with("sensor.old", "sensor.new")
+
+
+@pytest.mark.asyncio
+async def test_a_rename_is_followed_by_a_history_merge(hass, writer):
+    """A rename that could not finish leaves the history split (#113)."""
+    er.async_get(hass).async_get_or_create(
+        "sensor", "test", "uid", suggested_object_id="new"
+    )
+    listener = _make_entity_registry_listener(hass, writer)
+
+    await listener(
+        _event(
+            {
+                "action": "update",
+                "entity_id": "sensor.new",
+                "old_entity_id": "sensor.old",
+                "changes": {"entity_id": "sensor.old"},
+            }
+        )
+    )
+
+    writer.merge_split_history.assert_awaited_once_with("sensor.new")
+
+
+@pytest.mark.asyncio
+async def test_an_update_that_is_not_a_rename_merges_nothing(hass, writer):
+    er.async_get(hass).async_get_or_create(
+        "sensor", "test", "uid", suggested_object_id="same"
+    )
+    listener = _make_entity_registry_listener(hass, writer)
+
+    await listener(
+        _event(
+            {
+                "action": "update",
+                "entity_id": "sensor.same",
+                "old_entity_id": "sensor.same",
+                "changes": {"name": None},
+            }
+        )
+    )
+
+    writer.write_entities.assert_awaited_once()
+    writer.merge_split_history.assert_not_awaited()
 
 
 @pytest.mark.asyncio

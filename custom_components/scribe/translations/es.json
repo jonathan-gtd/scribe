@@ -156,7 +156,11 @@
     },
     "rename_failed": {
       "title": "Falló el cambio de nombre de {old_entity_id}",
-      "description": "Scribe encontró un error al renombrar `{old_entity_id}` a `{new_entity_id}` en la base de datos: {error}. El historial de la entidad puede haber quedado repartido entre los dos identificadores. Consulta los registros de Home Assistant; volver a renombrar la entidad reintenta la operación."
+      "description": "Scribe encontró un error al renombrar `{old_entity_id}` a `{new_entity_id}` en la base de datos: {error}. El historial de la entidad puede haber quedado repartido entre los dos identificadores. Consulta los registros de Home Assistant. Scribe vuelve a intentar reunir el historial tras cada cambio de nombre de esta entidad y en cada arranque, y este aviso desaparece en cuanto lo consigue."
+    },
+    "history_split": {
+      "title": "El historial de {new_entity_id} está dividido",
+      "description": "El historial de `{new_entity_id}` está registrado bajo dos nombres en la base de datos de Scribe: el suyo y `{old_entity_id}`, que es la misma entidad con un nombre anterior — normalmente un cambio de nombre que no pudo completarse. Scribe no pudo reunirlos: {error}. No se modificó nada. Scribe lo vuelve a intentar tras cada cambio de nombre de esta entidad y en cada arranque, y este aviso desaparece en cuanto el historial está reunido."
     },
     "db_unreachable": {
       "title": "Scribe no puede acceder a su base de datos",

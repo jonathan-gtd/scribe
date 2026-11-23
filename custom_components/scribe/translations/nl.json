@@ -156,7 +156,11 @@
     },
     "rename_failed": {
       "title": "Hernoemen van entiteit {old_entity_id} is mislukt",
-      "description": "Scribe liep tegen een fout aan bij het hernoemen van `{old_entity_id}` naar `{new_entity_id}` in de database: {error}. De historie van de entiteit staat nu mogelijk verdeeld over de twee ID's. Bekijk de logs van Home Assistant voor details; de entiteit opnieuw hernoemen probeert het opnieuw."
+      "description": "Scribe liep tegen een fout aan bij het hernoemen van `{old_entity_id}` naar `{new_entity_id}` in de database: {error}. De historie van de entiteit staat nu mogelijk verdeeld over de twee ID's. Bekijk de logs van Home Assistant voor details. Scribe probeert de historie opnieuw samen te voegen na elke hernoeming van deze entiteit en bij elke start, en deze melding verdwijnt zodra dat gelukt is."
+    },
+    "history_split": {
+      "title": "Historie van {new_entity_id} is gesplitst",
+      "description": "De historie van `{new_entity_id}` staat onder twee namen in de database van Scribe: de eigen naam en `{old_entity_id}`, dezelfde entiteit onder een vroegere naam — meestal een hernoeming die niet kon worden afgerond. Scribe kon ze niet samenvoegen: {error}. Er is niets gewijzigd. Scribe probeert het opnieuw na elke hernoeming van deze entiteit en bij elke start, en deze melding verdwijnt zodra de historie samengevoegd is."
     },
     "db_unreachable": {
       "title": "Scribe kan zijn database niet bereiken",

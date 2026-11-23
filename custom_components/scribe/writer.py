@@ -439,6 +439,16 @@ def _partition_entities(entities: list[dict], existing: dict) -> tuple[list, lis
 # Used on the fast path and again on both collision paths.
 _RENAME_ENTITY_SQL = "UPDATE entities SET entity_id = $1 WHERE entity_id = $2"
 
+# TimescaleDB (2.11 and later) refuses a single transaction that decompresses
+# more than this many rows, 100 000 by default. Folding one entity's history
+# into another rewrites every row of it, and an old history lives in compressed
+# chunks (#113).
+_DECOMPRESSION_LIMIT_GUC = "timescaledb.max_tuples_decompressed_per_dml_transaction"
+
+# The rename issues that mean "this entity's history is split and the merge is
+# still owed". Kept across restarts so the merge is retried at startup.
+_PENDING_MERGE_ISSUES = frozenset({"rename_failed", "history_split"})
+
 _NOT_SCALAR = object()
 
 
@@ -3067,32 +3077,9 @@ class ScribeWriter:
             # Fold the occupant's history into the renamed entity's
             # metadata_id, drop its row, then rename — one
             # continuous history under the new name.
-            #
-            # states_raw's primary key is (metadata_id, time), so
-            # any occupant row at a timestamp the surviving entity
-            # already holds would violate it and abort the whole
-            # rename. Both rows describe the same instant of what
-            # is now one entity: the survivor's own row wins and
-            # the duplicate is dropped first.
-            dropped = await conn.execute(
-                """
-                DELETE FROM states_raw o
-                WHERE o.metadata_id = $2
-                  AND EXISTS (
-                      SELECT 1 FROM states_raw l
-                      WHERE l.metadata_id = $1 AND l.time = o.time
-                  )
-                """,
-                src["id"],
-                occ["id"],
+            merged_orphan_rows, dropped_duplicate_rows = await self._fold_history(
+                conn, src["id"], occ["id"]
             )
-            status = await conn.execute(
-                "UPDATE states_raw SET metadata_id = $1 WHERE metadata_id = $2",
-                src["id"],
-                occ["id"],
-            )
-            merged_orphan_rows = _affected_rows(status)
-            dropped_duplicate_rows = _affected_rows(dropped)
             await conn.execute(
                 "DELETE FROM entities WHERE id = $1",
                 occ["id"],
@@ -3350,6 +3337,183 @@ class ScribeWriter:
         )
         return purged
 
+    async def _fold_history(self, conn, keep_id: int, drop_id: int):
+        """Move every state of ``drop_id`` onto ``keep_id``; return (moved, dropped).
+
+        Runs inside the caller's transaction, so the fold is whole or not at
+        all. Only the ``states_raw`` rows move: deleting the ``entities`` row
+        is left to the caller.
+
+        states_raw's primary key is (metadata_id, time), so any row of
+        ``drop_id`` at a timestamp ``keep_id`` already holds would violate it
+        and abort the whole transaction. Both rows describe the same instant
+        of what is now one entity: the kept row wins and the duplicate is
+        deleted first.
+
+        TimescaleDB's ceiling on the rows one transaction may decompress is
+        lifted for this transaction only (``is_local``): the fold is meant to
+        rewrite the whole history, and stopping it at 100 000 rows only rolls
+        it back (#113). Versions without the setting have no such ceiling.
+        """
+        if (
+            await conn.fetchval(
+                "SELECT current_setting($1, true)", _DECOMPRESSION_LIMIT_GUC
+            )
+            is not None
+        ):
+            await conn.execute(
+                "SELECT set_config($1, '0', true)", _DECOMPRESSION_LIMIT_GUC
+            )
+        dropped = await conn.execute(
+            """
+            DELETE FROM states_raw o
+            WHERE o.metadata_id = $2
+              AND EXISTS (
+                  SELECT 1 FROM states_raw l
+                  WHERE l.metadata_id = $1 AND l.time = o.time
+              )
+            """,
+            keep_id,
+            drop_id,
+        )
+        moved = await conn.execute(
+            "UPDATE states_raw SET metadata_id = $1 WHERE metadata_id = $2",
+            keep_id,
+            drop_id,
+        )
+        return _affected_rows(moved), _affected_rows(dropped)
+
+    def _pending_merge(self, new_entity_id: str) -> str | None:
+        """The former name whose history ``new_entity_id`` still owes a merge.
+
+        A rename that failed, or a merge that failed after it, is recorded in
+        its repair issue, which Home Assistant keeps across restarts: that
+        issue *is* the list of merges still to do. A rename Scribe refused is
+        not one of them — the occupant may be another live entity.
+        """
+        issue = ir.async_get(self.hass).async_get_issue(
+            DOMAIN, f"rename_collision_{new_entity_id}"
+        )
+        if issue is None or issue.translation_key not in _PENDING_MERGE_ISSUES:
+            return None
+        return (issue.translation_placeholders or {}).get("old_entity_id")
+
+    async def merge_split_history(self, entity_id: str) -> None:
+        """Finish the merge a failed rename of ``entity_id`` left undone (#113).
+
+        A rename that fails leaves the entity's history under two ``entities``
+        rows: the row of its former name, and the row of its new name, which
+        the registry sync then fills in with the entity's own coordinates.
+        Only that pair is merged, and only while its repair issue says the
+        merge is owed — history Scribe did not split itself is left alone.
+
+        The former row is folded only if it carries the same (unique_id,
+        platform, domain) as the live entity, which is how Home Assistant
+        identifies an entity, and if no live entity goes by its name.
+
+        If the fold fails, the issue stays, saying the history is still split;
+        Scribe tries again after the next rename of the entity and at every
+        start, and retires the issue once the history is one.
+        """
+        if not self._pool:
+            return
+        former = self._pending_merge(entity_id)
+        if former is None:
+            return
+        registry = er.async_get(self.hass)
+        entry = registry.async_get(entity_id)
+        if entry is None or not entry.unique_id or registry.async_get(former):
+            return
+
+        await self._metadata_lock.acquire()
+        try:
+            async with self._pool.acquire() as conn:
+                rows = {
+                    r["entity_id"]: r
+                    for r in await conn.fetch(
+                        "SELECT id, entity_id, unique_id, platform, domain "
+                        "FROM entities WHERE entity_id = ANY($1)",
+                        [entity_id, former],
+                    )
+                }
+                keep, other = rows.get(entity_id), rows.get(former)
+                if other is None:
+                    # Nothing left under the former name: the history is one.
+                    self._clear_rename_issue(entity_id)
+                    return
+                if keep is None or any(
+                    row[k] != getattr(entry, k)
+                    for row in (keep, other)
+                    for k in ("unique_id", "platform", "domain")
+                ):
+                    # The registry sync has not given both rows the entity's
+                    # coordinates yet; the next attempt will see them.
+                    return
+                try:
+                    async with conn.transaction():
+                        moved, dropped = await self._fold_history(
+                            conn, keep["id"], other["id"]
+                        )
+                        await conn.execute(
+                            "DELETE FROM entities WHERE id = $1", other["id"]
+                        )
+                except Exception as e:
+                    _LOGGER.error(
+                        "[writer.merge_split_history] History of %s is still "
+                        "split with %s: %s (%s)",
+                        entity_id,
+                        former,
+                        e,
+                        type(e).__name__,
+                        exc_info=True,
+                    )
+                    self._report_rename_issue(
+                        entity_id,
+                        "history_split",
+                        {
+                            "old_entity_id": former,
+                            "new_entity_id": entity_id,
+                            "error": f"{e} ({type(e).__name__})",
+                        },
+                    )
+                    return
+
+            mid = self._entity_id_map.pop(former, None)
+            if mid is not None:
+                self._metadata_id_map.pop(mid, None)
+            self._clear_rename_issue(entity_id)
+            _LOGGER.warning(
+                "[writer.merge_split_history] History of %s was split with %s; "
+                "merged %s rows into it%s.",
+                entity_id,
+                former,
+                moved,
+                f" ({dropped} duplicate rows at timestamps it already had were dropped)"
+                if dropped and dropped > 0
+                else "",
+            )
+        finally:
+            self._metadata_lock.release()
+
+    async def retry_pending_merges(self) -> None:
+        """Run :meth:`merge_split_history` for every merge still owed.
+
+        Called at startup, after the registry sync: the issues Home Assistant
+        kept across the restart say which entities those are.
+        """
+        if not self._pool:
+            return
+        prefix = "rename_collision_"
+        pending = [
+            issue_id[len(prefix) :]
+            for (domain, issue_id), issue in ir.async_get(self.hass).issues.items()
+            if domain == DOMAIN
+            and issue_id.startswith(prefix)
+            and issue.translation_key in _PENDING_MERGE_ISSUES
+        ]
+        for entity_id in pending:
+            await self.merge_split_history(entity_id)
+
     async def rename_entity(self, old_entity_id: str, new_entity_id: str):
         """Rename an entity in the database (metadata only).
 
@@ -3425,8 +3589,12 @@ class ScribeWriter:
                     self._metadata_id_map.pop(mid, None)
 
             # A rename to this name succeeded — retire any repair issue a previous
-            # refused/failed attempt on the same destination may have raised.
-            self._clear_rename_issue(new_entity_id)
+            # refused attempt on the same destination raised. Not one that
+            # records a merge still owed: the rename moved a name, the history
+            # under the former name is still apart, and only the merge itself
+            # may say it is done (#113).
+            if self._pending_merge(new_entity_id) is None:
+                self._clear_rename_issue(new_entity_id)
 
             if merged_orphan_rows is not None:
                 _LOGGER.warning(
@@ -3500,6 +3668,7 @@ class ScribeWriter:
         translation_key: str,
         placeholders: dict[str, str] | None = None,
         severity: "ir.IssueSeverity" = ir.IssueSeverity.WARNING,
+        persistent: bool = False,
     ):
         """Surface a condition in the Repairs dashboard (best effort).
 
@@ -3513,6 +3682,7 @@ class ScribeWriter:
                 DOMAIN,
                 issue_id,
                 is_fixable=False,
+                is_persistent=persistent,
                 severity=severity,
                 translation_key=translation_key,
                 translation_placeholders=placeholders or {},
@@ -3548,13 +3718,15 @@ class ScribeWriter:
         """Report a rename problem, keyed by the destination entity_id.
 
         Repeated attempts on the same name update one issue, and any later
-        successful rename to that name retires it.
+        successful rename to that name retires it. The issues that record a
+        merge still owed outlive a restart, so the merge is retried at startup.
         """
         self._report_issue(
             f"rename_collision_{new_entity_id}",
             translation_key,
             placeholders,
             severity,
+            persistent=translation_key in _PENDING_MERGE_ISSUES,
         )
 
     def _clear_rename_issue(self, new_entity_id: str):

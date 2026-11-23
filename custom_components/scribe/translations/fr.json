@@ -156,7 +156,11 @@
     },
     "rename_failed": {
       "title": "Échec du renommage de {old_entity_id}",
-      "description": "Scribe a rencontré une erreur en renommant `{old_entity_id}` en `{new_entity_id}` dans la base : {error}. L'historique de l'entité est peut-être désormais scindé entre les deux identifiants. Consultez les logs de Home Assistant pour le détail ; renommer à nouveau l'entité relancera l'opération."
+      "description": "Scribe a rencontré une erreur en renommant `{old_entity_id}` en `{new_entity_id}` dans la base : {error}. L'historique de l'entité est peut-être désormais scindé entre les deux identifiants. Consultez les logs de Home Assistant pour le détail. Scribe retente de réunir l'historique après chaque renommage de cette entité et à chaque démarrage, et cet avis disparaît dès que c'est fait."
+    },
+    "history_split": {
+      "title": "L'historique de {new_entity_id} est scindé",
+      "description": "L'historique de `{new_entity_id}` est enregistré sous deux noms dans la base de Scribe : le sien et `{old_entity_id}`, qui est la même entité sous un ancien nom — en général un renommage qui n'a pas pu aboutir. Scribe n'a pas pu les réunir : {error}. Rien n'a été modifié. Scribe retente après chaque renommage de cette entité et à chaque démarrage, et cet avis disparaît dès que l'historique est réuni."
     },
     "db_unreachable": {
       "title": "Scribe ne peut pas joindre sa base de données",

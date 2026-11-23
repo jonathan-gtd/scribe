@@ -186,3 +186,177 @@ async def test_states_view_reads_mixed_compressed_and_live_chunks(writer, db):
     assert len(rows) == 10
     assert rows[0]["time"] == BASE_TIME
     assert rows[-1]["time"] == BASE_TIME + timedelta(seconds=60 * 60 * 24 * 30 + 4)
+
+
+# ---------------------------------------------------------------------------
+# TimescaleDB's ceiling on rows decompressed per transaction (#113)
+# ---------------------------------------------------------------------------
+
+_LIMIT_GUC = "timescaledb.max_tuples_decompressed_per_dml_transaction"
+
+
+@pytest.fixture
+async def low_limit_writer(hass, clean_db):
+    """A writer whose connections refuse to decompress more than 5 rows.
+
+    The default ceiling is 100 000; lowering it is what lets a test reach it
+    with a handful of states instead of writing a real installation's history.
+    """
+    from unittest.mock import patch
+
+    from custom_components.scribe.writer import ScribeWriter
+
+    from .conftest import make_writer
+
+    original = ScribeWriter._server_settings
+
+    def with_low_limit(self):
+        return {**(original(self) or {}), _LIMIT_GUC: "5"}
+
+    with patch.object(ScribeWriter, "_server_settings", with_low_limit):
+        w = make_writer(hass)
+        await w.start()
+        assert w._pool is not None
+        async with w._pool.acquire() as conn:
+            if (
+                await conn.fetchval("SELECT current_setting($1, true)", _LIMIT_GUC)
+                is None
+            ):
+                await w.stop()
+                pytest.skip("this TimescaleDB has no decompression ceiling")
+        yield w
+        await w.stop()
+
+
+async def _split_history(hass, writer, db, *, old_rows, new_rows):
+    """Reproduce #113: a rename that failed, leaving one entity under two rows.
+
+    The old plug's sensor recorded `old_rows` states, compressed, then the
+    device was removed. Its replacement appeared under another name and was
+    renamed onto the old one; the merge failed, and the registry sync then gave
+    the old row the replacement's coordinates — what the listener does next.
+    """
+    from unittest.mock import patch
+
+    from homeassistant.helpers import entity_registry as er
+
+    await register_entity(hass, "sensor.plug_power", "uid-old-plug", platform="mqtt")
+    await sync_metadata(writer, hass, "sensor.plug_power")
+    await write_states(writer, "sensor.plug_power", old_rows, start=0)
+    await _compress_all_states_chunks(db)
+    er.async_get(hass).async_remove("sensor.plug_power")
+
+    await register_entity(
+        hass, "sensor.0x00158d_power", "uid-new-plug", platform="mqtt"
+    )
+    await sync_metadata(writer, hass, "sensor.0x00158d_power")
+    await write_states(
+        writer, "sensor.0x00158d_power", new_rows, start=60 * 60 * 24 * 30
+    )
+    er.async_get(hass).async_update_entity(
+        "sensor.0x00158d_power", new_entity_id="sensor.plug_power"
+    )
+    with patch.object(
+        type(writer), "_fold_history", side_effect=RuntimeError("limit exceeded")
+    ):
+        await writer.rename_entity("sensor.0x00158d_power", "sensor.plug_power")
+    await sync_metadata(writer, hass, "sensor.plug_power")
+
+
+def _issue(hass, entity_id):
+    from homeassistant.helpers import issue_registry as ir
+
+    from custom_components.scribe.const import DOMAIN
+
+    return ir.async_get(hass).async_get_issue(DOMAIN, f"rename_collision_{entity_id}")
+
+
+@pytest.mark.asyncio
+async def test_rename_merge_is_not_stopped_by_the_decompression_limit(
+    low_limit_writer, hass
+):
+    """#113: the merge decompresses more than the ceiling and still completes."""
+    writer = low_limit_writer
+    db = writer._pool
+    from homeassistant.helpers import entity_registry as er
+
+    await register_entity(hass, "sensor.victim", "uid-victim")
+    await sync_metadata(writer, hass, "sensor.victim")
+    await write_states(writer, "sensor.victim", 20, start=0)
+    assert await _compress_all_states_chunks(db) >= 1
+    er.async_get(hass).async_remove("sensor.victim")
+
+    await register_entity(hass, "sensor.phoenix", "uid-phoenix")
+    await sync_metadata(writer, hass, "sensor.phoenix")
+    await write_states(writer, "sensor.phoenix", 3, start=60 * 60 * 24 * 30)
+
+    await writer.rename_entity("sensor.phoenix", "sensor.victim")
+
+    _, rows = await entity_rows(db, "sensor.victim")
+    assert rows == 23, "the merge was rolled back by the decompression limit"
+    assert _issue(hass, "sensor.victim") is None
+    async with db.acquire() as conn:
+        # Lifted for the merge's own transaction, nowhere else.
+        assert await conn.fetchval("SELECT current_setting($1)", _LIMIT_GUC) == "5"
+
+
+@pytest.mark.asyncio
+async def test_a_failed_merge_is_retried_and_its_issue_kept_until_done(
+    low_limit_writer, hass
+):
+    """#113: the split is recorded, survives a later rename, and heals."""
+    writer = low_limit_writer
+    db = writer._pool
+    await _split_history(hass, writer, db, old_rows=20, new_rows=4)
+
+    issue = _issue(hass, "sensor.plug_power")
+    assert issue is not None and issue.translation_key == "rename_failed"
+    assert issue.is_persistent, "lost at the next restart"
+    assert (await entity_rows(db, "sensor.0x00158d_power"))[1] == 4
+
+    # What the reporter saw clear the notice: another rename to the same name.
+    await writer.rename_entity("sensor.plug_power", "sensor.plug_power_tmp")
+    await writer.rename_entity("sensor.plug_power_tmp", "sensor.plug_power")
+    assert _issue(hass, "sensor.plug_power") is not None
+
+    # A merge that fails again keeps the notice, now saying so.
+    from unittest.mock import patch
+
+    with patch.object(
+        type(writer), "_fold_history", side_effect=RuntimeError("database gone")
+    ):
+        await writer.retry_pending_merges()
+    assert _issue(hass, "sensor.plug_power").translation_key == "history_split"
+
+    # At the next start, it goes through, under the low limit.
+    await writer.retry_pending_merges()
+    assert (await entity_rows(db, "sensor.plug_power"))[1] == 24
+    assert (await entity_rows(db, "sensor.0x00158d_power"))[0] is None
+    assert _issue(hass, "sensor.plug_power") is None
+
+
+@pytest.mark.asyncio
+async def test_history_scribe_did_not_split_is_left_alone(writer, hass, db):
+    """Two rows of one entity with no merge owed: nothing is folded.
+
+    Old installations hold such pairs — a rename made before Scribe followed
+    renames, a sensor moved from one room to another. Merging them is the
+    user's call, not something to do behind their back at an upgrade.
+    """
+    await register_entity(hass, "sensor.bedroom_temperature", "uid-t")
+    await sync_metadata(writer, hass, "sensor.bedroom_temperature")
+    await write_states(writer, "sensor.bedroom_temperature", 3, start=1000)
+    async with db.acquire() as conn:
+        # The row a rename before Scribe followed renames leaves behind.
+        await conn.execute(
+            "INSERT INTO entities (entity_id, unique_id, platform, domain) "
+            "SELECT 'sensor.shed_temperature', unique_id, platform, domain "
+            "FROM entities WHERE entity_id = 'sensor.bedroom_temperature'"
+        )
+    await write_states(writer, "sensor.shed_temperature", 5)
+
+    await writer.retry_pending_merges()
+    await writer.merge_split_history("sensor.bedroom_temperature")
+
+    assert (await entity_rows(db, "sensor.bedroom_temperature"))[1] == 3
+    assert (await entity_rows(db, "sensor.shed_temperature"))[1] == 5
