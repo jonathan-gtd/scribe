@@ -658,6 +658,14 @@ def _make_entity_registry_listener(hass, writer):
             entity = er.async_get(hass).async_get(entity_id)
             if entity:
                 await writer.write_entities([_entity_row(entity)])
+                if action == "update" and event.data.get("old_entity_id") not in (
+                    None,
+                    entity_id,
+                ):
+                    # A rename that could not finish leaves the history under
+                    # two rows, which the sync above has just given the same
+                    # identity: fold them now rather than at the next start.
+                    await writer.merge_split_history(entity_id)
         except Exception as e:
             _LOGGER.error(
                 "[__init__.handle_entity_registry_update] Error syncing entity %s (action=%s): %s (%s)",
@@ -1154,6 +1162,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "[__init__._async_late_setup] Starting background Scribe setup tasks..."
             )
             await _sync_metadata(hass, writer)
+            try:
+                await writer.retry_pending_merges()
+            except Exception as e:
+                _LOGGER.error(
+                    "[__init__._async_late_setup] Could not retry the history "
+                    "merges still owed: %s (%s)",
+                    e,
+                    type(e).__name__,
+                    exc_info=True,
+                )
             await _refresh_coordinators(chunk_coordinator, size_coordinator)
             _LOGGER.debug(
                 "[__init__._async_late_setup] Background Scribe setup tasks completed"

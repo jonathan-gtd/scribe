@@ -156,7 +156,11 @@
     },
     "rename_failed": {
       "title": "Umbenennung von {old_entity_id} fehlgeschlagen",
-      "description": "Scribe stieß beim Umbenennen von `{old_entity_id}` nach `{new_entity_id}` in der Datenbank auf einen Fehler: {error}. Der Verlauf der Entität kann nun auf beide Kennungen verteilt sein. Sieh in die Protokolle von Home Assistant; ein erneutes Umbenennen wiederholt den Vorgang."
+      "description": "Scribe stieß beim Umbenennen von `{old_entity_id}` nach `{new_entity_id}` in der Datenbank auf einen Fehler: {error}. Der Verlauf der Entität kann nun auf beide Kennungen verteilt sein. Sieh in die Protokolle von Home Assistant. Scribe versucht nach jeder Umbenennung dieser Entität und bei jedem Start erneut, den Verlauf zusammenzuführen; dieser Hinweis verschwindet, sobald es gelungen ist."
+    },
+    "history_split": {
+      "title": "Verlauf von {new_entity_id} ist aufgeteilt",
+      "description": "Der Verlauf von `{new_entity_id}` steht in der Datenbank von Scribe unter zwei Namen: dem eigenen und `{old_entity_id}`, derselben Entität unter einem früheren Namen — meist eine Umbenennung, die nicht abgeschlossen werden konnte. Scribe konnte sie nicht zusammenführen: {error}. Es wurde nichts verändert. Scribe versucht es nach jeder Umbenennung dieser Entität und bei jedem Start erneut; dieser Hinweis verschwindet, sobald der Verlauf zusammengeführt ist."
     },
     "db_unreachable": {
       "title": "Scribe erreicht seine Datenbank nicht",
